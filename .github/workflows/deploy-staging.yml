@@ -1,18 +1,26 @@
-name: Deploy Staging
+name: Docker Deploy Staging
 
 on:
   push:
-    branches:
-      - staging
+    branches: [staging]
 
 jobs:
-  deploy-staging:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Staging Server
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build & Push Image
+        run: |
+          docker build -t ghcr.io/jhsassociatesllp/jhs-ope:staging .
+          docker push ghcr.io/jhsassociatesllp/jhs-ope:staging
+
+      - name: Deploy on Server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -20,34 +28,17 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 2232
           script: |
-            set -e
+            docker stop jhs-ope-staging || true
+            docker rm jhs-ope-staging || true
 
-            APP_DIR=/www/wwwroot/jhs-ope/jhs-ope-staging
-            PORT=9009
+            docker pull ghcr.io/jhsassociatesllp/jhs-ope:staging
 
-            echo "🚀 Deploying STAGING"
+            docker run -d \
+            --name jhs-ope-staging \
+            --env-file /www/wwwroot/secrets/ope_staging.env \
+            -p 9009:8000 \
+            --restart always \
+            ghcr.io/jhsassociatesllp/jhs-ope:staging
 
-            # Stop old app
-            pkill -f "uvicorn main:app --port $PORT" || true
+            docker image prune -f
 
-            # Preserve .env
-            cp $APP_DIR/.env /tmp/staging.env 2>/dev/null || true
-
-            rm -rf $APP_DIR
-            git clone -b staging https://github.com/jhsassociatesllp/jhs-ope.git $APP_DIR
-            cd $APP_DIR
-
-            mv /tmp/staging.env .env 2>/dev/null || true
-
-            python3 -m venv venv
-            source venv/bin/activate
-
-            pip install --upgrade pip
-            pip install -r requirements.txt
-
-            nohup venv/bin/uvicorn main:app \
-              --host 0.0.0.0 \
-              --port $PORT \
-              > app.log 2>&1 &
-
-            echo "✅ STAGING deployed on port $PORT"

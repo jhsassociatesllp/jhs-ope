@@ -1,18 +1,26 @@
-name: Deploy Production
+name: Docker Deploy Production
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  deploy-production:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Production Server
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build & Push Image
+        run: |
+          docker build -t ghcr.io/jhsassociatesllp/jhs-ope:production .
+          docker push ghcr.io/jhsassociatesllp/jhs-ope:production
+
+      - name: Deploy on Server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -20,33 +28,16 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 2232
           script: |
-            set -e
+            docker stop jhs-ope-production || true
+            docker rm jhs-ope-production || true
 
-            APP_DIR=/www/wwwroot/jhs-ope/-ope-production
-            PORT=9010
+            docker pull ghcr.io/jhsassociatesllp/jhs-ope:production
 
-            echo "🚀 Deploying PRODUCTION"
+            docker run -d \
+            --name jhs-ope-production \
+            --env-file /www/wwwroot/secrets/ope_production.env \
+            -p 9010:8000 \
+            --restart always \
+            ghcr.io/jhsassociatesllp/jhs-ope:production
 
-            pkill -f "uvicorn main:app --port $PORT" || true
-
-            # Preserve .env
-            cp $APP_DIR/.env /tmp/prod.env 2>/dev/null || true
-
-            rm -rf $APP_DIR
-            git clone https://github.com/jhsassociatesllp/jhs-ope.git $APP_DIR
-            cd $APP_DIR
-
-            mv /tmp/prod.env .env 2>/dev/null || true
-
-            python3 -m venv venv
-            source venv/bin/activate
-
-            pip install --upgrade pip
-            pip install -r requirements.txt
-
-            nohup venv/bin/uvicorn main:app \
-              --host 0.0.0.0 \
-              --port $PORT \
-              > app.log 2>&1 &
-
-            echo "✅ PRODUCTION deployed on port $PORT"
+            docker image prune -f
