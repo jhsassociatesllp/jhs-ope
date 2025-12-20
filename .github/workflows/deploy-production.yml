@@ -1,0 +1,51 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR=/www/wwwroot/jhs-ope/-ope-production
+            PORT=9010
+
+            echo "🚀 Deploying PRODUCTION"
+
+            pkill -f "uvicorn main:app --port $PORT" || true
+
+            # Preserve .env
+            cp $APP_DIR/.env /tmp/prod.env 2>/dev/null || true
+
+            rm -rf $APP_DIR
+            git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git $APP_DIR
+            cd $APP_DIR
+
+            mv /tmp/prod.env .env 2>/dev/null || true
+
+            python3 -m venv venv
+            source venv/bin/activate
+
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            nohup venv/bin/uvicorn main:app \
+              --host 0.0.0.0 \
+              --port $PORT \
+              > app.log 2>&1 &
+
+            echo "✅ PRODUCTION deployed on port $PORT"

@@ -1,0 +1,52 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Staging Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            APP_DIR=/www/wwwroot/jhs-ope/jhs-ope-staging
+            PORT=9009
+
+            echo "🚀 Deploying STAGING"
+
+            # Stop old app
+            pkill -f "uvicorn main:app --port $PORT" || true
+
+            # Preserve .env
+            cp $APP_DIR/.env /tmp/staging.env 2>/dev/null || true
+
+            rm -rf $APP_DIR
+            git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git $APP_DIR
+            cd $APP_DIR
+
+            mv /tmp/staging.env .env 2>/dev/null || true
+
+            python3 -m venv venv
+            source venv/bin/activate
+
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            nohup venv/bin/uvicorn main:app \
+              --host 0.0.0.0 \
+              --port $PORT \
+              > app.log 2>&1 &
+
+            echo "✅ STAGING deployed on port $PORT"

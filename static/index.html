@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <!-- <link rel="icon" type="image/png" href="/static/jhs_logo.jpg" /> -->
+  </head>
+  <body>
+    <header>
+      <div class="head">
+        <div class="logo">
+          <h2><i class="fas fa-clock"></i> JHS OPE</h2>
+        </div>
+
+        <button class="menu-toggle" onclick="toggleMenu()">☰</button>
+
+        <div class="navbar" id="navbar">
+          <div class="menu-close" onclick="toggleMenu()">✕</div>
+          <nav>
+            <ul>
+              <li id="navOPE" class="active">OPE</li>
+              <li id="navHistory">History</li>
+              <li id="status">Status</li>
+              <li id="logoutBtn">Logout</li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-container">
+      <section id="opeSection">
+        <section class="employee-details">
+          <h2>Employee Details</h2>
+          <div class="details-grid">
+            <div class="detail-item">
+              <label>Employee ID:</label>
+              <span id="empId"></span>
+            </div>
+            <div class="detail-item">
+              <label>Employee Name:</label>
+              <span id="empName"></span>
+            </div>
+            <div class="detail-item">
+              <label>Designation:</label>
+              <span id="empDesignation"></span>
+            </div>
+            <div class="detail-item">
+              <label>Gender:</label>
+              <span id="empGender"></span>
+            </div>
+            <div class="detail-item">
+              <label>Partner:</label>
+              <span id="empPartner"></span>
+            </div>
+            <div class="detail-item">
+              <label>Reporting Manager:</label>
+              <span id="empManager"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Month Selection Dropdown - ADD THIS -->
+        <section class="month-selection">
+          <div class="month-dropdown-container">
+            <label for="monthRange">Select Month Range:</label>
+            <select id="monthRange" name="monthRange" required>
+              <option value="" disabled selected>Select Your Month</option>
+              <option value="sep-oct-2025">Sep 2025 - Oct 2025</option>
+              <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
+              <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="ope-form">
+          <h2>New Entry Submission</h2>
+
+          <div class="table-container">
+            <table class="entry-table" id="entryTable">
+              <thead>
+                <tr>
+                  <th class="required">Date</th>
+                  <th>Status</th>
+                  <th class="required">Client Name</th>
+                  <th class="required">Project ID</th>
+                  <th class="required">Project Name</th>
+                  <th class="required">Project Type</th>
+                  <th class="required">Travel From</th>
+                  <th class="required">Travel To</th>
+                  <th class="required">Mode of Travel</th>
+                  <th class="required">Amount (₹)</th>
+                  <th>Remarks</th>
+                  <th >Ticket PDF</th>
+                  <th>Delete</th>
+                </tr>
+              </thead>
+              <tbody id="entryTableBody">
+                <!-- First row will be added by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="entry-buttons-container">
+            <button
+              type="button"
+              class="add-entry-btn"
+              onclick="addNewEntryRow()"
+            >
+              <i class="fas fa-plus"></i> Add New Entry
+            </button>
+
+            <button
+              type="button"
+              class="save-entry-btn"
+              onclick="saveAllEntries()"
+            >
+              <i class="fas fa-save"></i> Save Entry
+            </button>
+          </div>
+
+          <button type="button" class="submit-btn" onclick="submitAllEntries()">
+            <i class="fas fa-paper-plane"></i> Submit All Entries
+          </button>
+        </section>
+      </section>
+
+      <!-- HISTORY SECTION -->
+      <div id="historySection" style="display: none">
+        <section class="month-filter">
+          <label for="monthRangeFilter">Filter by Month Range:</label>
+          <select id="monthRangeFilter">
+            <option value="">All Months</option>
+          </select>
+        </section>
+
+        <div id="loadingDiv" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading history...
+        </div>
+
+        <section
+          id="historyTableSection"
+          class="history-table-container"
+          style="display: none"
+        >
+          <div class="table-wrapper">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Client</th>
+                  <th>Project ID</th>
+                  <th>Project Name</th>
+                  <th>Project Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Travel Mode</th>
+                  <th>Amount (₹)</th>
+                  <th>Remarks</th>
+                  <th>PDF</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <!-- Data will be rendered here -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div id="noDataDiv" class="no-data" style="display: none">
+          <i class="fas fa-inbox"></i> No data found
+        </div>
+      </div>
+
+      <!-- PDF Modal -->
+      <div id="pdfModal" class="pdf-modal">
+        <div class="pdf-modal-content">
+          <button class="pdf-modal-close" onclick="closePdfModal()">
+            ✕ Close
+          </button>
+          <iframe id="pdfViewer"></iframe>
+        </div>
+      </div>
+    </main>
+    <script src="script.js"></script>
+  </body>
+</html>
