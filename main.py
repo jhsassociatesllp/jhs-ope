@@ -26,7 +26,6 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES"))
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-
 # ---------- FastAPI app ----------
 app = FastAPI()
 
