@@ -33,7 +33,7 @@ jobs:
             cp $APP_DIR/.env /tmp/staging.env 2>/dev/null || true
 
             rm -rf $APP_DIR
-            git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git $APP_DIR
+            git clone https://github.com/jhsassociatesllp/jhs-ope.git $APP_DIR
             cd $APP_DIR
 
             mv /tmp/staging.env .env 2>/dev/null || true
