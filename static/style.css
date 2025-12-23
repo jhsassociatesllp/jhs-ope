@@ -7,8 +7,15 @@
 body {
     font-family: 'Inter', sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); */
     min-height: 100vh;
     padding: 20px;
+}
+
+.main-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 20px;
 }
 
 .container {
@@ -70,12 +77,17 @@ header::before {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    height: 65px;
 }
 
 .logo {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+.logo img{
+    width: 60px;
+    height: 60px;
 }
 
 .logo::before {
@@ -268,11 +280,13 @@ header .navbar ul li {
 
 /* Employee Details Card */
 .employee-details {
-    background: rgba(255, 255, 255, 0.95);
+    /* background: rgba(255, 255, 255, 0.95); */
+    background: rgb(200, 222, 252);
     backdrop-filter: blur(10px);
     border-radius: 16px;
     padding: 30px;
-    margin-bottom: 30px;
+    margin: 0 auto 30px auto;
+    max-width: 1200px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     animation: fadeIn 0.6s ease-out 0.1s both;
 }
@@ -340,11 +354,13 @@ header .navbar ul li {
 /* Month Range */
 /* Month Selection Dropdown */
 .month-selection {
-    background: rgba(255, 255, 255, 0.95);
+    /* background: rgba(255, 255, 255, 0.95); */
+    background: rgb(200, 222, 252);
     backdrop-filter: blur(10px);
     border-radius: 16px;
     padding: 25px 30px;
-    margin-bottom: 30px;
+    margin: 0 auto 30px auto;
+    max-width: 1200px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     animation: fadeIn 0.6s ease-out 0.15s both;
 }
@@ -496,10 +512,13 @@ header .navbar ul li {
 
 /* Form Card */
 .ope-form {
-    background: rgba(255, 255, 255, 0.95);
+    /* background: rgba(255, 255, 255, 0.95); */
+    background: rgb(200, 222, 252);
     backdrop-filter: blur(10px);
     border-radius: 16px;
     padding: 35px;
+    margin: 0 auto;
+    max-width: 1200px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     animation: fadeIn 0.6s ease-out 0.2s both;
 }

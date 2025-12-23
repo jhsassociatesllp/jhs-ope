@@ -5,6 +5,77 @@ let savedEntries = []; // Temporary storage for saved entries
 // API_URL = "http://127.0.0.1:8000";
 API_URL = "";
 
+
+// Add CSS animations for popups
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideUp {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes scaleIn {
+    from {
+      transform: scale(0);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+  
+  @keyframes progressBar {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+`;
+document.head.appendChild(style);
+
+// Month range configuration with date ranges
+const monthRanges = {
+  'sep-oct-2025': { start: '2025-09-21', end: '2025-10-20', display: 'Sep 2025 - Oct 2025' },
+  'oct-nov-2025': { start: '2025-10-21', end: '2025-11-20', display: 'Oct 2025 - Nov 2025' },
+  'nov-dec-2025': { start: '2025-11-21', end: '2025-12-20', display: 'Nov 2025 - Dec 2025' }
+};
+
+// Validate if date is within selected month range
+function isDateInMonthRange(dateStr, monthRangeKey) {
+  if (!monthRangeKey || !monthRanges[monthRangeKey]) {
+    return false;
+  }
+  
+  const range = monthRanges[monthRangeKey];
+  const selectedDate = new Date(dateStr);
+  const startDate = new Date(range.start);
+  const endDate = new Date(range.end);
+  
+  return selectedDate >= startDate && selectedDate <= endDate;
+}
+
+// Get next date for new row
+function getNextDate(currentDate) {
+  const date = new Date(currentDate);
+  date.setDate(date.getDate() + 1);
+  return date.toISOString().split('T')[0];
+}
+
+// Get start date for selected month range
+function getStartDateForMonth(monthRangeKey) {
+  if (monthRanges[monthRangeKey]) {
+    return monthRanges[monthRangeKey].start;
+  }
+  return today;
+}
+
 // toggle Button
 function toggleMenu() {
   const navbar = document.getElementById('navbar');
@@ -25,11 +96,12 @@ document.addEventListener('click', function(event) {
 });
 
 // Success Popup Function
+// Success Popup Function - UPDATED
 function showSuccessPopup(message) {
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position: fixed;
-    inset:0;
+    inset: 0;
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.6);
@@ -37,54 +109,57 @@ function showSuccessPopup(message) {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 20px;
   `;
 
   const popup = document.createElement('div');
   popup.style.cssText = `
     background: white;
-    padding: 40px;
-    border-radius: 20px;
+    padding: 30px 25px;
+    border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     text-align: center;
-    max-width: 400px;
+    max-width: 450px;
+    width: 90%;
     animation: slideUp 0.3s ease;
   `;
 
+  // ✅ UPDATED: Removed progress bar, centered text
   popup.innerHTML = `
     <div style="
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 20px;
+      margin: 0 auto 18px;
+      animation: scaleIn 0.4s ease;
     ">
-      <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
     </div>
-    <h2 style="font-size: 24px; color: #2d3748; margin-bottom: 15px;">Success!</h2>
-    <p style="color: #718096; margin-bottom: 30px; font-size: 16px;">${message}</p>
-    <button id="okBtn" style="
-      padding: 12px 40px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    ">OK</button>
+    <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">Success!</h2>
+    <p style="color: #6b7280; margin-bottom: 0; font-size: 14.5px; line-height: 1.5; word-wrap: break-word; text-align: center;">${message}</p>
   `;
 
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
 
-  document.getElementById('okBtn').addEventListener('click', function() {
+  // Button hover effect
+  const okBtn = document.getElementById('okBtn');
+  okBtn.addEventListener('mouseenter', () => {
+    okBtn.style.transform = 'translateY(-2px)';
+    okBtn.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+  });
+  okBtn.addEventListener('mouseleave', () => {
+    okBtn.style.transform = 'translateY(0)';
+    okBtn.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+  });
+
+  okBtn.addEventListener('click', function() {
     document.body.removeChild(overlay);
   });
 
@@ -96,12 +171,12 @@ function showSuccessPopup(message) {
 }
 
 // Error Popup Function
+// Error Popup Function - UPDATED
 function showErrorPopup(message) {
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position: fixed;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.6);
@@ -109,55 +184,70 @@ function showErrorPopup(message) {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 20px;
   `;
 
   const popup = document.createElement('div');
   popup.style.cssText = `
     background: white;
-    padding: 40px;
-    border-radius: 20px;
+    padding: 30px 25px;
+    border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     text-align: center;
-    max-width: 400px;
+    max-width: 450px;
+    width: 90%;
     animation: slideUp 0.3s ease;
+    max-height: 80vh;
+    overflow-y: auto;
   `;
 
   popup.innerHTML = `
     <div style="
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+       width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 20px;
+      margin: 0 auto 18px;
+      animation: scaleIn 0.4s ease;
     ">
-      <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
     </div>
-    <h2 style="font-size: 24px; color: #2d3748; margin-bottom: 15px;">Error</h2>
-    <p style="color: #718096; margin-bottom: 30px; font-size: 16px;">${message}</p>
-    <button id="okBtn" style="
-      padding: 12px 40px;
-      background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 4px 15px rgba(245, 101, 101, 0.4);
-    ">OK</button>
+    <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">Error</h2>
+    <div style="
+      color: #6b7280;
+      margin-bottom: 0;
+      font-size: 14px;
+      line-height: 1.6;
+      text-align: center;
+      max-height: 250px;
+      overflow-y: auto;
+      word-wrap: break-word;
+      padding: 0 10px;
+    ">${message}</div>
   `;
+
 
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
 
-  document.getElementById('okBtn').addEventListener('click', function() {
+  // Button hover effect
+  const okBtn = document.getElementById('okBtn');
+  okBtn.addEventListener('mouseenter', () => {
+    okBtn.style.transform = 'translateY(-2px)';
+    okBtn.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+  });
+  okBtn.addEventListener('mouseleave', () => {
+    okBtn.style.transform = 'translateY(0)';
+    okBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+  });
+
+  okBtn.addEventListener('click', function() {
     document.body.removeChild(overlay);
   });
 
@@ -245,6 +335,38 @@ document.addEventListener('DOMContentLoaded', function() {
           document.body.removeChild(overlay);
         }
       });
+       const monthRangeSelect = document.getElementById('monthRange');
+  if (monthRangeSelect) {
+    monthRangeSelect.addEventListener('change', function() {
+      const selectedMonth = this.value;
+      const tbody = document.getElementById('entryTableBody');
+      const rows = tbody.querySelectorAll('tr');
+      
+      if (selectedMonth) {
+        const startDate = getStartDateForMonth(selectedMonth);
+        
+        // Update ALL existing rows dates to sequential dates starting from 21st
+        rows.forEach((row, index) => {
+          const rowId = row.dataset.rowId;
+          const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
+          if (dateInput) {
+            if (index === 0) {
+              // First row gets the 21st
+              dateInput.value = startDate;
+            } else {
+              // Subsequent rows get sequential dates
+              const prevRow = rows[index - 1];
+              const prevRowId = prevRow.dataset.rowId;
+              const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
+              if (prevDateInput && prevDateInput.value) {
+                dateInput.value = getNextDate(prevDateInput.value);
+              }
+            }
+          }
+        });
+      }
+    });
+  }
     });
   }
 });
@@ -1280,87 +1402,169 @@ if (navHistory) {
 
 // 15. Success Popup Show karne ka function
 function showSuccessPopup(message) {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.6); z-index: 99999;
-        display: flex; align-items: center; justify-content: center;
-    `;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+  `;
 
-    const popup = document.createElement('div');
-    popup.style.cssText = `
-        background: white; padding: 40px; border-radius: 20px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        text-align: center;  max-width: 90vw; width: 100%;
-    `;
+  const popup = document.createElement('div');
+  popup.style.cssText = `
+    background: white;
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    max-width: 420px;
+    width: calc(100% - 40px);
+    box-sizing: border-box;
+    animation: slideUp 0.3s ease;
+  `;
 
-    popup.innerHTML = `
-        <div style="width: 80px; height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; margin: 0 auto 20px;">
-            <svg width="50" height="50" viewBox="0 0 24 24" fill="none" 
-                stroke="white" stroke-width="3">
-                <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-        </div>
-        <h2 style="font-size: 24px; color: #2d3748; margin-bottom: 15px;">Success!</h2>
-        <p style="color: #718096; margin-bottom: 30px; font-size: 16px;">${message}</p>
-        <button id="okBtn" style="padding: 12px 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; border: none; border-radius: 10px;
-            font-size: 16px; font-weight: 600; cursor: pointer;">OK</button>
-    `;
+  popup.innerHTML = `
+    <div style="
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+    ">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </div>
+    <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">Success!</h2>
+    <p style="color: #6b7280; font-size: 14.5px; line-height: 1.5; word-wrap: break-word; text-align: center;">${message}</p>
+  `;
 
-    overlay.appendChild(popup);
-    document.body.appendChild(overlay);
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
 
-    document.getElementById('okBtn').addEventListener('click', () => {
-        document.body.removeChild(overlay);
-    });
+  setTimeout(() => {
+    if (document.body.contains(overlay)) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
+    }
+  }, 2500);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
+    }
+  });
 }
 
 // 16. Error Popup Show karne ka function
 function showErrorPopup(message) {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.6); z-index: 99999;
-        display: flex; align-items: center; justify-content: center;
-    `;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+  `;
 
-    const popup = document.createElement('div');
-    popup.style.cssText = `
-        background: white; padding: 40px; border-radius: 20px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        text-align: center; max-width: 400px;  max-width: 90vw; width: 100%;
-    `;
+  const popup = document.createElement('div');
+  popup.style.cssText = `
+    background: white;
+    padding: 30px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    max-width: 420px;
+    width: calc(100% - 40px);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    animation: slideUp 0.3s ease;
+  `;
 
-    popup.innerHTML = `
-        <div style="width: 80px; height: 80px;
-            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-            border-radius: 50%; display: flex; align-items: center;
-            justify-content: center; margin: 0 auto 20px;">
-            <svg width="50" height="50" viewBox="0 0 24 24" fill="none" 
-                stroke="white" stroke-width="3">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        </div>
-        <h2 style="font-size: 24px; color: #2d3748; margin-bottom: 15px;">Error</h2>
-        <p style="color: #718096; margin-bottom: 30px; font-size: 16px;">${message}</p>
-        <button id="okBtn" style="padding: 12px 40px;
-            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
-            color: white; border: none; border-radius: 10px;
-            font-size: 16px; font-weight: 600; cursor: pointer;">OK</button>
-    `;
+  popup.innerHTML = `
+    <div style="
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+    ">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </div>
+    <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">Error</h2>
+    <div style="
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.6;
+      text-align: center;
+      max-height: 250px;
+      overflow-y: auto;
+      word-wrap: break-word;
+    ">${message}</div>
+  `;
 
-    overlay.appendChild(popup);
-    document.body.appendChild(overlay);
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
 
-    document.getElementById('okBtn').addEventListener('click', () => {
-        document.body.removeChild(overlay);
-    });
+  setTimeout(() => {
+    if (document.body.contains(overlay)) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
+    }
+  }, 3000);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
+    }
+  });
 }
 
 // DOMContentLoaded me navigation setup karo
@@ -1378,16 +1582,35 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Add New Entry Row
-// Add New Entry Row
 function addNewEntryRow() {
   entryCounter++;
   const tbody = document.getElementById('entryTableBody');
+  const monthRangeSelect = document.getElementById('monthRange');
+  const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
+  
+  // Get date for new row
+  let newRowDate = today;
+  
+  // If there are existing rows, get the last date and add 1 day
+  const existingRows = tbody.querySelectorAll('tr');
+  if (existingRows.length > 0) {
+    const lastRow = existingRows[existingRows.length - 1];
+    const lastRowId = lastRow.dataset.rowId;
+    const lastDateInput = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
+    if (lastDateInput && lastDateInput.value) {
+      newRowDate = getNextDate(lastDateInput.value);
+    }
+  } else if (selectedMonth) {
+    // First row - use month start date
+    newRowDate = getStartDateForMonth(selectedMonth);
+  }
   
   const row = document.createElement('tr');
   row.dataset.rowId = entryCounter;
   
   row.innerHTML = `
-    <td><input type="date" name="date_${entryCounter}" value="${today}" required /></td>
+    <td><strong>${entryCounter}</strong></td>  <!-- S.No column -->
+    <td><input type="date" name="date_${entryCounter}" value="${newRowDate}" required /></td>
     <td>
       <div class="table-action-btns">
         <button type="button" class="copy-btn" onclick="copyRow(${entryCounter})">
@@ -1396,8 +1619,6 @@ function addNewEntryRow() {
         <button type="button" class="paste-btn" onclick="pasteRow(${entryCounter})">
           <i class="fas fa-paste"></i> Paste
         </button>
-        ${entryCounter > 1 ? `
-        ` : ''}
       </div>
     </td>
     <td><input type="text" name="client_${entryCounter}" placeholder="Client Name" required /></td>
@@ -1448,6 +1669,14 @@ function addNewEntryRow() {
   `;
   
   tbody.appendChild(row);
+  
+  // Add date validation listener
+  const dateInput = row.querySelector(`input[name="date_${entryCounter}"]`);
+  if (dateInput) {
+    dateInput.addEventListener('change', function() {
+      validateDateInRange(this, entryCounter);
+    });
+  }
   
   // Scroll to new row
   setTimeout(() => {
@@ -1509,12 +1738,47 @@ function deleteEntryRow(rowId) {
   
   if (row) {
     row.remove();
+    
+    // Renumber all S.No columns
+    const remainingRows = tbody.querySelectorAll('tr');
+    remainingRows.forEach((r, index) => {
+      const snoCell = r.querySelector('td:first-child strong');
+      if (snoCell) {
+        snoCell.textContent = index + 1;
+      }
+    });
+    
     showSuccessPopup('Entry row deleted!');
   }
 }
 
+// Validate date is within selected month range
+function validateDateInRange(dateInput, rowId) {
+  const monthRangeSelect = document.getElementById('monthRange');
+  const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
+  
+  if (!selectedMonth) {
+    showErrorPopup('Please select a month range first!');
+    dateInput.value = today;
+    return false;
+  }
+  
+  const selectedDate = dateInput.value;
+  
+  if (!isDateInMonthRange(selectedDate, selectedMonth)) {
+    const range = monthRanges[selectedMonth];
+    showErrorPopup(
+      `Invalid Date! Please select a date between ${range.start} and ${range.end} for ${range.display}`
+    );
+    // Reset to month start date
+    dateInput.value = range.start;
+    return false;
+  }
+  
+  return true;
+}
+
 // Save All Entries (Same as Submit but different message)
-// Save All Entries (Temporarily - Not to Database)
 function saveAllEntries() {
   const monthRange = document.getElementById('monthRange')?.value;
   
@@ -1533,7 +1797,7 @@ function saveAllEntries() {
   
   let validCount = 0;
   let errors = [];
-  savedEntries = []; // Clear previous saved data
+  savedEntries = [];
   
   // Validate and collect all entries
   for (let i = 0; i < rows.length; i++) {
@@ -1552,10 +1816,17 @@ function saveAllEntries() {
     const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value.trim();
     const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
     
-    // Validation
+    // Basic validation
     if (!date || !client || !projectId || !projectName || !projectType || 
         !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
       errors.push(`Row ${i + 1}: Please fill all required fields`);
+      continue;
+    }
+    
+    // DATE VALIDATION - NEW CHECK
+    if (!isDateInMonthRange(date, monthRange)) {
+      const range = monthRanges[monthRange];
+      errors.push(`Row ${i + 1}: Date must be between ${range.start} and ${range.end}`);
       continue;
     }
     
@@ -1597,21 +1868,19 @@ function saveAllEntries() {
   }
   
   // Success message
-  // Success message
-showSuccessPopup(`${validCount} ${validCount === 1 ? 'entry' : 'entries'} saved temporarily! Click "Submit All Entries" to store in database.`);
+  showSuccessPopup(`${validCount} ${validCount === 1 ? 'entry' : 'entries'} saved temporarily! Click "Submit All Entries" to store in database.`);
 
-console.log('✅ Saved Entries (Temporary):', savedEntries);
+  console.log('✅ Saved Entries (Temporary):', savedEntries);
 
-// ✅ NEW: Refresh history if history section is visible
-const historySection = document.getElementById('historySection');
-if (historySection && historySection.style.display === 'block') {
-    displayHistoryTable(allHistoryData);
-}
-
-  
+  // Refresh history if visible
+  const historySection = document.getElementById('historySection');
+  if (historySection && historySection.style.display === 'block') {
+      displayHistoryTable(allHistoryData);
+  }
 }
 
 // Submit All Entries to Database
+// Submit All Entries to Database - UPDATED VERSION
 async function submitAllEntries() {
   const token = localStorage.getItem('access_token');
   const empCode = localStorage.getItem('employee_code');
@@ -1622,9 +1891,21 @@ async function submitAllEntries() {
     return;
   }
   
-  // Check if there are saved entries
-  if (savedEntries.length === 0) {
-    showErrorPopup('No entries saved! Please click "Save Entry" first.');
+  // Check month range is selected
+  const monthRangeSelect = document.getElementById('monthRange');
+  const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
+  
+  if (!monthRange) {
+    showErrorPopup('Please select month range first!');
+    return;
+  }
+  
+  // Get all table rows
+  const tbody = document.getElementById('entryTableBody');
+  const rows = tbody.querySelectorAll('tr');
+  
+  if (rows.length === 0) {
+    showErrorPopup('No entries to submit!');
     return;
   }
   
@@ -1640,25 +1921,64 @@ async function submitAllEntries() {
   let errorCount = 0;
   let errors = [];
   
-  // Submit each saved entry to database
-  for (let i = 0; i < savedEntries.length; i++) {
-    const entry = savedEntries[i];
+  // ✅ NEW: Read data directly from table rows instead of savedEntries
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowId = row.dataset.rowId;
     
+    // Get form values from current row
+    const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
+    const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
+    const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
+    const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
+    const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
+    const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
+    const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
+    const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value;
+    const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value;
+    const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value.trim();
+    const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
+    const pdfFile = pdfInput?.files[0];
+    
+    // Validations
+    if (!date || !client || !projectId || !projectName || !projectType || 
+        !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
+      errors.push(`Row ${i + 1}: Please fill all required fields`);
+      errorCount++;
+      continue;
+    }
+    
+    // Date validation
+    if (!isDateInMonthRange(date, monthRange)) {
+      const range = monthRanges[monthRange];
+      errors.push(`Row ${i + 1}: Date must be between ${range.start} and ${range.end}`);
+      errorCount++;
+      continue;
+    }
+    
+    // PDF validation
+    if (pdfFile && pdfFile.type !== 'application/pdf') {
+      errors.push(`Row ${i + 1}: Only PDF files allowed`);
+      errorCount++;
+      continue;
+    }
+    
+    // Prepare FormData
     const formData = new FormData();
-    formData.append('date', entry.date);
-    formData.append('client', entry.client);
-    formData.append('project_id', entry.projectId);
-    formData.append('project_name', entry.projectName);
-    formData.append('project_type', entry.projectType);
-    formData.append('location_from', entry.locationFrom);
-    formData.append('location_to', entry.locationTo);
-    formData.append('travel_mode', entry.travelMode);
-    formData.append('amount', entry.amount);
-    formData.append('remarks', entry.remarks);
-    formData.append('month_range', entry.monthRange);
+    formData.append('date', date);
+    formData.append('client', client);
+    formData.append('project_id', projectId);
+    formData.append('project_name', projectName);
+    formData.append('project_type', projectType);
+    formData.append('location_from', locationFrom);
+    formData.append('location_to', locationTo);
+    formData.append('travel_mode', travelMode);
+    formData.append('amount', parseFloat(amount));
+    formData.append('remarks', remarks || 'NA');
+    formData.append('month_range', monthRange);
     
-    if (entry.pdfFile) {
-      formData.append('ticket_pdf', entry.pdfFile);
+    if (pdfFile) {
+      formData.append('ticket_pdf', pdfFile);
     }
     
     try {
@@ -1672,19 +1992,26 @@ async function submitAllEntries() {
         body: formData
       });
       
-      const result = await response.json();
-      
       if (response.ok) {
-        console.log(`✅ Entry ${i + 1} submitted to database`);
+        const result = await response.json();
+        console.log(`✅ Entry ${i + 1} submitted to database`, result);
         successCount++;
       } else {
-        console.error(`❌ Entry ${i + 1} failed:`, result);
-        errors.push(`Entry ${i + 1}: ${result.detail || 'Submission failed'}`);
+        let errorMessage = 'Submission failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+        } catch (e) {
+          errorMessage = await response.text() || `HTTP ${response.status}`;
+        }
+        
+        console.error(`❌ Entry ${i + 1} failed:`, errorMessage);
+        errors.push(`Entry ${i + 1}: ${errorMessage}`);
         errorCount++;
       }
     } catch (err) {
       console.error(`❌ Entry ${i + 1} error:`, err);
-      errors.push(`Entry ${i + 1}: Network error`);
+      errors.push(`Entry ${i + 1}: ${err.message || 'Network error'}`);
       errorCount++;
     }
   }
@@ -1699,14 +2026,14 @@ async function submitAllEntries() {
   if (errorCount === 0) {
     showSuccessPopup(`All ${successCount} ${successCount === 1 ? 'entry' : 'entries'} submitted to database successfully!`);
     
-    // Clear saved entries
-    savedEntries = [];
-    
     // Clear all rows and reset
     const tbody = document.getElementById('entryTableBody');
     tbody.innerHTML = '';
     entryCounter = 0;
     addNewEntryRow();
+    
+    // Clear saved entries array
+    savedEntries = [];
     
   } else if (successCount > 0) {
     showErrorPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} submitted, ${errorCount} failed.<br><br>${errors.join('<br>')}`);

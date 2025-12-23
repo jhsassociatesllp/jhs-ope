@@ -238,7 +238,7 @@ async def submit_ope_entry(
     client: str = Form(...),
     project_id: str = Form(...),
     project_name: str = Form(...),
-    project_type: str = Form(...),  # ✅ NEW FIELD ADDED
+    project_type: str = Form(...),
     location_from: str = Form(...),
     location_to: str = Form(...),
     travel_mode: str = Form(...),
@@ -253,7 +253,16 @@ async def submit_ope_entry(
         
         print(f"📌 Submitting OPE entry for: {employee_code}")
         print(f"📌 Month range received: {month_range}")
-        print(f"📌 Project type: {project_type}")  # ✅ NEW LOG
+        print(f"📌 Project type: {project_type}")
+        print(f"📌 Date: {date}")
+        print(f"📌 Amount: {amount}")
+        
+        # Validate amount
+        if amount <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Amount must be greater than 0, received: {amount}"
+            )
         
         # Format month_range from "sep-oct-2025" to "Sep 2025 - Oct 2025"
         def format_month_range(month_str):
@@ -293,7 +302,10 @@ async def submit_ope_entry(
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         if not emp:
             print(f"❌ Employee not found: {employee_code}")
-            raise HTTPException(status_code=404, detail="Employee not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Employee details not found for code: {employee_code}"
+            )
         
         print(f"✅ Employee found: {emp.get('Emp Name')}")
         
@@ -311,7 +323,7 @@ async def submit_ope_entry(
             "client": client,
             "project_id": project_id,
             "project_name": project_name,
-            "project_type": project_type,  # ✅ NEW FIELD ADDED
+            "project_type": project_type,
             "location_from": location_from,
             "location_to": location_to,
             "travel_mode": travel_mode,
@@ -340,7 +352,7 @@ async def submit_ope_entry(
                 "department": "",
                 "Data": [
                     {
-                        formatted_month_range: [entry_doc]  # Use formatted version
+                        formatted_month_range: [entry_doc]
                     }
                 ]
             }
@@ -383,17 +395,21 @@ async def submit_ope_entry(
             "employee_id": employee_code,
             "date": date,
             "month_range": formatted_month_range,
-            "project_type": project_type,  # ✅ NEW FIELD IN RESPONSE
+            "project_type": project_type,
             "status": "saved"
         }
         
+    except HTTPException as he:
+        # Re-raise HTTP exceptions as-is
+        raise he
     except Exception as e:
         print(f"❌❌ Error submitting OPE entry: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # ADD THESE ENDPOINTS IN YOUR main.py FILE
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
 
 # ---------- GET HISTORY ----------
 @app.get("/api/ope/history/{employee_code}")
