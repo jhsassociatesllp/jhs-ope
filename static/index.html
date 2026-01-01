@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
+    <title>JHS OPE - Employee Portal</title>
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="style.css" />
@@ -13,187 +13,438 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
     />
-    <!-- <link rel="icon" type="image/png" href="/static/jhs_logo.jpg" /> -->
   </head>
   <body>
-    <header>
-      <div class="head">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
         <div class="logo">
-          <h2> JHS OPE</h2>
+          <i class="fas fa-briefcase"></i>
+          <h2>JHS OPE</h2>
         </div>
-
-        <button class="menu-toggle" onclick="toggleMenu()">☰</button>
-
-        <div class="navbar" id="navbar">
-          <div class="menu-close" onclick="toggleMenu()">✕</div>
-          <nav>
-            <ul>
-              <li id="navOPE" class="active">OPE</li>
-              <li id="navHistory">History</li>
-              <!-- <li id="status">Status</li> -->
-              <li id="logoutBtn">Logout</li>
-            </ul>
-          </nav>
-        </div>
+        <p class="subtitle">Employee Portal</p>
       </div>
-    </header>
 
-    <main class="main-container">
-      <section id="opeSection">
-        <section class="employee-details">
-          <h2>Employee Details</h2>
-          <div class="details-grid">
-            <div class="detail-item">
-              <label>Employee ID:</label>
-              <span id="empId"></span>
-            </div>
-            <div class="detail-item">
-              <label>Employee Name:</label>
-              <span id="empName"></span>
-            </div>
-            <div class="detail-item">
-              <label>Designation:</label>
-              <span id="empDesignation"></span>
-            </div>
-            <div class="detail-item">
-              <label>Gender:</label>
-              <span id="empGender"></span>
-            </div>
-            <div class="detail-item">
-              <label>Partner:</label>
-              <span id="empPartner"></span>
-            </div>
-            <div class="detail-item">
-              <label>Reporting Manager:</label>
-              <span id="empManager"></span>
+      <nav class="sidebar-nav">
+        <ul>
+          <li id="navOPE" class="nav-item active">
+            <i class="fas fa-clipboard-list"></i>
+            <span>OPE</span>
+          </li>
+          <li id="navHistory" class="nav-item">
+            <i class="fas fa-history"></i>
+            <span>History</span>
+          </li>
+          <li id="navStatus" class="nav-item">
+            <i class="fas fa-chart-line"></i>
+            <span>Status</span>
+          </li>
+          <li id="navPending" class="nav-item">
+            <i class="fas fa-clock"></i>
+            <span>Pending</span>
+          </li>
+          <li id="navApprove" class="nav-item">
+            <i class="fas fa-check-circle"></i>
+            <span>Approve</span>
+          </li>
+          <li id="navReject" class="nav-item">
+            <i class="fas fa-times-circle"></i>
+            <span>Reject</span>
+          </li>
+          
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <!-- <div class="user-info">
+          <i class="fas fa-user-circle"></i>
+          <div>
+            <p class="user-name" id="sidebarUserName">Loading...</p>
+            <p class="user-role" id="sidebarUserId">Employee</p>
+          </div>
+        </div> -->
+        <li id="logoutBtn" class="nav-item logout">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </li>
+      </div>
+    </aside>
+
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+      <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- OPE Section -->
+      <section id="opeSection" class="content-section active">
+        <!-- <div class="page-header">
+          <h1><i class="fas fa-clipboard-list"></i> OPE Entry Management</h1>
+          <p>Manage your travel expense entries</p>
+        </div> -->
+
+        <!-- Employee Details Card -->
+        <div class="card employee-details-card">
+          <div class="card-header">
+            <h2><i class="fas fa-user"></i> Employee Details</h2>
+          </div>
+          <div class="card-body">
+            <div class="details-grid">
+              <div class="detail-item">
+                <label><i class="fas fa-id-badge"></i> Employee ID</label>
+                <span id="empId">-</span>
+              </div>
+              <div class="detail-item">
+                <label><i class="fas fa-user"></i> Employee Name</label>
+                <span id="empName">-</span>
+              </div>
+              <div class="detail-item">
+                <label><i class="fas fa-briefcase"></i> Designation</label>
+                <span id="empDesignation">-</span>
+              </div>
+              <div class="detail-item">
+                <label><i class="fas fa-venus-mars"></i> Gender</label>
+                <span id="empGender">-</span>
+              </div>
+              <div class="detail-item">
+                <label><i class="fas fa-handshake"></i> Partner</label>
+                <span id="empPartner">-</span>
+              </div>
+              <div class="detail-item">
+                <label><i class="fas fa-user-tie"></i> Reporting Manager</label>
+                <span id="empManager">-</span>
+              </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <!-- Month Selection Dropdown - ADD THIS -->
-        <section class="month-selection">
-          <div class="month-dropdown-container">
-            <label for="monthRange">Select Month Range:</label>
-            <select id="monthRange" name="monthRange" required>
-              <option value="" disabled selected>Select Your Month</option>
-              <option value="sep-oct-2025">Sep 2025 - Oct 2025</option>
-              <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
-              <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
-            </select>
+        <!-- Month Selection Card -->
+        <div class="card month-selection-card">
+          <div class="card-header">
+            <h2><i class="fas fa-calendar-alt"></i> Select Month Range</h2>
           </div>
-        </section>
-
-        <section class="ope-form">
-          <h2>New Entry Submission</h2>
-
-          <div class="table-container">
-            <table class="entry-table" id="entryTable">
-              <thead>
-                <tr>
-                  <th>S.No</th>
-                  <th class="required">Date</th>
-                  <th>Action</th>
-                  <th class="required">Client Name</th>
-                  <th class="required">Project ID</th>
-                  <th class="required">Project Name</th>
-                  <th class="required">Project Type</th>
-                  <th class="required">Travel From</th>
-                  <th class="required">Travel To</th>
-                  <th class="required">Mode of Travel</th>
-                  <th class="required">Amount (₹)</th>
-                  <th>Remarks</th>
-                  <th >Ticket PDF</th>
-                  <th>Delete</th>
-                </tr>
-              </thead>
-              <tbody id="entryTableBody">
-                <!-- First row will be added by JavaScript -->
-              </tbody>
-            </table>
+          <div class="card-body">
+            <div class="month-dropdown-container">
+              <label for="monthRange">Month Range:</label>
+              <select id="monthRange" name="monthRange" required>
+                <option value="" disabled selected>Select Your Month</option>
+                <option value="sep-oct-2025">Sep 2025 - Oct 2025</option>
+                <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
+                <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
+              </select>
+            </div>
           </div>
+        </div>
 
-          <div class="entry-buttons-container">
-            <button
-              type="button"
-              class="add-entry-btn"
-              onclick="addNewEntryRow()"
-            >
-              <i class="fas fa-plus"></i> Add New Entry
+        <!-- Entry Form Card -->
+        <div class="card entry-form-card">
+          <div class="card-header">
+            <h2><i class="fas fa-plus-circle"></i> New Entry Submission</h2>
+          </div>
+          <div class="card-body">
+            <div class="table-container">
+              <table class="entry-table" id="entryTable">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th class="required">Date</th>
+                    <th>Action</th>
+                    <th class="required">Client Name</th>
+                    <th class="required">Project ID</th>
+                    <th class="required">Project Name</th>
+                    <th class="required">Project Type</th>
+                    <th class="required">Travel From</th>
+                    <th class="required">Travel To</th>
+                    <th class="required">Mode of Travel</th>
+                    <th class="required">Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th>Ticket PDF</th>
+                    <th>Delete</th>
+                  </tr>
+                </thead>
+                <tbody id="entryTableBody">
+                  <!-- Rows will be added by JavaScript -->
+                </tbody>
+              </table>
+            </div>
+
+            <div class="entry-buttons-container">
+              <button type="button" class="btn btn-success" onclick="addNewEntryRow()">
+                <i class="fas fa-plus"></i> Add New Entry
+              </button>
+              <button type="button" class="btn btn-primary" onclick="saveAllEntries()">
+                <i class="fas fa-save"></i> Save Entry
+              </button>
+            </div>
+
+            <button type="button" class="btn btn-submit" onclick="submitAllEntries()">
+              <i class="fas fa-paper-plane"></i> Submit All Entries
             </button>
-
-            <button
-              type="button"
-              class="save-entry-btn"
-              onclick="saveAllEntries()"
-            >
-              <i class="fas fa-save"></i> Save Entry
-            </button>
           </div>
-
-          <button type="button" class="submit-btn" onclick="submitAllEntries()">
-            <i class="fas fa-paper-plane"></i> Submit All Entries
-          </button>
-        </section>
+        </div>
       </section>
 
-      <!-- HISTORY SECTION -->
-      <div id="historySection" style="display: none">
-        <section class="month-filter">
-          <label for="monthRangeFilter">Filter by Month Range:</label>
-          <select id="monthRangeFilter">
-            <option value="">All Months</option>
-          </select>
-        </section>
-
-        <div id="loadingDiv" class="loading">
-          <i class="fas fa-spinner fa-spin"></i> Loading history...
+      <!-- History Section -->
+      <section id="historySection" class="content-section">
+        <div class="page-header">
+          <h1><i class="fas fa-history"></i> Entry History</h1>
+          <p>View and manage your submitted entries</p>
         </div>
 
-        <section
-          id="historyTableSection"
-          class="history-table-container"
-          style="display: none"
-        >
-          <div class="table-wrapper">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Action</th>
-                  <th>Client</th>
-                  <th>Project ID</th>
-                  <th>Project Name</th>
-                  <th>Project Type</th>
-                  <th>From</th>
-                  <th>To</th>
-                  <th>Travel Mode</th>
-                  <th>Amount (₹)</th>
-                  <th>Remarks</th>
-                  <th>PDF</th>
-                </tr>
-              </thead>
-              <tbody id="historyTableBody">
-                <!-- Data will be rendered here -->
-              </tbody>
-            </table>
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-filter"></i> Filter Entries</h2>
           </div>
-        </section>
-
-        <div id="noDataDiv" class="no-data" style="display: none">
-          <i class="fas fa-inbox"></i> No data found
+          <div class="card-body">
+            <div class="month-filter">
+              <label for="monthRangeFilter">Filter by Month Range:</label>
+              <select id="monthRangeFilter">
+                <option value="">All Months</option>
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- PDF Modal -->
-      <div id="pdfModal" class="pdf-modal">
-        <div class="pdf-modal-content">
-          <button class="pdf-modal-close" onclick="closePdfModal()">
-            ✕ Close
-          </button>
-          <iframe id="pdfViewer"></iframe>
+        <div id="loadingDiv" class="loading-container">
+          <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading history...</p>
+          </div>
         </div>
+
+        <div class="card" id="historyTableSection" style="display: none">
+          <div class="card-body">
+            <div class="table-wrapper">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Client</th>
+                    <th>Project ID</th>
+                    <th>Project Name</th>
+                    <th>Project Type</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Travel Mode</th>
+                    <th>Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th>PDF</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                  <!-- Data will be rendered here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="noDataDiv" class="no-data-container" style="display: none">
+          <i class="fas fa-inbox"></i>
+          <p>No data found</p>
+        </div>
+      </section>
+
+      <!-- Status Section (Placeholder) -->
+      <section id="statusSection" class="content-section">
+        <div class="page-header">
+          <h1><i class="fas fa-chart-line"></i> Status Overview</h1>
+          <p>Track your expense submission status</p>
+        </div>
+
+        <div class="card">
+          <div class="card-body text-center" style="padding: 60px 20px;">
+            <i class="fas fa-chart-pie" style="font-size: 64px; color: #667eea; margin-bottom: 20px;"></i>
+            <h3 style="color: #4a5568; margin-bottom: 10px;">Status Dashboard</h3>
+            <p style="color: #718096;">Coming soon... This feature is under development.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pending Section -->
+<!-- Pending Section -->
+<section id="pendingSection" class="content-section">
+  <div class="page-header">
+    <h1><i class="fas fa-clock"></i> Pending Approvals</h1>
+    <p>Review and approve employee expense entries</p>
+  </div>
+
+  <div id="pendingLoadingDiv" class="loading-container">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p>Loading pending entries...</p>
+    </div>
+  </div>
+
+  <div class="card" id="pendingTableSection" style="display: none">
+    <div class="card-header">
+      <h2><i class="fas fa-users"></i> Employees Awaiting Approval</h2>
+    </div>
+    <div class="card-body">
+      <div class="table-wrapper">
+        <table class="history-table" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="width: 15%; text-align: center;">Employee ID</th>
+              <th style="width: 35%; text-align: left;">Employee Name</th>
+              <th style="width: 20%; text-align: center;">Status</th>
+              <th style="width: 30%; text-align: center;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="pendingTableBody"></tbody>
+        </table>
       </div>
+    </div>
+  </div>
+
+  <div id="pendingNoDataDiv" class="no-data-container" style="display: none">
+    <i class="fas fa-inbox"></i>
+    <p>No pending approvals</p>
+  </div>
+</section>
+
+<!-- Approve Section -->
+<section id="approveSection" class="content-section">
+  <div class="page-header">
+    <h1><i class="fas fa-check-circle"></i> Approved Entries</h1>
+    <p>View all approved expense entries</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2><i class="fas fa-filter"></i> Filter Approved Entries</h2>
+    </div>
+    <div class="card-body">
+      <div class="month-filter">
+        <label for="approveMonthFilter">Filter by Month Range:</label>
+        <select id="approveMonthFilter">
+          <option value="">All Months</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="approveLoadingDiv" class="loading-container">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p>Loading approved entries...</p>
+    </div>
+  </div>
+
+  <div class="card" id="approveTableSection" style="display: none">
+    <div class="card-body">
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Client</th>
+              <th>Project ID</th>
+              <th>Project Name</th>
+              <th>Project Type</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Travel Mode</th>
+              <th>Amount (₹)</th>
+              <th>Remarks</th>
+              <th>PDF</th>
+              <th>Approved By</th>
+              <th>Approved Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="approveTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="approveNoDataDiv" class="no-data-container" style="display: none">
+    <i class="fas fa-inbox"></i>
+    <p>No approved entries found</p>
+  </div>
+</section>
+
+<!-- Reject Section -->
+<section id="rejectSection" class="content-section">
+  <div class="page-header">
+    <h1><i class="fas fa-times-circle"></i> Rejected Entries</h1>
+    <p>View all rejected expense entries</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2><i class="fas fa-filter"></i> Filter Rejected Entries</h2>
+    </div>
+    <div class="card-body">
+      <div class="month-filter">
+        <label for="rejectMonthFilter">Filter by Month Range:</label>
+        <select id="rejectMonthFilter">
+          <option value="">All Months</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="rejectLoadingDiv" class="loading-container">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p>Loading rejected entries...</p>
+    </div>
+  </div>
+
+  <div class="card" id="rejectTableSection" style="display: none">
+    <div class="card-body">
+      <div class="table-wrapper">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Client</th>
+              <th>Project ID</th>
+              <th>Project Name</th>
+              <th>Project Type</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Travel Mode</th>
+              <th>Amount (₹)</th>
+              <th>Remarks</th>
+              <th>PDF</th>
+              <th>Rejected By</th>
+              <th>Rejected Date</th>
+              <th>Reason</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="rejectTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="rejectNoDataDiv" class="no-data-container" style="display: none">
+    <i class="fas fa-inbox"></i>
+    <p>No rejected entries found</p>
+  </div>
+</section>
+
     </main>
+
+    <!-- PDF Modal -->
+    <div id="pdfModal" class="pdf-modal">
+      <div class="pdf-modal-content">
+        <button class="pdf-modal-close" onclick="closePdfModal()">
+          <i class="fas fa-times"></i> Close
+        </button>
+        <iframe id="pdfViewer"></iframe>
+      </div>
+    </div>
+
     <script src="script.js"></script>
   </body>
 </html>
