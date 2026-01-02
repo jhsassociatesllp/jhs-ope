@@ -1770,7 +1770,6 @@ document.addEventListener('DOMContentLoaded', function() {
   addNewEntryRow();
 });
 
-// Add New Entry Row
 // Add New Entry Row - UPDATED VERSION
 function addNewEntryRow() {
   entryCounter++;
@@ -1806,6 +1805,25 @@ function addNewEntryRow() {
   
   row.innerHTML = `
     <td><strong>${entryCounter}</strong></td>
+    <td><button type="button" onclick="openEntryModal(${entryCounter})" 
+                style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
+                       color: white; 
+                       border: none; 
+                       padding: 6px 10px; 
+                       border-radius: 6px; 
+                       cursor: pointer; 
+                       display: inline-flex; 
+                       align-items: center; 
+                       gap: 4px;
+                       transition: all 0.2s ease;
+                       font-size: 13px;"
+                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.4)';"
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
+                title="Fill form in modal">
+          <i class="fas fa-eye"></i>
+        </button>
+</td>
+
     <td><input type="date" name="date_${entryCounter}" value="${newRowDate}" required /></td>
     <td>
       <div class="table-action-btns">
@@ -1902,6 +1920,170 @@ function addNewEntryRow() {
     row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, 100);
 }
+
+// Open Entry Modal
+function openEntryModal(rowId) {
+  const modal = document.getElementById('entryFormModal');
+  const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+  
+  if (!row) return;
+  
+  // Get current values from row
+  const date = row.querySelector(`input[name="date_${rowId}"]`)?.value || '';
+  const client = row.querySelector(`input[name="client_${rowId}"]`)?.value || '';
+  const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value || '';
+  const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value || '';
+  const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value || '';
+  const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value || '';
+  const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value || '';
+  const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value || '';
+  const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value || '';
+  const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value || '';
+  
+  // Populate modal with current values
+  document.getElementById('modalRowId').value = rowId;
+  document.getElementById('modalDate').value = date;
+  document.getElementById('modalClient').value = client;
+  document.getElementById('modalProjectId').value = projectId;
+  document.getElementById('modalProjectName').value = projectName;
+  document.getElementById('modalProjectType').value = projectType;
+  document.getElementById('modalLocationFrom').value = locationFrom;
+  document.getElementById('modalLocationTo').value = locationTo;
+  document.getElementById('modalTravelMode').value = travelMode;
+  document.getElementById('modalAmount').value = amount;
+  document.getElementById('modalRemarks').value = remarks;
+  document.getElementById('modalFileName').textContent = '';
+  
+  modal.style.display = 'flex';
+  
+  // Prevent body scroll
+  document.body.style.overflow = 'hidden';
+}
+
+// Close Entry Modal
+function closeEntryModal() {
+  const modal = document.getElementById('entryFormModal');
+  modal.style.display = 'none';
+  
+  // Reset form
+  document.getElementById('modalEntryForm').reset();
+  document.getElementById('modalFileName').textContent = '';
+  
+  // Restore body scroll
+  document.body.style.overflow = '';
+}
+
+// Handle Modal Form Submit
+document.addEventListener('DOMContentLoaded', function() {
+  const modalForm = document.getElementById('modalEntryForm');
+  
+  if (modalForm) {
+    // PDF file validation
+    const pdfInput = document.getElementById('modalTicketPdf');
+    const fileName = document.getElementById('modalFileName');
+    
+    pdfInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) {
+        fileName.textContent = '';
+        return;
+      }
+      
+      if (file.type !== 'application/pdf') {
+        fileName.textContent = '❌ Only PDF files allowed!';
+        fileName.style.color = '#e53e3e';
+        e.target.value = '';
+      } else {
+        fileName.textContent = '✅ ' + file.name;
+        fileName.style.color = '#27ae60';
+      }
+    });
+    
+    // Form submission
+    modalForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const token = localStorage.getItem('access_token');
+      const empCode = localStorage.getItem('employee_code');
+      
+      if (!token || !empCode) {
+        showErrorPopup('Authentication required. Please login again.');
+        return;
+      }
+      
+      const rowId = document.getElementById('modalRowId').value;
+      const monthRangeSelect = document.getElementById('monthRange');
+      const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
+      
+      if (!monthRange) {
+        showErrorPopup('Please select month range first!');
+        return;
+      }
+      
+      // Get form values
+      const date = document.getElementById('modalDate').value;
+      const client = document.getElementById('modalClient').value.trim();
+      const projectId = document.getElementById('modalProjectId').value.trim();
+      const projectName = document.getElementById('modalProjectName').value.trim();
+      const projectType = document.getElementById('modalProjectType').value;
+      const locationFrom = document.getElementById('modalLocationFrom').value.trim();
+      const locationTo = document.getElementById('modalLocationTo').value.trim();
+      const travelMode = document.getElementById('modalTravelMode').value;
+      const amount = parseFloat(document.getElementById('modalAmount').value);
+      const remarks = document.getElementById('modalRemarks').value.trim();
+      const pdfFile = document.getElementById('modalTicketPdf').files[0];
+      
+      // Validation
+      if (!date || !client || !projectId || !projectName || !projectType || 
+          !locationFrom || !locationTo || !travelMode || isNaN(amount) || amount <= 0) {
+        showErrorPopup('Please fill all required fields correctly');
+        return;
+      }
+      
+      if (!isDateInMonthRange(date, monthRange)) {
+        const range = monthRanges[monthRange];
+        showErrorPopup(
+          `❌ Invalid Date!<br><br>` +
+          `Selected date: <strong>${date}</strong><br>` +
+          `Valid range: <strong>${range.start}</strong> to <strong>${range.end}</strong><br><br>` +
+          `Please select a date within <strong>${range.display}</strong> payroll period.`
+        );
+        return;
+      }
+      
+      if (pdfFile && pdfFile.type !== 'application/pdf') {
+        showErrorPopup('Only PDF files allowed');
+        return;
+      }
+      
+      // Update table row with modal data
+      const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+      if (row) {
+        row.querySelector(`input[name="date_${rowId}"]`).value = date;
+        row.querySelector(`input[name="client_${rowId}"]`).value = client;
+        row.querySelector(`input[name="projectid_${rowId}"]`).value = projectId;
+        row.querySelector(`input[name="projectname_${rowId}"]`).value = projectName;
+        row.querySelector(`select[name="projecttype_${rowId}"]`).value = projectType;
+        row.querySelector(`input[name="locationfrom_${rowId}"]`).value = locationFrom;
+        row.querySelector(`input[name="locationto_${rowId}"]`).value = locationTo;
+        row.querySelector(`select[name="travelmode_${rowId}"]`).value = travelMode;
+        row.querySelector(`input[name="amount_${rowId}"]`).value = amount;
+        row.querySelector(`input[name="remarks_${rowId}"]`).value = remarks;
+        
+        // Handle PDF file
+        if (pdfFile) {
+          const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(pdfFile);
+          pdfInput.files = dataTransfer.files;
+        }
+      }
+      
+      showSuccessPopup('Entry updated successfully in the form!');
+      closeEntryModal();
+    });
+  }
+});
 
 // Copy Row Data
 function copyRow(rowId) {

@@ -1,219 +1,341 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JHS OPE - Employee Portal</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="style.css" />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-    />
-  </head>
-  <body>
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo">
-          <i class="fas fa-briefcase"></i>
-          <h2>JHS OPE</h2>
+  <!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>JHS OPE - Employee Portal</title>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet"
+      />
+      <link rel="stylesheet" href="style.css" />
+      <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      />
+    </head>
+    <body>
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo">
+            <i class="fas fa-briefcase"></i>
+            <h2>JHS OPE</h2>
+          </div>
+          <p class="subtitle">Employee Portal</p>
         </div>
-        <p class="subtitle">Employee Portal</p>
-      </div>
 
-      <nav class="sidebar-nav">
-        <ul>
-          <li id="navOPE" class="nav-item active">
-            <i class="fas fa-clipboard-list"></i>
-            <span>OPE</span>
-          </li>
-          <li id="navHistory" class="nav-item">
-            <i class="fas fa-history"></i>
-            <span>History</span>
-          </li>
-          <li id="navStatus" class="nav-item">
-            <i class="fas fa-chart-line"></i>
-            <span>Status</span>
-          </li>
-          <li id="navPending" class="nav-item">
-            <i class="fas fa-clock"></i>
-            <span>Pending</span>
-          </li>
-          <li id="navApprove" class="nav-item">
-            <i class="fas fa-check-circle"></i>
-            <span>Approve</span>
-          </li>
-          <li id="navReject" class="nav-item">
-            <i class="fas fa-times-circle"></i>
-            <span>Reject</span>
-          </li>
-          
-        </ul>
-      </nav>
+        <nav class="sidebar-nav">
+          <ul>
+            <li id="navOPE" class="nav-item active">
+              <i class="fas fa-clipboard-list"></i>
+              <span>OPE</span>
+            </li>
+            <li id="navHistory" class="nav-item">
+              <i class="fas fa-history"></i>
+              <span>History</span>
+            </li>
+            <li id="navStatus" class="nav-item">
+              <i class="fas fa-chart-line"></i>
+              <span>Status</span>
+            </li>
+            <li id="navPending" class="nav-item">
+              <i class="fas fa-clock"></i>
+              <span>Pending</span>
+            </li>
+            <li id="navApprove" class="nav-item">
+              <i class="fas fa-check-circle"></i>
+              <span>Approve</span>
+            </li>
+            <li id="navReject" class="nav-item">
+              <i class="fas fa-times-circle"></i>
+              <span>Reject</span>
+            </li>
+            
+          </ul>
+        </nav>
 
-      <div class="sidebar-footer">
-        <!-- <div class="user-info">
-          <i class="fas fa-user-circle"></i>
-          <div>
-            <p class="user-name" id="sidebarUserName">Loading...</p>
-            <p class="user-role" id="sidebarUserId">Employee</p>
-          </div>
-        </div> -->
-        <li id="logoutBtn" class="nav-item logout">
-            <i class="fas fa-sign-out-alt"></i>
-            <span>Logout</span>
-          </li>
-      </div>
-    </aside>
+        <div class="sidebar-footer">
+          <!-- <div class="user-info">
+            <i class="fas fa-user-circle"></i>
+            <div>
+              <p class="user-name" id="sidebarUserName">Loading...</p>
+              <p class="user-role" id="sidebarUserId">Employee</p>
+            </div>
+          </div> -->
+          <li id="logoutBtn" class="nav-item logout">
+              <i class="fas fa-sign-out-alt"></i>
+              <span>Logout</span>
+            </li>
+        </div>
+      </aside>
 
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-      <i class="fas fa-bars"></i>
-    </button>
+      <!-- Mobile Menu Toggle -->
+      <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <i class="fas fa-bars"></i>
+      </button>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <!-- OPE Section -->
-      <section id="opeSection" class="content-section active">
-        <!-- <div class="page-header">
-          <h1><i class="fas fa-clipboard-list"></i> OPE Entry Management</h1>
-          <p>Manage your travel expense entries</p>
-        </div> -->
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- OPE Section -->
+        <section id="opeSection" class="content-section active">
+          <!-- <div class="page-header">
+            <h1><i class="fas fa-clipboard-list"></i> OPE Entry Management</h1>
+            <p>Manage your travel expense entries</p>
+          </div> -->
 
-        <!-- Employee Details Card -->
-        <div class="card employee-details-card">
-          <div class="card-header">
-            <h2><i class="fas fa-user"></i> Employee Details</h2>
-          </div>
-          <div class="card-body">
-            <div class="details-grid">
-              <div class="detail-item">
-                <label><i class="fas fa-id-badge"></i> Employee ID</label>
-                <span id="empId">-</span>
-              </div>
-              <div class="detail-item">
-                <label><i class="fas fa-user"></i> Employee Name</label>
-                <span id="empName">-</span>
-              </div>
-              <div class="detail-item">
-                <label><i class="fas fa-briefcase"></i> Designation</label>
-                <span id="empDesignation">-</span>
-              </div>
-              <div class="detail-item">
-                <label><i class="fas fa-venus-mars"></i> Gender</label>
-                <span id="empGender">-</span>
-              </div>
-              <div class="detail-item">
-                <label><i class="fas fa-handshake"></i> Partner</label>
-                <span id="empPartner">-</span>
-              </div>
-              <div class="detail-item">
-                <label><i class="fas fa-user-tie"></i> Reporting Manager</label>
-                <span id="empManager">-</span>
+          <!-- Employee Details Card -->
+          <div class="card employee-details-card">
+            <div class="card-header">
+              <h2><i class="fas fa-user"></i> Employee Details</h2>
+            </div>
+            <div class="card-body">
+              <div class="details-grid">
+                <div class="detail-item">
+                  <label><i class="fas fa-id-badge"></i> Employee ID</label>
+                  <span id="empId">-</span>
+                </div>
+                <div class="detail-item">
+                  <label><i class="fas fa-user"></i> Employee Name</label>
+                  <span id="empName">-</span>
+                </div>
+                <div class="detail-item">
+                  <label><i class="fas fa-briefcase"></i> Designation</label>
+                  <span id="empDesignation">-</span>
+                </div>
+                <div class="detail-item">
+                  <label><i class="fas fa-venus-mars"></i> Gender</label>
+                  <span id="empGender">-</span>
+                </div>
+                <div class="detail-item">
+                  <label><i class="fas fa-handshake"></i> Partner</label>
+                  <span id="empPartner">-</span>
+                </div>
+                <div class="detail-item">
+                  <label><i class="fas fa-user-tie"></i> Reporting Manager</label>
+                  <span id="empManager">-</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Month Selection Card -->
-        <div class="card month-selection-card">
-          <div class="card-header">
-            <h2><i class="fas fa-calendar-alt"></i> Select Month Range</h2>
-          </div>
-          <div class="card-body">
-            <div class="month-dropdown-container">
-              <label for="monthRange">Month Range:</label>
-              <select id="monthRange" name="monthRange" required>
-                <option value="" disabled selected>Select Your Month</option>
-                <option value="sep-oct-2025">Sep 2025 - Oct 2025</option>
-                <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
-                <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
-              </select>
+          <!-- Month Selection Card -->
+          <div class="card month-selection-card">
+            <div class="card-header">
+              <h2><i class="fas fa-calendar-alt"></i> Select Month Range</h2>
+            </div>
+            <div class="card-body">
+              <div class="month-dropdown-container">
+                <label for="monthRange">Month Range:</label>
+                <select id="monthRange" name="monthRange" required>
+                  <option value="" disabled selected>Select Your Month</option>
+                  <option value="sep-oct-2025">Sep 2025 - Oct 2025</option>
+                  <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
+                  <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
+                </select>
+              </div>
             </div>
           </div>
+
+          <!-- Entry Form Card -->
+          <div class="card entry-form-card">
+            <div class="card-header">
+              <h2><i class="fas fa-plus-circle"></i> New Entry Submission</h2>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="entry-table" id="entryTable">
+                  <thead>
+                    <tr>
+                      <th>S.No</th>
+                      <th>Add</th>
+                      <th class="required">Date</th>
+                      <th>Action</th>
+                      <th class="required">Client Name</th>
+                      <th class="required">Project ID</th>
+                      <th class="required">Project Name</th>
+                      <th class="required">Project Type</th>
+                      <th class="required">Travel From</th>
+                      <th class="required">Travel To</th>
+                      <th class="required">Mode of Travel</th>
+                      <th class="required">Amount (₹)</th>
+                      <th>Remarks</th>
+                      <th>Ticket PDF</th>
+                      <th>Delete</th>
+                    </tr>
+                  </thead>
+                  <tbody id="entryTableBody">
+                    <!-- Rows will be added by JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="entry-buttons-container">
+                <button type="button" class="btn btn-success" onclick="addNewEntryRow()">
+                  <i class="fas fa-plus"></i> Add New Entry
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveAllEntries()">
+                  <i class="fas fa-save"></i> Save Entry
+                </button>
+              </div>
+
+              <button type="button" class="btn btn-submit" onclick="submitAllEntries()">
+                <i class="fas fa-paper-plane"></i> Submit All Entries
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- History Section -->
+        <section id="historySection" class="content-section">
+          <div class="page-header">
+            <h1><i class="fas fa-history"></i> Entry History</h1>
+            <p>View and manage your submitted entries</p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fas fa-filter"></i> Filter Entries</h2>
+            </div>
+            <div class="card-body">
+              <div class="month-filter">
+                <label for="monthRangeFilter">Filter by Month Range:</label>
+                <select id="monthRangeFilter">
+                  <option value="">All Months</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="loadingDiv" class="loading-container">
+            <div class="loading-spinner">
+              <i class="fas fa-spinner fa-spin"></i>
+              <p>Loading history...</p>
+            </div>
+          </div>
+
+          <div class="card" id="historyTableSection" style="display: none">
+            <div class="card-body">
+              <div class="table-wrapper">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Client</th>
+                      <th>Project ID</th>
+                      <th>Project Name</th>
+                      <th>Project Type</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Travel Mode</th>
+                      <th>Amount (₹)</th>
+                      <th>Remarks</th>
+                      <th>PDF</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyTableBody">
+                    <!-- Data will be rendered here -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="noDataDiv" class="no-data-container" style="display: none">
+            <i class="fas fa-inbox"></i>
+            <p>No data found</p>
+          </div>
+        </section>
+
+        <!-- Status Section (Placeholder) -->
+        <section id="statusSection" class="content-section">
+          <div class="page-header">
+            <h1><i class="fas fa-chart-line"></i> Status Overview</h1>
+            <p>Track your expense submission status</p>
+          </div>
+
+          <div class="card">
+            <div class="card-body text-center" style="padding: 60px 20px;">
+              <i class="fas fa-chart-pie" style="font-size: 64px; color: #667eea; margin-bottom: 20px;"></i>
+              <h3 style="color: #4a5568; margin-bottom: 10px;">Status Dashboard</h3>
+              <p style="color: #718096;">Coming soon... This feature is under development.</p>
+            </div>
+          </div>
+        </section>
+
+        
+      <!-- Pending Section -->
+      <section id="pendingSection" class="content-section">
+        <div class="page-header">
+          <h1><i class="fas fa-clock"></i> Pending Approvals</h1>
+          <p>Review and approve employee expense entries</p>
         </div>
 
-        <!-- Entry Form Card -->
-        <div class="card entry-form-card">
+        <div id="pendingLoadingDiv" class="loading-container">
+          <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading pending entries...</p>
+          </div>
+        </div>
+
+        <div class="card" id="pendingTableSection" style="display: none">
           <div class="card-header">
-            <h2><i class="fas fa-plus-circle"></i> New Entry Submission</h2>
+            <h2><i class="fas fa-users"></i> Employees Awaiting Approval</h2>
           </div>
           <div class="card-body">
-            <div class="table-container">
-              <table class="entry-table" id="entryTable">
+            <div class="table-wrapper">
+              <table class="history-table" style="width: 100%;">
                 <thead>
                   <tr>
-                    <th>S.No</th>
-                    <th class="required">Date</th>
-                    <th>Action</th>
-                    <th class="required">Client Name</th>
-                    <th class="required">Project ID</th>
-                    <th class="required">Project Name</th>
-                    <th class="required">Project Type</th>
-                    <th class="required">Travel From</th>
-                    <th class="required">Travel To</th>
-                    <th class="required">Mode of Travel</th>
-                    <th class="required">Amount (₹)</th>
-                    <th>Remarks</th>
-                    <th>Ticket PDF</th>
-                    <th>Delete</th>
+                    <th style="width: 15%; text-align: center;">Employee ID</th>
+                    <th style="width: 35%; text-align: left;">Employee Name</th>
+                    <th style="width: 20%; text-align: center;">Status</th>
+                    <th style="width: 30%; text-align: center;">Action</th>
                   </tr>
                 </thead>
-                <tbody id="entryTableBody">
-                  <!-- Rows will be added by JavaScript -->
-                </tbody>
+                <tbody id="pendingTableBody"></tbody>
               </table>
             </div>
-
-            <div class="entry-buttons-container">
-              <button type="button" class="btn btn-success" onclick="addNewEntryRow()">
-                <i class="fas fa-plus"></i> Add New Entry
-              </button>
-              <button type="button" class="btn btn-primary" onclick="saveAllEntries()">
-                <i class="fas fa-save"></i> Save Entry
-              </button>
-            </div>
-
-            <button type="button" class="btn btn-submit" onclick="submitAllEntries()">
-              <i class="fas fa-paper-plane"></i> Submit All Entries
-            </button>
           </div>
+        </div>
+
+        <div id="pendingNoDataDiv" class="no-data-container" style="display: none">
+          <i class="fas fa-inbox"></i>
+          <p>No pending approvals</p>
         </div>
       </section>
 
-      <!-- History Section -->
-      <section id="historySection" class="content-section">
+      <!-- Approve Section -->
+      <section id="approveSection" class="content-section">
         <div class="page-header">
-          <h1><i class="fas fa-history"></i> Entry History</h1>
-          <p>View and manage your submitted entries</p>
+          <h1><i class="fas fa-check-circle"></i> Approved Entries</h1>
+          <p>View all approved expense entries</p>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <h2><i class="fas fa-filter"></i> Filter Entries</h2>
+            <h2><i class="fas fa-filter"></i> Filter Approved Entries</h2>
           </div>
           <div class="card-body">
             <div class="month-filter">
-              <label for="monthRangeFilter">Filter by Month Range:</label>
-              <select id="monthRangeFilter">
+              <label for="approveMonthFilter">Filter by Month Range:</label>
+              <select id="approveMonthFilter">
                 <option value="">All Months</option>
               </select>
             </div>
           </div>
         </div>
 
-        <div id="loadingDiv" class="loading-container">
+        <div id="approveLoadingDiv" class="loading-container">
           <div class="loading-spinner">
             <i class="fas fa-spinner fa-spin"></i>
-            <p>Loading history...</p>
+            <p>Loading approved entries...</p>
           </div>
         </div>
 
-        <div class="card" id="historyTableSection" style="display: none">
+        <div class="card" id="approveTableSection" style="display: none">
           <div class="card-body">
             <div class="table-wrapper">
               <table class="history-table">
@@ -231,220 +353,278 @@
                     <th>Amount (₹)</th>
                     <th>Remarks</th>
                     <th>PDF</th>
+                    <th>Approved By</th>
+                    <th>Approved Date</th>
                     <th>Action</th>
                   </tr>
                 </thead>
-                <tbody id="historyTableBody">
-                  <!-- Data will be rendered here -->
-                </tbody>
+                <tbody id="approveTableBody"></tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <div id="noDataDiv" class="no-data-container" style="display: none">
+        <div id="approveNoDataDiv" class="no-data-container" style="display: none">
           <i class="fas fa-inbox"></i>
-          <p>No data found</p>
+          <p>No approved entries found</p>
         </div>
       </section>
 
-      <!-- Status Section (Placeholder) -->
-      <section id="statusSection" class="content-section">
+      <!-- Reject Section -->
+      <section id="rejectSection" class="content-section">
         <div class="page-header">
-          <h1><i class="fas fa-chart-line"></i> Status Overview</h1>
-          <p>Track your expense submission status</p>
+          <h1><i class="fas fa-times-circle"></i> Rejected Entries</h1>
+          <p>View all rejected expense entries</p>
         </div>
 
         <div class="card">
-          <div class="card-body text-center" style="padding: 60px 20px;">
-            <i class="fas fa-chart-pie" style="font-size: 64px; color: #667eea; margin-bottom: 20px;"></i>
-            <h3 style="color: #4a5568; margin-bottom: 10px;">Status Dashboard</h3>
-            <p style="color: #718096;">Coming soon... This feature is under development.</p>
+          <div class="card-header">
+            <h2><i class="fas fa-filter"></i> Filter Rejected Entries</h2>
           </div>
+          <div class="card-body">
+            <div class="month-filter">
+              <label for="rejectMonthFilter">Filter by Month Range:</label>
+              <select id="rejectMonthFilter">
+                <option value="">All Months</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="rejectLoadingDiv" class="loading-container">
+          <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading rejected entries...</p>
+          </div>
+        </div>
+
+        <div class="card" id="rejectTableSection" style="display: none">
+          <div class="card-body">
+            <div class="table-wrapper">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Client</th>
+                    <th>Project ID</th>
+                    <th>Project Name</th>
+                    <th>Project Type</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Travel Mode</th>
+                    <th>Amount (₹)</th>
+                    <th>Remarks</th>
+                    <th>PDF</th>
+                    <th>Rejected By</th>
+                    <th>Rejected Date</th>
+                    <th>Reason</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="rejectTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="rejectNoDataDiv" class="no-data-container" style="display: none">
+          <i class="fas fa-inbox"></i>
+          <p>No rejected entries found</p>
         </div>
       </section>
 
-      <!-- Pending Section -->
-<!-- Pending Section -->
-<section id="pendingSection" class="content-section">
-  <div class="page-header">
-    <h1><i class="fas fa-clock"></i> Pending Approvals</h1>
-    <p>Review and approve employee expense entries</p>
-  </div>
+      </main>
 
-  <div id="pendingLoadingDiv" class="loading-container">
-    <div class="loading-spinner">
-      <i class="fas fa-spinner fa-spin"></i>
-      <p>Loading pending entries...</p>
-    </div>
-  </div>
-
-  <div class="card" id="pendingTableSection" style="display: none">
-    <div class="card-header">
-      <h2><i class="fas fa-users"></i> Employees Awaiting Approval</h2>
-    </div>
-    <div class="card-body">
-      <div class="table-wrapper">
-        <table class="history-table" style="width: 100%;">
-          <thead>
-            <tr>
-              <th style="width: 15%; text-align: center;">Employee ID</th>
-              <th style="width: 35%; text-align: left;">Employee Name</th>
-              <th style="width: 20%; text-align: center;">Status</th>
-              <th style="width: 30%; text-align: center;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="pendingTableBody"></tbody>
-        </table>
+      <!-- PDF Modal -->
+      <div id="pdfModal" class="pdf-modal">
+        <div class="pdf-modal-content">
+          <button class="pdf-modal-close" onclick="closePdfModal()">
+            <i class="fas fa-times"></i> Close
+          </button>
+          <iframe id="pdfViewer"></iframe>
+        </div>
       </div>
+
+      <!-- Entry Form Modal -->
+<div id="entryFormModal" class="modal" style="display: none;">
+  <div class="modal-overlay" onclick="closeEntryModal()"></div>
+  <div class="modal-content" style="max-width: 1100px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 25px 30px; border-bottom: 2px solid #e5e7eb; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+      <h2 style="font-size: 24px; color: white; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px;">
+         Entry Form
+      </h2>
+      <button onclick="closeEntryModal()" style="background: rgba(255, 255, 255, 0.2); color: white; border: 2px solid rgba(255, 255, 255, 0.3); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.3s ease; backdrop-filter: blur(10px);"
+              onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'; this.style.transform='translateY(-2px)';"
+              onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'; this.style.transform='translateY(0)';">
+        <i class="fas fa-times"></i> Close
+      </button>
+    </div>
+    
+    <div class="modal-body" style="padding: 30px;">
+      <form id="modalEntryForm">
+        <input type="hidden" id="modalRowId" />
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+          
+          <!-- Date Field - Full Width -->
+          <div style="grid-column: 1 / -1;">
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Date <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="date" id="modalDate" required style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Client Name -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Client Name <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modalClient" required placeholder="Enter client name" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Project ID -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Project ID <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modalProjectId" required placeholder="Enter project ID" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Project Name -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Project Name <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modalProjectName" required placeholder="Enter project name" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Project Type -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Project Type <span style="color: #ef4444;">*</span>
+            </label>
+            <select id="modalProjectType" required style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb; cursor: pointer;"
+                    onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                    onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';">
+              <option value="" disabled selected>Select Type</option>
+              <option value="Concurrent">Concurrent</option>
+              <option value="KYC">KYC</option>
+              <option value="IFC">IFC</option>
+              <option value="Statutory">Statutory</option>
+              <option value="Internal">Internal</option>
+              <option value="Cyber Security">Cyber Security</option>
+              <option value="Consulting">Consulting</option>
+              <option value="Outsourcing">Outsourcing</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          
+          <!-- Travel From -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Travel From <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modalLocationFrom" required placeholder="From location" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Travel To -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Travel To <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modalLocationTo" required placeholder="To location" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Mode of Travel -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Mode of Travel <span style="color: #ef4444;">*</span>
+            </label>
+            <select id="modalTravelMode" required style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb; cursor: pointer;"
+                    onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                    onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';">
+              <option value="" disabled selected>Select Mode</option>
+              <option value="metro_recharge">Metro Recharge</option>
+              <option value="metro_pass">Metro Pass</option>
+              <option value="metro_tickets">Metro Tickets</option>
+              <option value="shared_auto">Shared Auto</option>
+              <option value="shared_taxi">Shared Taxi</option>
+              <option value="meter_auto">Meter Auto</option>
+              <option value="taxi_cab">Taxi / Cab</option>
+              <option value="bus_ticket">Bus Tickets</option>
+              <option value="bus_pass">Bus Pass</option>
+              <option value="train_pass 1st">Train Pass - 1st Class</option>
+              <option value="train_pass 2nd">Train Pass - 2nd Class</option>
+              <option value="train_ticket">Train Ticket</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          
+          <!-- Amount -->
+          <div>
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Amount (₹) <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="number" id="modalAmount" required placeholder="Enter amount" min="0" step="0.01" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Remarks - Span 2 columns -->
+          <div style="grid-column: span 2;">
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Remarks
+            </label>
+            <input type="text" id="modalRemarks" placeholder="Enter remarks (optional)" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; transition: all 0.3s ease; background: #f9fafb;"
+                   onfocus="this.style.borderColor='#667eea'; this.style.background='white'; this.style.boxShadow='0 0 0 3px rgba(102, 126, 234, 0.1)';"
+                   onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb'; this.style.boxShadow='none';" />
+          </div>
+          
+          <!-- Ticket PDF - Full Width -->
+          <div style="grid-column: 1 / -1;">
+            <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #374151; font-size: 14px;">
+               Ticket PDF
+            </label>
+            <div style="position: relative;">
+              <input type="file" id="modalTicketPdf" accept=".pdf" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 14px; cursor: pointer; background: #f9fafb;"
+                     onfocus="this.style.borderColor='#667eea'; this.style.background='white';"
+                     onblur="this.style.borderColor='#e5e7eb'; this.style.background='#f9fafb';" />
+            </div>
+            <p id="modalFileName" style="margin-top: 8px; font-size: 13px; color: #6b7280; font-weight: 500;"></p>
+          </div>
+        </div>
+        
+        <!-- Centered Buttons -->
+        <div style="display: flex; gap: 15px; justify-content: center; margin-top: 35px; padding-top: 25px; border-top: 2px solid #e5e7eb;">
+          <button type="button" onclick="closeEntryModal()" style="padding: 14px 32px; background: #f1f5f9; color: #475569; border: 2px solid #e2e8f0; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; min-width: 140px; justify-content: center;"
+                  onmouseover="this.style.background='#e2e8f0'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0, 0, 0, 0.1)';"
+                  onmouseout="this.style.background='#f1f5f9'; this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+            <i class="fas fa-times"></i> Cancel
+          </button>
+          <button type="submit" style="padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); display: flex; align-items: center; gap: 8px; min-width: 140px; justify-content: center;"
+                  onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(102, 126, 234, 0.5)';"
+                  onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(102, 126, 234, 0.4)';">
+            <i class="fas fa-save"></i> Save Entry
+          </button>
+        </div>
+      </form>
     </div>
   </div>
+</div>
 
-  <div id="pendingNoDataDiv" class="no-data-container" style="display: none">
-    <i class="fas fa-inbox"></i>
-    <p>No pending approvals</p>
-  </div>
-</section>
-
-<!-- Approve Section -->
-<section id="approveSection" class="content-section">
-  <div class="page-header">
-    <h1><i class="fas fa-check-circle"></i> Approved Entries</h1>
-    <p>View all approved expense entries</p>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h2><i class="fas fa-filter"></i> Filter Approved Entries</h2>
-    </div>
-    <div class="card-body">
-      <div class="month-filter">
-        <label for="approveMonthFilter">Filter by Month Range:</label>
-        <select id="approveMonthFilter">
-          <option value="">All Months</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <div id="approveLoadingDiv" class="loading-container">
-    <div class="loading-spinner">
-      <i class="fas fa-spinner fa-spin"></i>
-      <p>Loading approved entries...</p>
-    </div>
-  </div>
-
-  <div class="card" id="approveTableSection" style="display: none">
-    <div class="card-body">
-      <div class="table-wrapper">
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Client</th>
-              <th>Project ID</th>
-              <th>Project Name</th>
-              <th>Project Type</th>
-              <th>From</th>
-              <th>To</th>
-              <th>Travel Mode</th>
-              <th>Amount (₹)</th>
-              <th>Remarks</th>
-              <th>PDF</th>
-              <th>Approved By</th>
-              <th>Approved Date</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="approveTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div id="approveNoDataDiv" class="no-data-container" style="display: none">
-    <i class="fas fa-inbox"></i>
-    <p>No approved entries found</p>
-  </div>
-</section>
-
-<!-- Reject Section -->
-<section id="rejectSection" class="content-section">
-  <div class="page-header">
-    <h1><i class="fas fa-times-circle"></i> Rejected Entries</h1>
-    <p>View all rejected expense entries</p>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h2><i class="fas fa-filter"></i> Filter Rejected Entries</h2>
-    </div>
-    <div class="card-body">
-      <div class="month-filter">
-        <label for="rejectMonthFilter">Filter by Month Range:</label>
-        <select id="rejectMonthFilter">
-          <option value="">All Months</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <div id="rejectLoadingDiv" class="loading-container">
-    <div class="loading-spinner">
-      <i class="fas fa-spinner fa-spin"></i>
-      <p>Loading rejected entries...</p>
-    </div>
-  </div>
-
-  <div class="card" id="rejectTableSection" style="display: none">
-    <div class="card-body">
-      <div class="table-wrapper">
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Client</th>
-              <th>Project ID</th>
-              <th>Project Name</th>
-              <th>Project Type</th>
-              <th>From</th>
-              <th>To</th>
-              <th>Travel Mode</th>
-              <th>Amount (₹)</th>
-              <th>Remarks</th>
-              <th>PDF</th>
-              <th>Rejected By</th>
-              <th>Rejected Date</th>
-              <th>Reason</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="rejectTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div id="rejectNoDataDiv" class="no-data-container" style="display: none">
-    <i class="fas fa-inbox"></i>
-    <p>No rejected entries found</p>
-  </div>
-</section>
-
-    </main>
-
-    <!-- PDF Modal -->
-    <div id="pdfModal" class="pdf-modal">
-      <div class="pdf-modal-content">
-        <button class="pdf-modal-close" onclick="closePdfModal()">
-          <i class="fas fa-times"></i> Close
-        </button>
-        <iframe id="pdfViewer"></iframe>
-      </div>
-    </div>
-
-    <script src="script.js"></script>
-  </body>
-</html>
+      <script src="script.js"></script>
+    </body>
+  </html>
