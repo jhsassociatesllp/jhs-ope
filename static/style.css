@@ -338,6 +338,7 @@ body {
 .month-dropdown-container {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 15px;
 }
 
@@ -373,6 +374,7 @@ body {
 .month-filter {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 15px;
 }
 
@@ -396,7 +398,7 @@ body {
 }
 
 .table-container::-webkit-scrollbar {
-    height: 10px;
+    height: 5px;
 }
 
 .table-container::-webkit-scrollbar-track {
@@ -926,5 +928,283 @@ body {
     }
     to {
         transform: scale(1);
+    }
+}
+
+
+/* Status TAble Css */
+/* ============================================
+   STATUS SECTION - COMPACT TABLE DESIGN
+   ============================================ */
+
+#statusSection .card {
+    margin-bottom: 20px;
+}
+
+#statusSection .table-wrapper {
+    overflow-x: auto;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+#statusSection .history-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+}
+
+#statusSection .history-table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+#statusSection .history-table thead th {
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 12px;
+    text-align: left;
+    border: none;
+}
+
+#statusSection .history-table thead th:first-child {
+    border-top-left-radius: 12px;
+    width: 180px; /* Fixed width for Payroll Month */
+}
+
+#statusSection .history-table thead th:nth-child(2) {
+    width: 140px; /* Fixed width for Total Amount */
+    text-align: center;
+}
+
+#statusSection .history-table thead th:nth-child(3) {
+    width: 220px; /* Fixed width for Overall Status */
+    text-align: center;
+}
+
+#statusSection .history-table thead th:last-child {
+    border-top-right-radius: 12px;
+    width: auto; /* Flexible width for Approval Tracker */
+    min-width: 600px;
+}
+
+#statusSection .history-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background-color 0.2s ease;
+}
+
+#statusSection .history-table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+#statusSection .history-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+#statusSection .history-table tbody td {
+    padding: 16px 12px;
+    vertical-align: middle;
+    color: #475569;
+    font-size: 14px;
+}
+
+#statusSection .history-table tbody td:first-child {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+#statusSection .history-table tbody td:nth-child(2) {
+    text-align: center;
+    font-weight: 700;
+    font-size: 16px;
+    color: #059669;
+}
+
+#statusSection .history-table tbody td:nth-child(3) {
+    text-align: center;
+}
+
+/* Status Badge Styling */
+.status-badge-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-badge {
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.status-badge.completed {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.status-badge.pending {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+}
+
+.status-info {
+    font-size: 11px;
+    color: #64748b;
+    text-align: center;
+    line-height: 1.4;
+}
+
+/* Approval Tracker Styling */
+.approval-tracker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: nowrap;
+    padding: 4px 0;
+}
+
+.approval-level {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    min-width: 160px;
+    max-width: 180px;
+    border: 2px solid;
+    transition: all 0.3s ease;
+}
+
+.approval-level.approved {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-color: #059669;
+}
+
+.approval-level.pending {
+    background: #fef3c7;
+    border-color: #f59e0b;
+}
+
+.approval-level.inactive {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+
+.approval-level i {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.approval-level.approved i {
+    color: white;
+}
+
+.approval-level.pending i {
+    color: #f59e0b;
+}
+
+.approval-level.inactive i {
+    color: #94a3b8;
+}
+
+.level-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.level-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.approval-level.approved .level-title {
+    color: white;
+}
+
+.approval-level.pending .level-title,
+.approval-level.inactive .level-title {
+    color: #475569;
+}
+
+.level-status {
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.approval-level.approved .level-status {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.approval-level.pending .level-status {
+    color: #64748b;
+}
+
+.approval-level.inactive .level-status {
+    color: #94a3b8;
+}
+
+.level-date {
+    font-size: 9px;
+    margin-top: 2px;
+}
+
+.approval-level.approved .level-date {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.approval-level.inactive .level-date,
+.approval-level.pending .level-date {
+    color: #94a3b8;
+}
+
+.approval-arrow {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.approval-arrow.active {
+    color: #10b981;
+}
+
+.approval-arrow.inactive {
+    color: #94a3b8;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1400px) {
+    #statusSection .history-table thead th:last-child {
+        min-width: 500px;
+    }
+    
+    .approval-level {
+        min-width: 140px;
+        max-width: 160px;
+        padding: 8px 10px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .approval-tracker {
+        flex-wrap: wrap;
+    }
+    
+    .approval-level {
+        min-width: 180px;
     }
 }
