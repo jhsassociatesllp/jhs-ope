@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-// API_URL = "http://127.0.0.1:8000";
-API_URL = "";
+API_URL = "http://127.0.0.1:8000";
+// API_URL = "";
 
 
 // Add CSS animations for popups
@@ -44,7 +44,8 @@ document.head.appendChild(style);
 const monthRanges = {
   'sep-oct-2025': { start: '2025-09-21', end: '2025-10-20', display: 'Sep 2025 - Oct 2025' },
   'oct-nov-2025': { start: '2025-10-21', end: '2025-11-20', display: 'Oct 2025 - Nov 2025' },
-  'nov-dec-2025': { start: '2025-11-21', end: '2025-12-20', display: 'Nov 2025 - Dec 2025' }
+  'nov-dec-2025': { start: '2025-11-21', end: '2025-12-20', display: 'Nov 2025 - Dec 2025' },
+  'dec-jan-2026': { start: '2025-12-21', end: '2026-01-20', display: 'Dec 2025 - Jan 2026' } 
 };
 
 // Validate if date is within selected month range
@@ -3763,26 +3764,87 @@ if (existingStyle) {
 // PENDING SECTION
 let allPendingEmployees = [];
 
+// async function loadPendingData(token, empCode) {
+//     try {
+//         document.getElementById('pendingLoadingDiv').style.display = 'block';
+//         document.getElementById('pendingTableSection').style.display = 'none';
+//         document.getElementById('pendingNoDataDiv').style.display = 'none';
+
+//         console.log("🔍 Fetching pending entries for manager:", empCode);
+
+//         const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
+//             headers: { 'Authorization': `Bearer ${token}` }
+//         });
+
+//         if (!response.ok) throw new Error('Failed to fetch pending entries');
+
+//         const data = await response.json();
+//         const pendingEmployees = data.employees || [];
+
+//         console.log("✅ Pending employees:", pendingEmployees);
+        
+//         // ✅ Flatten all pending entries for month filter population
+//         allPendingData = [];
+//         pendingEmployees.forEach(emp => {
+//             emp.entries.forEach(entry => {
+//                 allPendingData.push({
+//                     ...entry,
+//                     employee_id: emp.employeeId,
+//                     employee_name: emp.employeeName,
+//                     designation: emp.designation
+//                 });
+//             });
+//         });
+
+//         console.log("📊 Total pending entries:", allPendingData.length);
+        
+//         if (allPendingData.length === 0) {
+//             showPendingNoData();
+//         } else {
+//             // ✅ Populate month filter first, then display employee table
+//             populatePendingMonthFilter();
+//             displayPendingEmployeeTable(allPendingData);
+//         }
+//     } catch (error) {
+//         console.error('❌ Error:', error);
+//         document.getElementById('pendingLoadingDiv').style.display = 'none';
+//         showPendingNoData();
+//     }
+// }
 async function loadPendingData(token, empCode) {
     try {
+        console.log("🔍 Loading pending data for:", empCode);
+        
         document.getElementById('pendingLoadingDiv').style.display = 'block';
         document.getElementById('pendingTableSection').style.display = 'none';
         document.getElementById('pendingNoDataDiv').style.display = 'none';
 
-        console.log("🔍 Fetching pending entries for manager:", empCode);
+        // ✅ CHECK IF USER IS HR
+        const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+        if (isHR) {
+            console.log("👔 Loading HR pending data");
+        } else {
+            console.log("👔 Loading Manager pending data");
+        }
 
         const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!response.ok) throw new Error('Failed to fetch pending entries');
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Failed to fetch pending:", response.status, errorText);
+            throw new Error('Failed to fetch pending entries');
+        }
 
         const data = await response.json();
         const pendingEmployees = data.employees || [];
 
         console.log("✅ Pending employees:", pendingEmployees);
+        console.log("📊 Total pending employees:", pendingEmployees.length);
         
-        // ✅ Flatten all pending entries for month filter population
+        // ✅ Store all pending data globally
         allPendingData = [];
         pendingEmployees.forEach(emp => {
             emp.entries.forEach(entry => {
@@ -3800,7 +3862,6 @@ async function loadPendingData(token, empCode) {
         if (allPendingData.length === 0) {
             showPendingNoData();
         } else {
-            // ✅ Populate month filter first, then display employee table
             populatePendingMonthFilter();
             displayPendingEmployeeTable(allPendingData);
         }
@@ -3810,7 +3871,6 @@ async function loadPendingData(token, empCode) {
         showPendingNoData();
     }
 }
-
 
 function populatePendingMonthFilter() {
     const monthSet = new Set();
@@ -4315,38 +4375,149 @@ let allApproveData = [];
 //     }
 // }
 
+// async function loadApproveData(token, empCode) {
+//     try {
+//         console.log("🔍 Loading approve data for manager:", empCode);
+        
+//         document.getElementById('approveLoadingDiv').style.display = 'block';
+//         document.getElementById('approveTableSection').style.display = 'none';
+//         document.getElementById('approveNoDataDiv').style.display = 'none';
+
+//         const approvedListResponse = await fetch(
+//             `${API_URL}/api/ope/manager/approved-list`, 
+//             {
+//                 headers: { 'Authorization': `Bearer ${token}` }
+//             }
+//         );
+
+//         if (!approvedListResponse.ok) {
+//             console.error("❌ Failed to fetch approved list:", approvedListResponse.status);
+//             throw new Error('Failed to fetch approved list');
+//         }
+
+//         const approvedListData = await approvedListResponse.json();
+//         const approvedEmployeeCodes = approvedListData.employee_codes || [];
+
+//         console.log("✅ Approved employees:", approvedEmployeeCodes);
+
+//         if (approvedEmployeeCodes.length === 0) {
+//             console.log("📭 No approved employees found");
+//             showApproveNoData();
+//             return;
+//         }
+
+//         // ✅ FIX: Clear allApproveData before loading
+//         allApproveData = [];
+
+//         for (const empCodeLoop of approvedEmployeeCodes) {
+//             console.log(`📥 Fetching approved entries for: ${empCodeLoop}`);
+            
+//             try {
+//                 const response = await fetch(
+//                     `${API_URL}/api/ope/approved/${empCodeLoop}`, 
+//                     {
+//                         headers: { 'Authorization': `Bearer ${token}` }
+//                     }
+//                 );
+
+//                 if (response.ok) {
+//                     const data = await response.json();
+//                     const approvedCount = data.approved ? data.approved.length : 0;
+//                     console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
+                    
+//                     if (data.approved && data.approved.length > 0) {
+//                         // ✅ FIX: Use concat to avoid duplicates
+//                         allApproveData = allApproveData.concat(data.approved);
+//                     }
+//                 } else {
+//                     console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
+//                 }
+//             } catch (err) {
+//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
+//             }
+//         }
+
+//         console.log("\n✅ Total approved entries loaded:", allApproveData.length);
+
+//         if (allApproveData.length === 0) {
+//             console.log("📭 No approved entries found");
+//             showApproveNoData();
+//         } else {
+//             // ✅ FIX: Remove duplicates based on _id
+//             const uniqueApproveData = [];
+//             const seenIds = new Set();
+            
+//             allApproveData.forEach(entry => {
+//                 if (!seenIds.has(entry._id)) {
+//                     seenIds.add(entry._id);
+//                     uniqueApproveData.push(entry);
+//                 }
+//             });
+            
+//             allApproveData = uniqueApproveData;
+//             console.log("✅ After removing duplicates:", allApproveData.length);
+            
+//             populateApproveMonthFilter();
+//             displayApproveEmployeeTable(allApproveData);
+//         }
+        
+//     } catch (error) {
+//         console.error('❌ Error in loadApproveData:', error);
+//         document.getElementById('approveLoadingDiv').style.display = 'none';
+//         showApproveNoData();
+//     }
+// }
+
 async function loadApproveData(token, empCode) {
     try {
-        console.log("🔍 Loading approve data for manager:", empCode);
+        console.log("🔍 Loading approve data for:", empCode);
         
         document.getElementById('approveLoadingDiv').style.display = 'block';
         document.getElementById('approveTableSection').style.display = 'none';
         document.getElementById('approveNoDataDiv').style.display = 'none';
 
-        const approvedListResponse = await fetch(
-            `${API_URL}/api/ope/manager/approved-list`, 
-            {
+        // ✅ CHECK IF USER IS HR
+        const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+        let approvedEmployeeCodes = [];
+        
+        if (isHR) {
+            console.log("👔 USER IS HR - Fetching HR approved entries");
+            
+            // ✅ FOR HR: Get all employees with fully approved status
+            const statusDocs = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
                 headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (statusDocs.ok) {
+                const data = await statusDocs.json();
+                approvedEmployeeCodes = data.employee_codes || [];
             }
-        );
+        } else {
+            console.log("👔 USER IS MANAGER - Fetching manager approved entries");
+            
+            // ✅ FOR MANAGERS: Use existing logic
+            const approvedListResponse = await fetch(
+                `${API_URL}/api/ope/manager/approved-list`, 
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
 
-        if (!approvedListResponse.ok) {
-            console.error("❌ Failed to fetch approved list:", approvedListResponse.status);
-            throw new Error('Failed to fetch approved list');
+            if (approvedListResponse.ok) {
+                const approvedListData = await approvedListResponse.json();
+                approvedEmployeeCodes = approvedListData.employee_codes || [];
+            }
         }
-
-        const approvedListData = await approvedListResponse.json();
-        const approvedEmployeeCodes = approvedListData.employee_codes || [];
 
         console.log("✅ Approved employees:", approvedEmployeeCodes);
 
         if (approvedEmployeeCodes.length === 0) {
-            console.log("📭 No approved employees found");
             showApproveNoData();
             return;
         }
 
-        // ✅ FIX: Clear allApproveData before loading
+        // ✅ Fetch approved entries for each employee
         allApproveData = [];
 
         for (const empCodeLoop of approvedEmployeeCodes) {
@@ -4366,11 +4537,8 @@ async function loadApproveData(token, empCode) {
                     console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
                     
                     if (data.approved && data.approved.length > 0) {
-                        // ✅ FIX: Use concat to avoid duplicates
                         allApproveData = allApproveData.concat(data.approved);
                     }
-                } else {
-                    console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
                 }
             } catch (err) {
                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
@@ -4380,10 +4548,9 @@ async function loadApproveData(token, empCode) {
         console.log("\n✅ Total approved entries loaded:", allApproveData.length);
 
         if (allApproveData.length === 0) {
-            console.log("📭 No approved entries found");
             showApproveNoData();
         } else {
-            // ✅ FIX: Remove duplicates based on _id
+            // Remove duplicates
             const uniqueApproveData = [];
             const seenIds = new Set();
             
@@ -4407,7 +4574,6 @@ async function loadApproveData(token, empCode) {
         showApproveNoData();
     }
 }
-
 
 // function displayApproveEmployeeTable(data) {
 //     console.log("🎨 Displaying approve employee table");
@@ -5305,84 +5471,84 @@ function showApproveNoData() {
 // REJECT SECTION
 let allRejectData = [];
 
-async function loadRejectData(token, empCode) {
-    try {
-        console.log("🔍 Loading reject data for manager:", empCode);
+// async function loadRejectData(token, empCode) {
+//     try {
+//         console.log("🔍 Loading reject data for manager:", empCode);
         
-        document.getElementById('rejectLoadingDiv').style.display = 'block';
-        document.getElementById('rejectTableSection').style.display = 'none';
-        document.getElementById('rejectNoDataDiv').style.display = 'none';
+//         document.getElementById('rejectLoadingDiv').style.display = 'block';
+//         document.getElementById('rejectTableSection').style.display = 'none';
+//         document.getElementById('rejectNoDataDiv').style.display = 'none';
 
-        const rejectedListResponse = await fetch(
-            `${API_URL}/api/ope/manager/rejected-list`, 
-            {
-                headers: { 'Authorization': `Bearer ${token}` }
-            }
-        );
+//         const rejectedListResponse = await fetch(
+//             `${API_URL}/api/ope/manager/rejected-list`, 
+//             {
+//                 headers: { 'Authorization': `Bearer ${token}` }
+//             }
+//         );
 
-        if (!rejectedListResponse.ok) {
-            console.error("❌ Failed to fetch rejected list:", rejectedListResponse.status);
-            throw new Error('Failed to fetch rejected list');
-        }
+//         if (!rejectedListResponse.ok) {
+//             console.error("❌ Failed to fetch rejected list:", rejectedListResponse.status);
+//             throw new Error('Failed to fetch rejected list');
+//         }
 
-        const rejectedListData = await rejectedListResponse.json();
-        const rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+//         const rejectedListData = await rejectedListResponse.json();
+//         const rejectedEmployeeCodes = rejectedListData.employee_codes || [];
 
-        console.log("✅ Rejected employees:", rejectedEmployeeCodes);
+//         console.log("✅ Rejected employees:", rejectedEmployeeCodes);
 
-        if (rejectedEmployeeCodes.length === 0) {
-            console.log("📭 No rejected employees found");
-            showRejectNoData();
-            return;
-        }
+//         if (rejectedEmployeeCodes.length === 0) {
+//             console.log("📭 No rejected employees found");
+//             showRejectNoData();
+//             return;
+//         }
 
-        // ✅ Fetch rejected entries for EACH employee
-        allRejectData = [];
+//         // ✅ Fetch rejected entries for EACH employee
+//         allRejectData = [];
 
-        for (const empCodeLoop of rejectedEmployeeCodes) {
-            console.log(`📥 Fetching rejected entries for: ${empCodeLoop}`);
+//         for (const empCodeLoop of rejectedEmployeeCodes) {
+//             console.log(`📥 Fetching rejected entries for: ${empCodeLoop}`);
             
-            try {
-                const response = await fetch(
-                    `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
-                    {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    }
-                );
+//             try {
+//                 const response = await fetch(
+//                     `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
+//                     {
+//                         headers: { 'Authorization': `Bearer ${token}` }
+//                     }
+//                 );
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const rejectedCount = data.rejected ? data.rejected.length : 0;
-                    console.log(`✅ Got ${rejectedCount} rejected entries for ${empCodeLoop}`);
+//                 if (response.ok) {
+//                     const data = await response.json();
+//                     const rejectedCount = data.rejected ? data.rejected.length : 0;
+//                     console.log(`✅ Got ${rejectedCount} rejected entries for ${empCodeLoop}`);
                     
-                    if (data.rejected && data.rejected.length > 0) {
-                        allRejectData = allRejectData.concat(data.rejected);
-                    }
-                } else {
-                    console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
-                }
-            } catch (err) {
-                console.error(`❌ Error fetching ${empCodeLoop}:`, err);
-            }
-        }
+//                     if (data.rejected && data.rejected.length > 0) {
+//                         allRejectData = allRejectData.concat(data.rejected);
+//                     }
+//                 } else {
+//                     console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
+//                 }
+//             } catch (err) {
+//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
+//             }
+//         }
 
-        console.log("\n✅ Total rejected entries loaded:", allRejectData.length);
+//         console.log("\n✅ Total rejected entries loaded:", allRejectData.length);
 
-        if (allRejectData.length === 0) {
-            console.log("📭 No rejected entries found");
-            showRejectNoData();
-        } else {
-            // ✅ Populate month filter first, then display employee table
-            populateRejectMonthFilter();
-            displayRejectEmployeeTable(allRejectData);
-        }
+//         if (allRejectData.length === 0) {
+//             console.log("📭 No rejected entries found");
+//             showRejectNoData();
+//         } else {
+//             // ✅ Populate month filter first, then display employee table
+//             populateRejectMonthFilter();
+//             displayRejectEmployeeTable(allRejectData);
+//         }
         
-    } catch (error) {
-        console.error('❌ Error in loadRejectData:', error);
-        document.getElementById('rejectLoadingDiv').style.display = 'none';
-        showRejectNoData();
-    }
-}  
+//     } catch (error) {
+//         console.error('❌ Error in loadRejectData:', error);
+//         document.getElementById('rejectLoadingDiv').style.display = 'none';
+//         showRejectNoData();
+//     }
+// }  
 
 
 // function displayRejectEmployeeTable(data) {
@@ -5480,6 +5646,92 @@ async function loadRejectData(token, empCode) {
     
 //     console.log(`✅ Displayed ${Object.keys(groupedByEmployee).length} rejected employees`);
 // }
+
+async function loadRejectData(token, empCode) {
+    try {
+        console.log("🔍 Loading reject data for:", empCode);
+        
+        document.getElementById('rejectLoadingDiv').style.display = 'block';
+        document.getElementById('rejectTableSection').style.display = 'none';
+        document.getElementById('rejectNoDataDiv').style.display = 'none';
+
+        // ✅ CHECK IF USER IS HR
+        const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+        let rejectedEmployeeCodes = [];
+        
+        if (isHR) {
+            console.log("👔 USER IS HR - Fetching HR rejected entries");
+            
+            const response = await fetch(`${API_URL}/api/ope/hr/rejected-employees`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                rejectedEmployeeCodes = data.employee_codes || [];
+            }
+        } else {
+            console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
+            
+            const rejectedListResponse = await fetch(
+                `${API_URL}/api/ope/manager/rejected-list`, 
+                {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }
+            );
+
+            if (rejectedListResponse.ok) {
+                const rejectedListData = await rejectedListResponse.json();
+                rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+            }
+        }
+
+        console.log("✅ Rejected employees:", rejectedEmployeeCodes);
+
+        if (rejectedEmployeeCodes.length === 0) {
+            showRejectNoData();
+            return;
+        }
+
+        allRejectData = [];
+
+        for (const empCodeLoop of rejectedEmployeeCodes) {
+            console.log(`📥 Fetching rejected entries for: ${empCodeLoop}`);
+            
+            try {
+                const response = await fetch(
+                    `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
+                    {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.rejected && data.rejected.length > 0) {
+                        allRejectData = allRejectData.concat(data.rejected);
+                    }
+                }
+            } catch (err) {
+                console.error(`❌ Error fetching ${empCodeLoop}:`, err);
+            }
+        }
+
+        if (allRejectData.length === 0) {
+            showRejectNoData();
+        } else {
+            populateRejectMonthFilter();
+            displayRejectEmployeeTable(allRejectData);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error in loadRejectData:', error);
+        document.getElementById('rejectLoadingDiv').style.display = 'none';
+        showRejectNoData();
+    }
+}
+
 
 function displayRejectEmployeeTable(data) {
     console.log("🎨 Displaying reject employee table");
@@ -6363,13 +6615,65 @@ function toggleManagerButtons(isManager) {
 }
 
 // Update checkUserRole to use isManager
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
+    
+//     console.log("🔍 Checking user role...");
+    
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
+    
+//     if (!response.ok) {
+//       console.error("❌ Role check failed");
+//       return false;
+//     }
+    
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
+    
+//     // Store role in localStorage using isManager
+//     localStorage.setItem("is_manager", data.isManager);
+    
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
+    
+//     return data.isManager;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
+
 async function checkUserRole() {
   try {
     const token = localStorage.getItem("access_token");
     const empCode = localStorage.getItem("employee_code");
     
-    console.log("🔍 Checking user role...");
+    if (!token || !empCode) {
+      console.log("❌ No token or empCode, skipping role check");
+      return false;
+    }
     
+    console.log("🔍 Checking user role for:", empCode);
+    
+    // ✅ CHECK IF USER IS HR
+    const isHR = (empCode.trim().toUpperCase() === "JHS729");
+    
+    if (isHR) {
+      console.log("👔 User is HR - showing manager buttons");
+      localStorage.setItem("is_manager", "true");
+      localStorage.setItem("is_hr", "true");
+      toggleManagerButtons(true);
+      return true;
+    }
+    
+    // ✅ CHECK IF USER IS REPORTING MANAGER
     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
       headers: {
         Authorization: `Bearer ${token}`
@@ -6377,15 +6681,16 @@ async function checkUserRole() {
     });
     
     if (!response.ok) {
-      console.error("❌ Role check failed");
+      console.error("❌ Role check failed:", response.status);
       return false;
     }
     
     const data = await response.json();
     console.log("✅ Role check result:", data);
     
-    // Store role in localStorage using isManager
+    // Store role in localStorage
     localStorage.setItem("is_manager", data.isManager);
+    localStorage.setItem("is_hr", "false");
     
     // Show/hide manager-only buttons
     toggleManagerButtons(data.isManager);
@@ -6397,6 +6702,7 @@ async function checkUserRole() {
     return false;
   }
 }
+
 
 function showEmployeeModal(employeeId) {
     const employee = allPendingEmployees.find(e => e.employeeId === employeeId);
@@ -6814,13 +7120,74 @@ window.editTotalAmount = editTotalAmount;
 // }
 
 // Updated Code 
+// async function approveEmployee(employeeId) {
+//   const token = localStorage.getItem('access_token');
+  
+//   try {
+//     console.log("✅ Approving employee:", employeeId);
+    
+//     // ✅ Show confirmation popup
+//     const confirmed = await showConfirmPopup(
+//       'Approve All Entries',
+//       `Are you sure you want to approve all entries for ${employeeId}?`,
+//       'Yes, Approve',
+//       'Cancel'
+//     );
+    
+//     if (!confirmed) {
+//       return;
+//     }
+    
+//     const response = await fetch(`${API_URL}/api/ope/manager/approve/${employeeId}`, {
+//       method: 'POST',
+//       headers: {
+//         'Authorization': `Bearer ${token}`,
+//         'Content-Type': 'application/json'
+//       }
+//     });
+    
+//     console.log("📡 Approve response status:", response.status);
+    
+//     if (response.ok) {
+//       const result = await response.json();
+//       console.log("✅ Approve result:", result);
+//       showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
+      
+//       // Close modal if open
+//       const modals = document.querySelectorAll('.modal-overlay');
+//       modals.forEach(modal => modal.remove());
+      
+//       // Reload pending data
+//       const empCode = localStorage.getItem('employee_code');
+//       await loadPendingData(token, empCode);
+      
+//     } else {
+//       const errorText = await response.text();
+//       console.error("❌ Approve error response:", errorText);
+      
+//       let errorData;
+//       try {
+//         errorData = JSON.parse(errorText);
+//       } catch (e) {
+//         errorData = { detail: errorText };
+//       }
+      
+//       showErrorPopup(errorData.detail || 'Approval failed');
+//     }
+    
+//   } catch (error) {
+//     console.error('❌ Approval error:', error);
+//     showErrorPopup(`Network error: ${error.message}`);
+//   }
+// }
+
 async function approveEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
   
   try {
     console.log("✅ Approving employee:", employeeId);
     
-    // ✅ Show confirmation popup
     const confirmed = await showConfirmPopup(
       'Approve All Entries',
       `Are you sure you want to approve all entries for ${employeeId}?`,
@@ -6832,7 +7199,13 @@ async function approveEmployee(employeeId) {
       return;
     }
     
-    const response = await fetch(`${API_URL}/api/ope/manager/approve/${employeeId}`, {
+    // ✅ DETERMINE ENDPOINT BASED ON USER
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const endpoint = isHR 
+      ? `${API_URL}/api/ope/hr/approve/${employeeId}`
+      : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -6840,55 +7213,95 @@ async function approveEmployee(employeeId) {
       }
     });
     
-    console.log("📡 Approve response status:", response.status);
-    
     if (response.ok) {
       const result = await response.json();
-      console.log("✅ Approve result:", result);
       showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
       
-      // Close modal if open
       const modals = document.querySelectorAll('.modal-overlay');
       modals.forEach(modal => modal.remove());
       
-      // Reload pending data
-      const empCode = localStorage.getItem('employee_code');
-      await loadPendingData(token, empCode);
+      await loadPendingData(token, currentEmpCode);
       
     } else {
-      const errorText = await response.text();
-      console.error("❌ Approve error response:", errorText);
-      
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { detail: errorText };
-      }
-      
+      const errorData = await response.json();
       showErrorPopup(errorData.detail || 'Approval failed');
     }
     
   } catch (error) {
-    console.error('❌ Approval error:', error);
+    console.error('Approval error:', error);
     showErrorPopup(`Network error: ${error.message}`);
   }
 }
 
+
+// async function rejectEmployee(employeeId) {
+//   const token = localStorage.getItem('access_token');
+  
+//   try {
+//     console.log("❌ Rejecting employee:", employeeId);
+    
+//     // ✅ Ask for rejection reason
+//     const reason = await showRejectReasonPopup();
+    
+//     if (!reason) {
+//       return; // User cancelled
+//     }
+    
+//     const response = await fetch(`${API_URL}/api/ope/manager/reject/${employeeId}`, {
+//       method: 'POST',
+//       headers: {
+//         'Authorization': `Bearer ${token}`,
+//         'Content-Type': 'application/json'
+//       },
+//       body: JSON.stringify({ reason: reason })
+//     });
+    
+//     if (response.ok) {
+//       const result = await response.json();
+//       showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
+      
+//       // Close modal if open
+//       const modals = document.querySelectorAll('.modal-overlay');
+//       modals.forEach(modal => modal.remove());
+      
+//       // Reload pending data
+//       const empCode = localStorage.getItem('employee_code');
+//       await loadPendingData(token, empCode);
+      
+//     } else {
+//       const errorData = await response.json();
+//       showErrorPopup(errorData.detail || 'Rejection failed');
+//     }
+    
+//   } catch (error) {
+//     console.error('Rejection error:', error);
+//     showErrorPopup('Network error during rejection');
+//   }
+// }
+
+// ✅ NEW: Rejection Reason Popup
+
+// ✅ UPDATED: Reject with HR logic
 async function rejectEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
   
   try {
     console.log("❌ Rejecting employee:", employeeId);
     
-    // ✅ Ask for rejection reason
     const reason = await showRejectReasonPopup();
     
     if (!reason) {
-      return; // User cancelled
+      return;
     }
     
-    const response = await fetch(`${API_URL}/api/ope/manager/reject/${employeeId}`, {
+    // ✅ DETERMINE ENDPOINT BASED ON USER
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const endpoint = isHR 
+      ? `${API_URL}/api/ope/hr/reject/${employeeId}`
+      : `${API_URL}/api/ope/manager/reject/${employeeId}`;
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -6901,13 +7314,10 @@ async function rejectEmployee(employeeId) {
       const result = await response.json();
       showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
       
-      // Close modal if open
       const modals = document.querySelectorAll('.modal-overlay');
       modals.forEach(modal => modal.remove());
       
-      // Reload pending data
-      const empCode = localStorage.getItem('employee_code');
-      await loadPendingData(token, empCode);
+      await loadPendingData(token, currentEmpCode);
       
     } else {
       const errorData = await response.json();
@@ -6920,7 +7330,6 @@ async function rejectEmployee(employeeId) {
   }
 }
 
-// ✅ NEW: Rejection Reason Popup
 function showRejectReasonPopup() {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
