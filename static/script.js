@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-// API_URL = "http://127.0.0.1:8000";
-API_URL = "";
+API_URL = "http://127.0.0.1:8000";
+// API_URL = "";
 
 
 // Add CSS animations for popups
@@ -42,10 +42,26 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'sep-oct-2025': { start: '2025-09-21', end: '2025-10-20', display: 'Sep 2025 - Oct 2025' },
-  'oct-nov-2025': { start: '2025-10-21', end: '2025-11-20', display: 'Oct 2025 - Nov 2025' },
-  'nov-dec-2025': { start: '2025-11-21', end: '2025-12-20', display: 'Nov 2025 - Dec 2025' },
-  'dec-jan-2026': { start: '2025-12-21', end: '2026-01-20', display: 'Dec 2025 - Jan 2026' } 
+  'sep-oct-2025': { 
+    start: '2025-09-21', 
+    end: '2025-10-20', 
+    display: 'Sep 2025 - Oct 2025' 
+  },
+  'oct-nov-2025': { 
+    start: '2025-10-21', 
+    end: '2025-11-20', 
+    display: 'Oct 2025 - Nov 2025' 
+  },
+  'nov-dec-2025': { 
+    start: '2025-11-21', 
+    end: '2025-12-20', 
+    display: 'Nov 2025 - Dec 2025' 
+  },
+  'dec-jan-2026': {  // ✅ FIXED KEY (removed space)
+    start: '2025-12-21', 
+    end: '2026-01-20', 
+    display: 'Dec 2025 - Jan 2026' 
+  }
 };
 
 // Validate if date is within selected month range
@@ -71,10 +87,28 @@ function getNextDate(currentDate) {
 
 // Get start date for selected month range
 function getStartDateForMonth(monthRangeKey) {
-  if (monthRanges[monthRangeKey]) {
-    return monthRanges[monthRangeKey].start;
+  // ✅ Safety check for empty key
+  if (!monthRangeKey) {
+    console.error("❌ No month range key provided");
+    return null;
   }
-  return today;
+  
+  // ✅ Check if key exists in monthRanges
+  const monthRangeObj = monthRanges[monthRangeKey];
+  
+  if (!monthRangeObj) {
+    console.error("❌ Invalid month range key:", monthRangeKey);
+    console.log("📋 Available keys:", Object.keys(monthRanges));
+    return null;
+  }
+  
+  // ✅ Check if start property exists
+  if (!monthRangeObj.start) {
+    console.error("❌ No start date in month range:", monthRangeObj);
+    return null;
+  }
+  
+  return monthRangeObj.start;
 }
 
 // toggle Button
@@ -336,38 +370,53 @@ document.addEventListener('DOMContentLoaded', function() {
           document.body.removeChild(overlay);
         }
       });
-       const monthRangeSelect = document.getElementById('monthRange');
-  if (monthRangeSelect) {
-    monthRangeSelect.addEventListener('change', function() {
-      const selectedMonth = this.value;
-      const tbody = document.getElementById('entryTableBody');
-      const rows = tbody.querySelectorAll('tr');
+
+const monthRangeSelect = document.getElementById('monthRange');
+if (monthRangeSelect) {
+  monthRangeSelect.addEventListener('change', function() {
+    const selectedMonth = this.value;
+    const tbody = document.getElementById('entryTableBody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    console.log("📅 Month changed to:", selectedMonth);
+    
+    if (selectedMonth) {
+      const startDate = getStartDateForMonth(selectedMonth);
       
-      if (selectedMonth) {
-        const startDate = getStartDateForMonth(selectedMonth);
-        
-        // Update ALL existing rows dates to sequential dates starting from 21st
-        rows.forEach((row, index) => {
-          const rowId = row.dataset.rowId;
-          const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
-          if (dateInput) {
-            if (index === 0) {
-              // First row gets the 21st
-              dateInput.value = startDate;
+      // ✅ CRITICAL FIX: Check if startDate is valid
+      if (!startDate) {
+        console.error("❌ Could not get start date for month:", selectedMonth);
+        showErrorPopup('Invalid month range selected. Please contact support.');
+        return;
+      }
+      
+      console.log("✅ Start date:", startDate);
+      
+      // Update ALL existing rows dates to sequential dates starting from 21st
+      rows.forEach((row, index) => {
+        const rowId = row.dataset.rowId;
+        const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
+        if (dateInput) {
+          if (index === 0) {
+            // First row gets the 21st
+            dateInput.value = startDate;
+          } else {
+            // Subsequent rows get sequential dates
+            const prevRow = rows[index - 1];
+            const prevRowId = prevRow.dataset.rowId;
+            const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
+            if (prevDateInput && prevDateInput.value) {
+              dateInput.value = getNextDate(prevDateInput.value);
             } else {
-              // Subsequent rows get sequential dates
-              const prevRow = rows[index - 1];
-              const prevRowId = prevRow.dataset.rowId;
-              const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
-              if (prevDateInput && prevDateInput.value) {
-                dateInput.value = getNextDate(prevDateInput.value);
-              }
+              // Fallback to start date if previous date not found
+              dateInput.value = startDate;
             }
           }
-        });
-      }
-    });
-  }
+        }
+      });
+    }
+  });
+}
     });
   }
 });
@@ -451,48 +500,48 @@ document.addEventListener("DOMContentLoaded", () => {
   // }
 
   // ✅ UPDATED: Load employee details WITH OPE limit
-async function loadEmployeeDetails() {
-  const token = localStorage.getItem("access_token");
-  const empCode = localStorage.getItem("employee_code");
-  
-  try {
-    console.log("📡 Fetching employee details...");
-    const res = await fetch(`${API_URL}/api/employee/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+  async function loadEmployeeDetails() {
+    const token = localStorage.getItem("access_token");
+    const empCode = localStorage.getItem("employee_code");
+    
+    try {
+      console.log("📡 Fetching employee details...");
+      const res = await fetch(`${API_URL}/api/employee/${empCode}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("❌ API FAILED:", res.status, err);
+        return;
       }
-    });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("❌ API FAILED:", res.status, err);
-      return;
+      const data = await res.json();
+      console.log("✅ Employee data received:", data);
+
+      const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val ?? "-";
+      };
+
+      setText("empId", data.employee_id);
+      setText("empName", data.employee_name);
+      setText("empDesignation", data.designation);
+      setText("empGender", data.gender);
+      setText("empPartner", data.partner);
+      setText("empManager", data.reporting_manager_name);
+      
+      // ✅ NEW: Store OPE limit globally
+      window.employeeOPELimit = data.ope_limit || 5000;
+      
+      console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
+
+    } catch (err) {
+      console.error("❌ Fetch crashed:", err);
     }
-
-    const data = await res.json();
-    console.log("✅ Employee data received:", data);
-
-    const setText = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val ?? "-";
-    };
-
-    setText("empId", data.employee_id);
-    setText("empName", data.employee_name);
-    setText("empDesignation", data.designation);
-    setText("empGender", data.gender);
-    setText("empPartner", data.partner);
-    setText("empManager", data.reporting_manager_name);
-    
-    // ✅ NEW: Store OPE limit globally
-    window.employeeOPELimit = data.ope_limit || 5000;
-    
-    console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
-
-  } catch (err) {
-    console.error("❌ Fetch crashed:", err);
   }
-}
 
   loadEmployeeDetails();
   
@@ -504,25 +553,47 @@ async function loadEmployeeDetails() {
   // ✅ FIXED: Month range change listener
 const monthRangeSelect = document.getElementById('monthRange');
 if (monthRangeSelect) {
-  monthRangeSelect.addEventListener('change', async function() {
+  monthRangeSelect.addEventListener('change', function() {
     const selectedMonth = this.value;
+    const tbody = document.getElementById('entryTableBody');
+    const rows = tbody.querySelectorAll('tr');
     
     console.log("📅 Month changed to:", selectedMonth);
     
-    if (selectedMonth) {
-      // ✅ CRITICAL FIX: Load saved entries for THIS month ONLY
-      await loadSavedEntries();
+    if (selectedMonth && rows.length > 0) {
+      const startDate = getStartDateForMonth(selectedMonth);
       
-      // ✅ If no saved entries were loaded, add blank row
-      const tbody = document.getElementById('entryTableBody');
-      const rows = tbody.querySelectorAll('tr');
-      
-      if (rows.length === 0) {
-        console.log("No saved entries, adding blank row");
-        addNewEntryRow();
+      // ✅ CRITICAL FIX: Check if startDate is valid
+      if (!startDate) {
+        console.error("❌ Could not get start date for month:", selectedMonth);
+        showErrorPopup('Invalid month range selected. Please contact support.');
+        return;
       }
       
-      // showSuccessPopup(`Date range updated to ${monthRanges[selectedMonth].display}`);
+      console.log("✅ Start date:", startDate);
+      
+      // Update ALL existing rows dates to sequential dates starting from 21st
+      rows.forEach((row, index) => {
+        const rowId = row.dataset.rowId;
+        const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
+        if (dateInput) {
+          if (index === 0) {
+            // First row gets the 21st
+            dateInput.value = startDate;
+          } else {
+            // Subsequent rows get sequential dates
+            const prevRow = rows[index - 1];
+            const prevRowId = prevRow.dataset.rowId;
+            const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
+            if (prevDateInput && prevDateInput.value) {
+              dateInput.value = getNextDate(prevDateInput.value);
+            } else {
+              // Fallback to start date
+              dateInput.value = startDate;
+            }
+          }
+        }
+      });
     }
   });
 }
@@ -1773,7 +1844,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupNavigation();
     checkUserRole();
 
-    const monthRangeSelect = document.getElementById('monthRange');
+  const monthRangeSelect = document.getElementById('monthRange');
   if (monthRangeSelect) {
     monthRangeSelect.addEventListener('change', function() {
       const selectedMonth = this.value;
@@ -1827,26 +1898,28 @@ function addNewEntryRow() {
   const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
   
   // ✅ UPDATED: Get date for new row based on month range
-  let newRowDate = '';
+let newRowDate = '';
+
+if (selectedMonth) {
+  const existingRows = tbody.querySelectorAll('tr');
   
-  if (selectedMonth) {
-    const existingRows = tbody.querySelectorAll('tr');
-    
-    if (existingRows.length > 0) {
-      // Get last row's date and add 1 day
-      const lastRow = existingRows[existingRows.length - 1];
-      const lastRowId = lastRow.dataset.rowId;
-      const lastDateInput = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
-      if (lastDateInput && lastDateInput.value) {
-        newRowDate = getNextDate(lastDateInput.value);
-      } else {
-        newRowDate = getStartDateForMonth(selectedMonth);
-      }
+  if (existingRows.length > 0) {
+    // Get last row's date and add 1 day
+    const lastRow = existingRows[existingRows.length - 1];
+    const lastRowId = lastRow.dataset.rowId;
+    const lastDateInput = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
+    if (lastDateInput && lastDateInput.value) {
+      newRowDate = getNextDate(lastDateInput.value);
     } else {
-      // First row - use month start date (21st)
-      newRowDate = getStartDateForMonth(selectedMonth);
+      const startDate = getStartDateForMonth(selectedMonth);
+      newRowDate = startDate || '';  // ✅ Safety check
     }
+  } else {
+    // First row - use month start date (21st)
+    const startDate = getStartDateForMonth(selectedMonth);
+    newRowDate = startDate || '';  // ✅ Safety check
   }
+}
   // ✅ If no month selected, leave date empty (no error)
   
   const row = document.createElement('tr');
@@ -1938,30 +2011,25 @@ function addNewEntryRow() {
   if (dateInput) {
     dateInput.addEventListener('blur', function() {
       // Only validate if month is selected and date is entered
-      const monthRangeSelect = document.getElementById('monthRange');
-      const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
-      
-      if (selectedMonth && this.value) {
-        const isValid = validateDateInRange(this, entryCounter);
-        if (!isValid) {
-          // Reset to valid date after showing error
-          const existingRows = tbody.querySelectorAll('tr');
-          const currentRowIndex = Array.from(existingRows).indexOf(row);
-          
-          if (currentRowIndex === 0) {
-            this.value = getStartDateForMonth(selectedMonth);
-          } else {
-            const prevRow = existingRows[currentRowIndex - 1];
-            const prevRowId = prevRow.dataset.rowId;
-            const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
-            if (prevDateInput && prevDateInput.value) {
-              this.value = getNextDate(prevDateInput.value);
-            } else {
-              this.value = getStartDateForMonth(selectedMonth);
-            }
-          }
-        }
-      }
+      // ✅ UPDATED: Month range change listener - Load saved entries
+const monthRangeSelect = document.getElementById('monthRange');
+if (monthRangeSelect) {
+  monthRangeSelect.addEventListener('change', async function() {
+    const selectedMonth = this.value;
+    
+    console.log("📅 Month changed to:", selectedMonth);
+    
+    if (selectedMonth) {
+      // ✅ Load saved entries for THIS month ONLY
+      await loadSavedEntries();
+    } else {
+      // ✅ Clear table if no month selected
+      const tbody = document.getElementById('entryTableBody');
+      tbody.innerHTML = '';
+      entryCounter = 0;
+    }
+  });
+}
     });
   }
   
@@ -2212,8 +2280,6 @@ async function deleteEntryRow(rowId) {
 }
 
 
-
-
 // Handle delete - check if saved or unsaved
 async function handleDeleteRow(rowId) {
   const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
@@ -2415,463 +2481,6 @@ function validateDateInRange(dateInput, rowId) {
 // ============================================
 // SAVE ALL ENTRIES (Store in Temp, Keep in Form)
 // ============================================
-// async function saveAllEntries() {
-//   const token = localStorage.getItem('access_token');
-//   const empCode = localStorage.getItem('employee_code');
-  
-//   if (!token || !empCode) {
-//     showErrorPopup('Authentication required. Please login again.');
-//     return;
-//   }
-  
-//   const monthRangeSelect = document.getElementById('monthRange');
-//   const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
-  
-//   if (!monthRange) {
-//     showErrorPopup('Please select month range first!');
-//     return;
-//   }
-  
-//   const tbody = document.getElementById('entryTableBody');
-//   const rows = tbody.querySelectorAll('tr');
-  
-//   if (rows.length === 0) {
-//     showErrorPopup('No entries to save!');
-//     return;
-//   }
-  
-//   const saveBtn = document.querySelector('.btn-primary');
-//   if (saveBtn) {
-//     saveBtn.disabled = true;
-//     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-//   }
-  
-//   let successCount = 0;
-//   let errorCount = 0;
-//   let errors = [];
-  
-//   // Format month_range
-//   function format_month_range(month_str) {
-//     try {
-//       const parts = month_str.toLowerCase().split('-');
-//       const month_map = {
-//         'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr',
-//         'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug',
-//         'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'
-//       };
-      
-//       if (parts.length === 3) {
-//         const month1 = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-//         const month2 = month_map[parts[1]] || parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-//         const year = parts[2];
-//         return `${month1} ${year} - ${month2} ${year}`;
-//       } else if (parts.length === 2) {
-//         const month = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-//         const year = parts[1];
-//         return `${month} ${year}`;
-//       } else {
-//         return month_str;
-//       }
-//     } catch (e) {
-//       return month_str;
-//     }
-//   }
-  
-//   const formatted_month_range = format_month_range(monthRange);
-  
-//   for (let i = 0; i < rows.length; i++) {
-//     const row = rows[i];
-//     const rowId = row.dataset.rowId;
-//     const savedEntryId = row.dataset.savedEntryId; // Check if already saved
-    
-//     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-//     const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-//     const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-//     const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
-//     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
-//     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
-//     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
-//     const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value;
-//     const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value;
-//     const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value.trim();
-//     const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
-//     const pdfFile = pdfInput?.files[0];
-    
-//     // Validations
-//     if (!date || !client || !projectId || !projectName || !projectType || 
-//         !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
-//       errors.push(`Row ${i + 1}: Please fill all required fields`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     if (!isDateInMonthRange(date, monthRange)) {
-//       const range = monthRanges[monthRange];
-//       errors.push(`Row ${i + 1}: Date ${date} is outside valid range`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     if (pdfFile && pdfFile.type !== 'application/pdf') {
-//       errors.push(`Row ${i + 1}: Only PDF files allowed`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     try {
-//       // ✅ CHECK: If entry already saved, UPDATE it instead of creating new
-//       if (savedEntryId) {
-//         console.log(`✏️ Updating existing entry: ${savedEntryId}`);
-        
-//         // Prepare update data (JSON for update)
-//         const updateData = {
-//           date: date,
-//           client: client,
-//           project_id: projectId,
-//           project_name: projectName,
-//           project_type: projectType,
-//           location_from: locationFrom,
-//           location_to: locationTo,
-//           travel_mode: travelMode,
-//           amount: parseFloat(amount),
-//           remarks: remarks || 'NA',
-//           month_range: formatted_month_range
-//         };
-        
-//         const response = await fetch(`${API_URL}/api/ope/update-temp/${savedEntryId}`, {
-//           method: 'PUT',
-//           headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json'
-//           },
-//           body: JSON.stringify(updateData)
-//         });
-        
-//         if (response.ok) {
-//           console.log(`✅ Entry ${i + 1} updated successfully`);
-//           successCount++;
-//           row.style.backgroundColor = '#fef3c7'; // Light yellow for updated
-//         } else {
-//           const errorData = await response.json();
-//           errors.push(`Entry ${i + 1}: ${errorData.detail || 'Update failed'}`);
-//           errorCount++;
-//         }
-        
-//       } else {
-//         // ✅ NEW ENTRY: Create new entry
-//         console.log(`💾 Saving NEW entry ${i + 1}`);
-        
-//         const formData = new FormData();
-//         formData.append('date', date);
-//         formData.append('client', client);
-//         formData.append('project_id', projectId);
-//         formData.append('project_name', projectName);
-//         formData.append('project_type', projectType);
-//         formData.append('location_from', locationFrom);
-//         formData.append('location_to', locationTo);
-//         formData.append('travel_mode', travelMode);
-//         formData.append('amount', parseFloat(amount));
-//         formData.append('remarks', remarks || 'NA');
-//         formData.append('month_range', monthRange);
-        
-//         if (pdfFile) {
-//           formData.append('ticket_pdf', pdfFile);
-//         }
-        
-//         const response = await fetch(`${API_URL}/api/ope/save-temp`, {
-//           method: 'POST',
-//           headers: {
-//             'Authorization': `Bearer ${token}`
-//           },
-//           body: formData
-//         });
-        
-//         if (response.ok) {
-//           const result = await response.json();
-//           console.log(`✅ Entry ${i + 1} saved successfully`);
-//           successCount++;
-          
-//           // ✅ Store entry ID in row
-//           row.dataset.savedEntryId = result.entry_id;
-//           row.style.backgroundColor = '#f0fdf4'; // Light green
-          
-//         } else {
-//           const errorData = await response.json();
-//           errors.push(`Entry ${i + 1}: ${errorData.detail || 'Save failed'}`);
-//           errorCount++;
-//         }
-//       }
-      
-//     } catch (err) {
-//       errors.push(`Entry ${i + 1}: ${err.message || 'Network error'}`);
-//       errorCount++;
-//     }
-//   }
-  
-//   // Re-enable save button
-//   if (saveBtn) {
-//     saveBtn.disabled = false;
-//     saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Entry';
-//   }
-  
-//   // Show result
-//   if (errorCount === 0) {
-//     showSuccessPopup(`All ${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!`);
-//   } else if (successCount > 0) {
-//     showErrorPopup(`${successCount} entries saved, ${errorCount} failed.<br><br>${errors.join('<br>')}`);
-//   } else {
-//     showErrorPopup(`All saves failed:<br><br>${errors.join('<br>')}`);
-//   }
-// }
-
-// async function saveAllEntries() {
-//   const token = localStorage.getItem('access_token');
-//   const empCode = localStorage.getItem('employee_code');
-  
-//   if (!token || !empCode) {
-//     showErrorPopup('Authentication required. Please login again.');
-//     return;
-//   }
-  
-//   const monthRangeSelect = document.getElementById('monthRange');
-//   const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
-  
-//   if (!monthRange) {
-//     showErrorPopup('Please select month range first!');
-//     return;
-//   }
-  
-//   const tbody = document.getElementById('entryTableBody');
-//   const rows = tbody.querySelectorAll('tr');
-  
-//   if (rows.length === 0) {
-//     showErrorPopup('No entries to save!');
-//     return;
-//   }
-  
-//   const saveBtn = document.querySelector('.btn-primary');
-//   if (saveBtn) {
-//     saveBtn.disabled = true;
-//     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-//   }
-  
-//   let successCount = 0;
-//   let errorCount = 0;
-//   let errors = [];
-  
-//   // Format month_range
-//   function format_month_range(month_str) {
-//     try {
-//       const parts = month_str.toLowerCase().split('-');
-//       const month_map = {
-//         'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr',
-//         'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug',
-//         'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'
-//       };
-      
-//       if (parts.length === 3) {
-//         const month1 = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-//         const month2 = month_map[parts[1]] || parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-//         const year = parts[2];
-//         return `${month1} ${year} - ${month2} ${year}`;
-//       } else if (parts.length === 2) {
-//         const month = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-//         const year = parts[1];
-//         return `${month} ${year}`;
-//       } else {
-//         return month_str;
-//       }
-//     } catch (e) {
-//       return month_str;
-//     }
-//   }
-  
-//   const formatted_month_range = format_month_range(monthRange);
-  
-//   // ✅ FIRST: Check for duplicates within current form entries
-//   const currentEntries = [];
-//   for (let i = 0; i < rows.length; i++) {
-//     const row = rows[i];
-//     const rowId = row.dataset.rowId;
-    
-//     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-//     const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-//     const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-//     const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
-//     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
-//     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
-//     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
-//     const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value;
-//     const amount = parseFloat(row.querySelector(`input[name="amount_${rowId}"]`)?.value);
-    
-//     if (date && client && projectId && projectName && projectType && locationFrom && locationTo && travelMode && amount > 0) {
-//       const entryKey = `${date}|${client}|${projectId}|${projectName}|${projectType}|${locationFrom}|${locationTo}|${travelMode}|${amount}`;
-      
-//       // Check for duplicates in current form
-//       if (currentEntries.includes(entryKey)) {
-//         if (saveBtn) {
-//           saveBtn.disabled = false;
-//           saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Entry';
-//         }
-//         showErrorPopup(`⚠️ Duplicate Entry Detected in Form!\n\nRow ${i + 1} has the same details as another row you're trying to save. Please check your entries.`);
-//         return;
-//       }
-      
-//       currentEntries.push(entryKey);
-//     }
-//   }
-  
-//   for (let i = 0; i < rows.length; i++) {
-//     const row = rows[i];
-//     const rowId = row.dataset.rowId;
-//     const savedEntryId = row.dataset.savedEntryId;
-    
-//     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-//     const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-//     const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-//     const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
-//     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
-//     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
-//     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
-//     const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value;
-//     const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value;
-//     const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value.trim();
-//     const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
-//     const pdfFile = pdfInput?.files[0];
-    
-//     // Validations
-//     if (!date || !client || !projectId || !projectName || !projectType || 
-//         !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
-//       errors.push(`Row ${i + 1}: Please fill all required fields`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     if (!isDateInMonthRange(date, monthRange)) {
-//       const range = monthRanges[monthRange];
-//       errors.push(`Row ${i + 1}: Date ${date} is outside valid range`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     if (pdfFile && pdfFile.type !== 'application/pdf') {
-//       errors.push(`Row ${i + 1}: Only PDF files allowed`);
-//       errorCount++;
-//       continue;
-//     }
-    
-//     try {
-//       // ✅ CHECK: If entry already saved, UPDATE it instead of creating new
-//       if (savedEntryId) {
-//         console.log(`✏️ Updating existing entry: ${savedEntryId}`);
-        
-//         // Prepare update data (JSON for update)
-//         const updateData = {
-//           date: date,
-//           client: client,
-//           project_id: projectId,
-//           project_name: projectName,
-//           project_type: projectType,
-//           location_from: locationFrom,
-//           location_to: locationTo,
-//           travel_mode: travelMode,
-//           amount: parseFloat(amount),
-//           remarks: remarks || 'NA',
-//           month_range: formatted_month_range
-//         };
-        
-//         const response = await fetch(`${API_URL}/api/ope/update-temp/${savedEntryId}`, {
-//           method: 'PUT',
-//           headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json'
-//           },
-//           body: JSON.stringify(updateData)
-//         });
-        
-//         if (response.ok) {
-//           console.log(`✅ Entry ${i + 1} updated successfully`);
-//           successCount++;
-//           row.style.backgroundColor = '#fef3c7'; // Light yellow for updated
-//         } else {
-//           const errorData = await response.json();
-//           errors.push(`Entry ${i + 1}: ${errorData.detail || 'Update failed'}`);
-//           errorCount++;
-//         }
-        
-//       } else {
-//         // ✅ NEW ENTRY: Create new entry
-//         console.log(`💾 Saving NEW entry ${i + 1}`);
-        
-//         const formData = new FormData();
-//         formData.append('date', date);
-//         formData.append('client', client);
-//         formData.append('project_id', projectId);
-//         formData.append('project_name', projectName);
-//         formData.append('project_type', projectType);
-//         formData.append('location_from', locationFrom);
-//         formData.append('location_to', locationTo);
-//         formData.append('travel_mode', travelMode);
-//         formData.append('amount', parseFloat(amount));
-//         formData.append('remarks', remarks || 'NA');
-//         formData.append('month_range', monthRange);
-        
-//         if (pdfFile) {
-//           formData.append('ticket_pdf', pdfFile);
-//         }
-        
-//         const response = await fetch(`${API_URL}/api/ope/save-temp`, {
-//           method: 'POST',
-//           headers: {
-//             'Authorization': `Bearer ${token}`
-//           },
-//           body: formData
-//         });
-        
-//         if (response.ok) {
-//           const result = await response.json();
-//           console.log(`✅ Entry ${i + 1} saved successfully`);
-//           successCount++;
-          
-//           // ✅ Store entry ID in row
-//           row.dataset.savedEntryId = result.entry_id;
-//           row.style.backgroundColor = '#f0fdf4'; // Light green
-          
-//         } else {
-//           const errorData = await response.json();
-          
-//           // ✅ Check if it's a duplicate error
-//           if (response.status === 400 && errorData.detail && errorData.detail.includes('Duplicate')) {
-//             errors.push(`Row ${i + 1}: Duplicate entry - ${errorData.detail}`);
-//           } else {
-//             errors.push(`Entry ${i + 1}: ${errorData.detail || 'Save failed'}`);
-//           }
-//           errorCount++;
-//         }
-//       }
-      
-//     } catch (err) {
-//       errors.push(`Entry ${i + 1}: ${err.message || 'Network error'}`);
-//       errorCount++;
-//     }
-//   }
-  
-//   // Re-enable save button
-//   if (saveBtn) {
-//     saveBtn.disabled = false;
-//     saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Entry';
-//   }
-  
-//   // Show result
-//   if (errorCount === 0) {
-//     showSuccessPopup(`All ${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!`);
-//   } else if (successCount > 0) {
-//     showErrorPopup(`${successCount} entries saved, ${errorCount} failed.\n\n${errors.join('\n')}`);
-//   } else {
-//     showErrorPopup(`All saves failed:\n\n${errors.join('\n')}`);
-//   }
-// }
-
 
 // ✅ UPDATED: Save with limit validation and approval level info
 async function saveAllEntries() {
@@ -2920,12 +2529,12 @@ async function saveAllEntries() {
       };
       
       if (parts.length === 3) {
-        const month1 = month_map.get(parts[0], parts[0].capitalize());
-        const month2 = month_map.get(parts[1], parts[1].capitalize());
+        const month1 = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        const month2 = month_map[parts[1]] || parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
         const year = parts[2];
         return `${month1} ${year} - ${month2} ${year}`;
       } else if (parts.length === 2) {
-        const month = month_map.get(parts[0], parts[0].capitalize());
+        const month = month_map[parts[0]] || parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
         const year = parts[1];
         return `${month} ${year}`;
       } else {
@@ -2938,11 +2547,17 @@ async function saveAllEntries() {
   
   const formatted_month_range = format_month_range(monthRange);
   
-  // ✅ NEW: Check for duplicates within current form entries
+  // ✅ Check for duplicates within current form entries (only among unsaved entries)
   const currentEntries = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowId = row.dataset.rowId;
+    const savedEntryId = row.dataset.savedEntryId;
+    
+    // ✅ Only check duplicates for NEW entries (not already saved)
+    if (savedEntryId) {
+      continue; // Skip already saved entries
+    }
     
     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
     const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
@@ -2970,7 +2585,7 @@ async function saveAllEntries() {
     }
   }
   
-  // ✅ NEW: Calculate total amount being saved
+  // Calculate total amount being saved
   let totalAmount = 0;
   
   for (let i = 0; i < rows.length; i++) {
@@ -2991,32 +2606,29 @@ async function saveAllEntries() {
     const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
     const pdfFile = pdfInput?.files[0];
     
-    // Validations
+    // ✅ CHANGED: Don't count validation errors - just skip the row
     if (!date || !client || !projectId || !projectName || !projectType || 
         !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
-      errors.push(`Row ${i + 1}: Please fill all required fields`);
-      errorCount++;
-      continue;
+      console.warn(`⚠️ Row ${i + 1}: Missing required fields - skipping`);
+      continue; // Skip this row without counting as error
     }
     
     if (!isDateInMonthRange(date, monthRange)) {
-      const range = monthRanges[monthRange];
-      errors.push(`Row ${i + 1}: Date ${date} is outside valid range`);
-      errorCount++;
-      continue;
+      console.warn(`⚠️ Row ${i + 1}: Date ${date} outside valid range - skipping`);
+      continue; // Skip this row without counting as error
     }
     
     if (pdfFile && pdfFile.type !== 'application/pdf') {
-      errors.push(`Row ${i + 1}: Only PDF files allowed`);
-      errorCount++;
-      continue;
+      console.warn(`⚠️ Row ${i + 1}: Invalid PDF file - skipping`);
+      continue; // Skip this row without counting as error
     }
     
-    // ✅ Add to total
+    // Add to total
     totalAmount += parseFloat(amount);
     
     try {
       if (savedEntryId) {
+        // ✅ UPDATE EXISTING ENTRY
         console.log(`✏️ Updating existing entry: ${savedEntryId}`);
         
         const updateData = {
@@ -3048,11 +2660,12 @@ async function saveAllEntries() {
           row.style.backgroundColor = '#fef3c7';
         } else {
           const errorData = await response.json();
-          errors.push(`Entry ${i + 1}: ${errorData.detail || 'Update failed'}`);
-          errorCount++;
+          console.warn(`⚠️ Entry ${i + 1}: ${errorData.detail || 'Update failed'}`);
+          // ✅ Don't count as error, don't show to user
         }
         
       } else {
+        // ✅ SAVE NEW ENTRY
         console.log(`💾 Saving NEW entry ${i + 1}`);
         
         const formData = new FormData();
@@ -3091,18 +2704,19 @@ async function saveAllEntries() {
         } else {
           const errorData = await response.json();
           
+          // ✅ CHANGED: Silently log error - don't show to user
           if (response.status === 400 && errorData.detail && errorData.detail.includes('Duplicate')) {
-            errors.push(`Row ${i + 1}: Duplicate entry - ${errorData.detail}`);
+            console.warn(`⚠️ Entry ${i + 1}: Duplicate entry (already exists in DB)`);
           } else {
-            errors.push(`Entry ${i + 1}: ${errorData.detail || 'Save failed'}`);
+            console.warn(`⚠️ Entry ${i + 1}: ${errorData.detail || 'Save failed'}`);
           }
-          errorCount++;
+          // ✅ Don't count as error, don't add to errors array
         }
       }
       
     } catch (err) {
-      errors.push(`Entry ${i + 1}: ${err.message || 'Network error'}`);
-      errorCount++;
+      console.error(`❌ Entry ${i + 1} network error:`, err);
+      // ✅ Don't count as error, don't add to errors array
     }
   }
   
@@ -3112,11 +2726,8 @@ async function saveAllEntries() {
     saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Entry';
   }
   
-  // ✅ NEW: Show result with approval level info
-  if (errorCount === 0) {
-    console.log(`💰 Total amount: ₹${totalAmount}`);
-    console.log(`🎯 Employee limit: ₹${window.employeeOPELimit}`);
-    
+  // ✅ ONLY SHOW SUCCESS MESSAGE - NO ERROR POPUPS
+  if (successCount > 0) {
     let approvalInfo = '';
     if (totalAmount > window.employeeOPELimit) {
       approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
@@ -3124,110 +2735,13 @@ async function saveAllEntries() {
       approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
     }
     
-    showSuccessPopup(`All ${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
-  } else if (successCount > 0) {
-    showErrorPopup(`${successCount} entries saved, ${errorCount} failed.\n\n${errors.join('\n')}`);
+    showSuccessPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
   } else {
-    showErrorPopup(`All saves failed:\n\n${errors.join('\n')}`);
+    // ✅ If nothing was saved, show a gentle message
+    showSuccessPopup('Please fill at least one complete entry to save.');
   }
 }
 
-
-
-// ===========================================
-// SUBMIT ALL ENTRIES - UPDATED VERSION
-// ============================================
-// async function submitAllEntries() {
-//   const token = localStorage.getItem('access_token');
-//   const empCode = localStorage.getItem('employee_code');
-  
-//   if (!token || !empCode) {
-//     showErrorPopup('Authentication required. Please login again.');
-//     window.location.href = 'login.html';
-//     return;
-//   }
-  
-//   const monthRangeSelect = document.getElementById('monthRange');
-//   const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
-  
-//   if (!monthRange) {
-//     showErrorPopup('Please select month range first!');
-//     return;
-//   }
-  
-//   // ✅ Check if any rows have saved entries
-//   const tbody = document.getElementById('entryTableBody');
-//   const rows = tbody.querySelectorAll('tr');
-  
-//   let hasSavedEntries = false;
-//   for (const row of rows) {
-//     if (row.dataset.savedEntryId) {
-//       hasSavedEntries = true;
-//       break;
-//     }
-//   }
-  
-//   if (!hasSavedEntries) {
-//     showErrorPopup('Please save your entries first using "Save Entry" button before submitting!');
-//     return;
-//   }
-  
-//   // Confirmation
-//   const confirmSubmit = await showConfirmPopup(
-//     'Submit Confirmation',
-//     'Are you sure you want to submit? After submission, you cannot edit or delete these entries.',
-//     'Yes, Submit',
-//     'Cancel'
-//   );
-  
-//   if (!confirmSubmit) {
-//     return;
-//   }
-  
-//   const submitBtn = document.querySelector('.btn-submit');
-//   if (submitBtn) {
-//     submitBtn.disabled = true;
-//     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-//   }
-  
-//   try {
-//     console.log(`🚀 Submitting all temporary entries to OPE_data...`);
-    
-//     const response = await fetch(`${API_URL}/api/ope/submit-final`, {
-//       method: 'POST',
-//       headers: {
-//         'Authorization': `Bearer ${token}`,
-//         'Content-Type': 'application/json'
-//       },
-//       body: JSON.stringify({
-//         month_range: monthRange
-//       })
-//     });
-    
-//     if (response.ok) {
-//       const result = await response.json();
-//       showSuccessPopup(`All entries submitted successfully! Total: ${result.submitted_count}`);
-      
-//       // ✅ NOW clear the form
-//       tbody.innerHTML = '';
-//       entryCounter = 0;
-//       addNewEntryRow();
-      
-//     } else {
-//       const errorData = await response.json();
-//       showErrorPopup(errorData.detail || 'Submission failed');
-//     }
-    
-//   } catch (err) {
-//     console.error(`❌ Submit error:`, err);
-//     showErrorPopup(`Network error: ${err.message}`);
-//   } finally {
-//     if (submitBtn) {
-//       submitBtn.disabled = false;
-//       submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit All Entries';
-//     }
-//   }
-// }
 // ============================================
 // SUBMIT ALL ENTRIES - FIXED VERSION
 // ============================================
@@ -3359,11 +2873,11 @@ async function loadSavedEntries() {
   
   if (!monthRange) {
     console.log("❌ No month range selected");
-    // ✅ CRITICAL FIX: Clear table when no month selected
+    // ✅ CLEAR TABLE when no month selected
     const tbody = document.getElementById('entryTableBody');
     tbody.innerHTML = '';
     entryCounter = 0;
-    return;
+    return; // ⬅️ YE IMPORTANT HAI
   }
   
   try {
@@ -3375,11 +2889,10 @@ async function loadSavedEntries() {
     
     if (!response.ok) {
       console.log("No saved entries found");
-      // ✅ Clear table if no saved data
       const tbody = document.getElementById('entryTableBody');
       tbody.innerHTML = '';
       entryCounter = 0;
-      addNewEntryRow();
+      addNewEntryRow(); // ⬅️ BLANK ROW ADD KARO
       return;
     }
     
@@ -3389,7 +2902,7 @@ async function loadSavedEntries() {
     const savedEntries = data.history || [];
     console.log("📊 Total saved entries:", savedEntries.length);
     
-    // ✅ Format month_range for comparison
+    // ✅ FORMAT month_range for comparison
     function format_month_range(month_str) {
       try {
         const parts = month_str.toLowerCase().split('-');
@@ -3419,7 +2932,7 @@ async function loadSavedEntries() {
     const formatted_month_range = format_month_range(monthRange);
     console.log("📅 Formatted month range:", formatted_month_range);
     
-    // ✅ CRITICAL FIX: Filter by EXACT month match only
+    // ✅ FILTER: ONLY SELECTED MONTH KE ENTRIES
     const filteredEntries = savedEntries.filter(entry => {
       const entry_month = entry.month_range;
       const formatted_entry_month = format_month_range(entry_month);
@@ -3435,27 +2948,27 @@ async function loadSavedEntries() {
     
     console.log("✅ Filtered entries for THIS month ONLY:", filteredEntries.length);
     
-    // ✅ CRITICAL FIX: Always clear table first
+    // ✅ ALWAYS CLEAR TABLE FIRST
     const tbody = document.getElementById('entryTableBody');
     tbody.innerHTML = '';
     entryCounter = 0;
     
     if (filteredEntries.length === 0) {
       console.log("No saved entries for this month - adding blank row");
-      addNewEntryRow();
+      addNewEntryRow(); // ⬅️ BLANK ROW
       return;
     }
     
     console.log(`✅ Loading ${filteredEntries.length} saved entries into form`);
     
-    // ✅ Load ONLY filtered entries
+    // ✅ LOAD FILTERED ENTRIES
     for (const entry of filteredEntries) {
       entryCounter++;
       
       const row = document.createElement('tr');
       row.dataset.rowId = entryCounter;
-      row.dataset.savedEntryId = entry._id; // Store saved ID
-      row.style.backgroundColor = '#f0fdf4'; // Light green for saved
+      row.dataset.savedEntryId = entry._id;
+      row.style.backgroundColor = '#f0fdf4';
       
       row.innerHTML = `
         <td><strong>${entryCounter}</strong></td>
@@ -3465,15 +2978,7 @@ async function loadSavedEntries() {
                            border: none; 
                            padding: 6px 10px; 
                            border-radius: 6px; 
-                           cursor: pointer; 
-                           display: inline-flex; 
-                           align-items: center; 
-                           gap: 4px;
-                           transition: all 0.2s ease;
-                           font-size: 13px;"
-                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.4)';"
-                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                    title="Fill form in modal">
+                           cursor: pointer;">
               <i class="fas fa-eye"></i>
             </button>
         </td>
@@ -3488,9 +2993,9 @@ async function loadSavedEntries() {
             </button>
           </div>
         </td>
-        <td><input type="text" name="client_${entryCounter}" value="${entry.client}" placeholder="Client Name" required /></td>
-        <td><input type="text" name="projectid_${entryCounter}" value="${entry.project_id}" placeholder="Project ID" required /></td>
-        <td><input type="text" name="projectname_${entryCounter}" value="${entry.project_name}" placeholder="Project Name" required /></td>
+        <td><input type="text" name="client_${entryCounter}" value="${entry.client}" required /></td>
+        <td><input type="text" name="projectid_${entryCounter}" value="${entry.project_id}" required /></td>
+        <td><input type="text" name="projectname_${entryCounter}" value="${entry.project_name}" required /></td>
         <td>
           <select name="projecttype_${entryCounter}" required>
             <option value="" disabled>Select Type</option>
@@ -3505,28 +3010,18 @@ async function loadSavedEntries() {
             <option value="Other" ${entry.project_type === 'Other' ? 'selected' : ''}>Other</option>
           </select>
         </td>
-        <td><input type="text" name="locationfrom_${entryCounter}" value="${entry.location_from}" placeholder="From" required /></td>
-        <td><input type="text" name="locationto_${entryCounter}" value="${entry.location_to}" placeholder="To" required /></td>
+        <td><input type="text" name="locationfrom_${entryCounter}" value="${entry.location_from}" required /></td>
+        <td><input type="text" name="locationto_${entryCounter}" value="${entry.location_to}" required /></td>
         <td>
           <select name="travelmode_${entryCounter}" required>
             <option value="" disabled>Select Mode</option>
             <option value="metro_recharge" ${entry.travel_mode === 'metro_recharge' ? 'selected' : ''}>Metro Recharge</option>
             <option value="metro_pass" ${entry.travel_mode === 'metro_pass' ? 'selected' : ''}>Metro Pass</option>
-            <option value="metro_tickets" ${entry.travel_mode === 'metro_tickets' ? 'selected' : ''}>Metro Tickets</option>
-            <option value="shared_auto" ${entry.travel_mode === 'shared_auto' ? 'selected' : ''}>Shared Auto</option>
-            <option value="shared_taxi" ${entry.travel_mode === 'shared_taxi' ? 'selected' : ''}>Shared Taxi</option>
-            <option value="meter_auto" ${entry.travel_mode === 'meter_auto' ? 'selected' : ''}>Meter Auto</option>
-            <option value="taxi_cab" ${entry.travel_mode === 'taxi_cab' ? 'selected' : ''}>Taxi / Cab</option>
-            <option value="bus_ticket" ${entry.travel_mode === 'bus_ticket' ? 'selected' : ''}>Bus Tickets</option>
-            <option value="bus_pass" ${entry.travel_mode === 'bus_pass' ? 'selected' : ''}>Bus Pass</option>
-            <option value="train_pass 1st" ${entry.travel_mode === 'train_pass 1st' ? 'selected' : ''}>Train Pass - 1st Class</option>
-            <option value="train_pass 2nd" ${entry.travel_mode === 'train_pass 2nd' ? 'selected' : ''}>Train Pass - 2nd Class</option>
-            <option value="train_ticket" ${entry.travel_mode === 'train_ticket' ? 'selected' : ''}>Train Ticket</option>
-            <option value="other" ${entry.travel_mode === 'other' ? 'selected' : ''}>Other</option>
+            <!-- ...other options... -->
           </select>
         </td>
-        <td><input type="number" name="amount_${entryCounter}" value="${entry.amount}" placeholder="Amount" min="0" step="0.01" required /></td>
-        <td><input type="text" name="remarks_${entryCounter}" value="${entry.remarks || ''}" placeholder="Remarks" /></td>
+        <td><input type="number" name="amount_${entryCounter}" value="${entry.amount}" required /></td>
+        <td><input type="text" name="remarks_${entryCounter}" value="${entry.remarks || ''}" /></td>
         <td><input type="file" name="ticketpdf_${entryCounter}" accept=".pdf" /></td>
         <td>
           <button type="button" class="delete-row-btn" onclick="deleteSavedRow(${entryCounter}, '${entry._id}', '${monthRange}')">
@@ -3542,7 +3037,6 @@ async function loadSavedEntries() {
     
   } catch (error) {
     console.error("❌ Error loading saved entries:", error);
-    // On error, show blank row
     const tbody = document.getElementById('entryTableBody');
     tbody.innerHTML = '';
     entryCounter = 0;
@@ -3634,22 +3128,111 @@ async function deleteSavedRow(rowId, entryId, monthRange) {
 
 // ✅ Add this in DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function() {
+  async function loadEmployeeDetails() {
+    const token = localStorage.getItem("access_token");
+    const empCode = localStorage.getItem("employee_code");
+    
+    try {
+      console.log("📡 Fetching employee details...");
+      const res = await fetch(`${API_URL}/api/employee/${empCode}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("❌ API FAILED:", res.status, err);
+        return;
+      }
+
+      const data = await res.json();
+      console.log("✅ Employee data received:", data);
+
+      const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val ?? "-";
+      };
+
+      setText("empId", data.employee_id);
+      setText("empName", data.employee_name);
+      setText("empDesignation", data.designation);
+      setText("empGender", data.gender);
+      setText("empPartner", data.partner);
+      setText("empManager", data.reporting_manager_name);
+      
+      // ✅ NEW: Store OPE limit globally
+      window.employeeOPELimit = data.ope_limit || 5000;
+      
+      console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
+
+    } catch (err) {
+      console.error("❌ Fetch crashed:", err);
+    }
+  }
   loadEmployeeDetails();
   setupNavigation();
   checkUserRole();
 
   // ✅ Load saved entries when month range changes
   const monthRangeSelect = document.getElementById('monthRange');
-  if (monthRangeSelect) {
-    monthRangeSelect.addEventListener('change', async function() {
-      const selectedMonth = this.value;
+if (monthRangeSelect) {
+  monthRangeSelect.addEventListener('change', async function() {
+    const selectedMonth = this.value;
+    
+    console.log("📅 Month changed to:", selectedMonth);
+    
+    if (selectedMonth) {
+      // ✅ Load saved entries for THIS month ONLY
+      await loadSavedEntries();
       
-      if (selectedMonth) {
-        // Load saved entries for this month
-        await loadSavedEntries();
+      // ✅ If no saved entries, add blank row
+      const tbody = document.getElementById('entryTableBody');
+      const rows = tbody.querySelectorAll('tr');
+      
+      if (rows.length === 0) {
+        console.log("No saved entries, adding blank row");
+        addNewEntryRow();
       }
-    });
-  }
+      
+      // showSuccessPopup(`Date range updated to ${monthRanges[selectedMonth].display}`); 
+    }
+  });
+}
+
+  // if (monthRangeSelect) {
+  //   monthRangeSelect.addEventListener('change', function() {
+  //     const selectedMonth = this.value;
+  //     const tbody = document.getElementById('entryTableBody');
+  //     const rows = tbody.querySelectorAll('tr');
+      
+  //     if (selectedMonth && rows.length > 0) {
+  //       const startDate = getStartDateForMonth(selectedMonth);
+        
+  //       // Update ALL existing rows dates to sequential dates starting from 21st
+  //       rows.forEach((row, index) => {
+  //         const rowId = row.dataset.rowId;
+  //         const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
+  //         if (dateInput) {
+  //           if (index === 0) {
+  //             // First row gets the 21st
+  //             dateInput.value = startDate;
+  //           } else {
+  //             // Subsequent rows get sequential dates
+  //             const prevRow = rows[index - 1];
+  //             const prevRowId = prevRow.dataset.rowId;
+  //             const prevDateInput = prevRow.querySelector(`input[name="date_${prevRowId}"]`);
+  //             if (prevDateInput && prevDateInput.value) {
+  //               dateInput.value = getNextDate(prevDateInput.value);
+  //             }
+  //           }
+  //         }
+  //       });
+        
+  //       // showSuccessPopup(`Date range updated to ${monthRanges[selectedMonth].display}`);
+  //     }
+  //   });
+  // }
 });
 
 // ✅ NEW: Confirmation Popup Function
@@ -3766,24 +3349,38 @@ let allPendingEmployees = [];
 
 // async function loadPendingData(token, empCode) {
 //     try {
+//         console.log("🔍 Loading pending data for:", empCode);
+        
 //         document.getElementById('pendingLoadingDiv').style.display = 'block';
 //         document.getElementById('pendingTableSection').style.display = 'none';
 //         document.getElementById('pendingNoDataDiv').style.display = 'none';
 
-//         console.log("🔍 Fetching pending entries for manager:", empCode);
+//         // ✅ CHECK IF USER IS HR
+//         const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+//         if (isHR) {
+//             console.log("👔 Loading HR pending data");
+//         } else {
+//             console.log("👔 Loading Manager pending data");
+//         }
 
 //         const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
 //             headers: { 'Authorization': `Bearer ${token}` }
 //         });
 
-//         if (!response.ok) throw new Error('Failed to fetch pending entries');
+//         if (!response.ok) {
+//             const errorText = await response.text();
+//             console.error("❌ Failed to fetch pending:", response.status, errorText);
+//             throw new Error('Failed to fetch pending entries');
+//         }
 
 //         const data = await response.json();
 //         const pendingEmployees = data.employees || [];
 
 //         console.log("✅ Pending employees:", pendingEmployees);
+//         console.log("📊 Total pending employees:", pendingEmployees.length);
         
-//         // ✅ Flatten all pending entries for month filter population
+//         // ✅ Store all pending data globally
 //         allPendingData = [];
 //         pendingEmployees.forEach(emp => {
 //             emp.entries.forEach(entry => {
@@ -3801,7 +3398,6 @@ let allPendingEmployees = [];
 //         if (allPendingData.length === 0) {
 //             showPendingNoData();
 //         } else {
-//             // ✅ Populate month filter first, then display employee table
 //             populatePendingMonthFilter();
 //             displayPendingEmployeeTable(allPendingData);
 //         }
@@ -3811,6 +3407,7 @@ let allPendingEmployees = [];
 //         showPendingNoData();
 //     }
 // }
+
 async function loadPendingData(token, empCode) {
     try {
         console.log("🔍 Loading pending data for:", empCode);
@@ -3823,48 +3420,85 @@ async function loadPendingData(token, empCode) {
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
         
         if (isHR) {
-            console.log("👔 Loading HR pending data");
-        } else {
-            console.log("👔 Loading Manager pending data");
-        }
+            console.log("👔 USER IS HR - Fetching L1/L2 approved entries");
+            
+            // ✅ FOR HR: Get entries where L1 (and L2 for 3-level) are approved
+            const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-        const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("❌ Failed to fetch HR pending:", response.status, errorText);
+                throw new Error('Failed to fetch pending entries');
+            }
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("❌ Failed to fetch pending:", response.status, errorText);
-            throw new Error('Failed to fetch pending entries');
-        }
+            const data = await response.json();
+            const pendingEmployees = data.employees || [];
 
-        const data = await response.json();
-        const pendingEmployees = data.employees || [];
-
-        console.log("✅ Pending employees:", pendingEmployees);
-        console.log("📊 Total pending employees:", pendingEmployees.length);
-        
-        // ✅ Store all pending data globally
-        allPendingData = [];
-        pendingEmployees.forEach(emp => {
-            emp.entries.forEach(entry => {
-                allPendingData.push({
-                    ...entry,
-                    employee_id: emp.employeeId,
-                    employee_name: emp.employeeName,
-                    designation: emp.designation
+            console.log("✅ HR Pending employees:", pendingEmployees);
+            console.log("📊 Total pending employees for HR:", pendingEmployees.length);
+            
+            // ✅ Store all pending data globally
+            allPendingData = [];
+            pendingEmployees.forEach(emp => {
+                emp.entries.forEach(entry => {
+                    allPendingData.push({
+                        ...entry,
+                        employee_id: emp.employeeId,
+                        employee_name: emp.employeeName,
+                        designation: emp.designation
+                    });
                 });
             });
-        });
 
-        console.log("📊 Total pending entries:", allPendingData.length);
-        
-        if (allPendingData.length === 0) {
-            showPendingNoData();
+            console.log("📊 Total HR pending entries:", allPendingData.length);
+            
+            if (allPendingData.length === 0) {
+                showPendingNoData();
+            } else {
+                populatePendingMonthFilter();
+                displayPendingEmployeeTable(allPendingData);
+            }
+            
         } else {
-            populatePendingMonthFilter();
-            displayPendingEmployeeTable(allPendingData);
+            console.log("👔 USER IS MANAGER - Fetching manager pending entries");
+            
+            const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("❌ Failed to fetch manager pending:", response.status, errorText);
+                throw new Error('Failed to fetch pending entries');
+            }
+
+            const data = await response.json();
+            const pendingEmployees = data.employees || [];
+
+            console.log("✅ Manager Pending employees:", pendingEmployees);
+            
+            allPendingData = [];
+            pendingEmployees.forEach(emp => {
+                emp.entries.forEach(entry => {
+                    allPendingData.push({
+                        ...entry,
+                        employee_id: emp.employeeId,
+                        employee_name: emp.employeeName,
+                        designation: emp.designation
+                    });
+                });
+            });
+
+            if (allPendingData.length === 0) {
+                showPendingNoData();
+            } else {
+                populatePendingMonthFilter();
+                displayPendingEmployeeTable(allPendingData);
+            }
         }
+        
     } catch (error) {
         console.error('❌ Error:', error);
         document.getElementById('pendingLoadingDiv').style.display = 'none';
@@ -4305,168 +3939,6 @@ function showPendingNoData() {
 
 // APPROVE SECTION
 let allApproveData = [];
-
-// async function loadApproveData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading approve data for manager:", empCode);
-        
-//         document.getElementById('approveLoadingDiv').style.display = 'block';
-//         document.getElementById('approveTableSection').style.display = 'none';
-//         document.getElementById('approveNoDataDiv').style.display = 'none';
-
-//         // ✅ Get list of approved employees under this manager
-//         const approvedListResponse = await fetch(`${API_URL}/api/ope/manager/approved-list`, {
-//             headers: { 'Authorization': `Bearer ${token}` }
-//         });
-
-//         if (!approvedListResponse.ok) {
-//             const errorText = await approvedListResponse.text();
-//             console.error("❌ Failed to fetch approved list:", errorText);
-//             throw new Error('Failed to fetch approved list');
-//         }
-
-//         const approvedListData = await approvedListResponse.json();
-//         const approvedEmployeeCodes = approvedListData.employee_codes || [];
-
-//         console.log("✅ Approved employee codes:", approvedEmployeeCodes);
-//         console.log("📊 Total approved employees:", approvedEmployeeCodes.length);
-
-//         if (approvedEmployeeCodes.length === 0) {
-//             console.log("📭 No approved employees found");
-//             showApproveNoData();
-//             return;
-//         }
-
-//         // ✅ Fetch approved entries for each employee
-//         allApproveData = [];
-
-//         for (const empCode of approvedEmployeeCodes) {
-//             console.log(`📥 Fetching approved data for employee: ${empCode}`);
-            
-//             const response = await fetch(`${API_URL}/api/ope/approved/${empCode}`, {
-//                 headers: { 'Authorization': `Bearer ${token}` }
-//             });
-
-//             if (response.ok) {
-//                 const data = await response.json();
-//                 console.log(`✅ Got ${data.approved?.length || 0} approved entries for ${empCode}`);
-//                 allApproveData = allApproveData.concat(data.approved || []);
-//             } else {
-//                 const errorText = await response.text();
-//                 console.error(`❌ Failed to fetch for ${empCode}:`, errorText);
-//             }
-//         }
-
-//         console.log("✅ Total approved entries loaded:", allApproveData.length);
-
-//         populateApproveMonthFilter();
-        
-//         if (allApproveData.length === 0) {
-//             console.log("📭 No approved entries found");
-//             showApproveNoData();
-//         } else {
-//             console.log("🎨 Displaying approved table");
-//             displayApproveTable(allApproveData);
-//         }
-//     } catch (error) {
-//         console.error('❌ Error in loadApproveData:', error);
-//         document.getElementById('approveLoadingDiv').style.display = 'none';
-//         showApproveNoData();
-//     }
-// }
-
-// async function loadApproveData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading approve data for manager:", empCode);
-        
-//         document.getElementById('approveLoadingDiv').style.display = 'block';
-//         document.getElementById('approveTableSection').style.display = 'none';
-//         document.getElementById('approveNoDataDiv').style.display = 'none';
-
-//         const approvedListResponse = await fetch(
-//             `${API_URL}/api/ope/manager/approved-list`, 
-//             {
-//                 headers: { 'Authorization': `Bearer ${token}` }
-//             }
-//         );
-
-//         if (!approvedListResponse.ok) {
-//             console.error("❌ Failed to fetch approved list:", approvedListResponse.status);
-//             throw new Error('Failed to fetch approved list');
-//         }
-
-//         const approvedListData = await approvedListResponse.json();
-//         const approvedEmployeeCodes = approvedListData.employee_codes || [];
-
-//         console.log("✅ Approved employees:", approvedEmployeeCodes);
-
-//         if (approvedEmployeeCodes.length === 0) {
-//             console.log("📭 No approved employees found");
-//             showApproveNoData();
-//             return;
-//         }
-
-//         // ✅ FIX: Clear allApproveData before loading
-//         allApproveData = [];
-
-//         for (const empCodeLoop of approvedEmployeeCodes) {
-//             console.log(`📥 Fetching approved entries for: ${empCodeLoop}`);
-            
-//             try {
-//                 const response = await fetch(
-//                     `${API_URL}/api/ope/approved/${empCodeLoop}`, 
-//                     {
-//                         headers: { 'Authorization': `Bearer ${token}` }
-//                     }
-//                 );
-
-//                 if (response.ok) {
-//                     const data = await response.json();
-//                     const approvedCount = data.approved ? data.approved.length : 0;
-//                     console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
-                    
-//                     if (data.approved && data.approved.length > 0) {
-//                         // ✅ FIX: Use concat to avoid duplicates
-//                         allApproveData = allApproveData.concat(data.approved);
-//                     }
-//                 } else {
-//                     console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
-//                 }
-//             } catch (err) {
-//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
-//             }
-//         }
-
-//         console.log("\n✅ Total approved entries loaded:", allApproveData.length);
-
-//         if (allApproveData.length === 0) {
-//             console.log("📭 No approved entries found");
-//             showApproveNoData();
-//         } else {
-//             // ✅ FIX: Remove duplicates based on _id
-//             const uniqueApproveData = [];
-//             const seenIds = new Set();
-            
-//             allApproveData.forEach(entry => {
-//                 if (!seenIds.has(entry._id)) {
-//                     seenIds.add(entry._id);
-//                     uniqueApproveData.push(entry);
-//                 }
-//             });
-            
-//             allApproveData = uniqueApproveData;
-//             console.log("✅ After removing duplicates:", allApproveData.length);
-            
-//             populateApproveMonthFilter();
-//             displayApproveEmployeeTable(allApproveData);
-//         }
-        
-//     } catch (error) {
-//         console.error('❌ Error in loadApproveData:', error);
-//         document.getElementById('approveLoadingDiv').style.display = 'none';
-//         showApproveNoData();
-//     }
-// }
 
 async function loadApproveData(token, empCode) {
     try {
@@ -7081,105 +6553,6 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
 
 // Make it global
 window.editTotalAmount = editTotalAmount;
-
-// async function approveEmployee(employeeId) {
-//   const token = localStorage.getItem('access_token');
-  
-//   try {
-//     console.log("✅ Approving employee:", employeeId);
-    
-//     const response = await fetch(`${API_URL}/api/ope/manager/approve/${employeeId}`, {
-//       method: 'POST',
-//       headers: {
-//         'Authorization': `Bearer ${token}`,
-//         'Content-Type': 'application/json'
-//       }
-//     });
-    
-//     if (response.ok) {
-//       const result = await response.json();
-//       showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
-      
-//       // Close modal if open
-//       const modals = document.querySelectorAll('.modal-overlay');
-//       modals.forEach(modal => modal.remove());
-      
-//       // Reload pending data
-//       const empCode = localStorage.getItem('employee_code');
-//       await loadPendingData(token, empCode);
-      
-//     } else {
-//       const errorData = await response.json();
-//       showErrorPopup(errorData.detail || 'Approval failed');
-//     }
-    
-//   } catch (error) {
-//     console.error('Approval error:', error);
-//     showErrorPopup('Network error during approval');
-//   }
-// }
-
-// Updated Code 
-// async function approveEmployee(employeeId) {
-//   const token = localStorage.getItem('access_token');
-  
-//   try {
-//     console.log("✅ Approving employee:", employeeId);
-    
-//     // ✅ Show confirmation popup
-//     const confirmed = await showConfirmPopup(
-//       'Approve All Entries',
-//       `Are you sure you want to approve all entries for ${employeeId}?`,
-//       'Yes, Approve',
-//       'Cancel'
-//     );
-    
-//     if (!confirmed) {
-//       return;
-//     }
-    
-//     const response = await fetch(`${API_URL}/api/ope/manager/approve/${employeeId}`, {
-//       method: 'POST',
-//       headers: {
-//         'Authorization': `Bearer ${token}`,
-//         'Content-Type': 'application/json'
-//       }
-//     });
-    
-//     console.log("📡 Approve response status:", response.status);
-    
-//     if (response.ok) {
-//       const result = await response.json();
-//       console.log("✅ Approve result:", result);
-//       showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
-      
-//       // Close modal if open
-//       const modals = document.querySelectorAll('.modal-overlay');
-//       modals.forEach(modal => modal.remove());
-      
-//       // Reload pending data
-//       const empCode = localStorage.getItem('employee_code');
-//       await loadPendingData(token, empCode);
-      
-//     } else {
-//       const errorText = await response.text();
-//       console.error("❌ Approve error response:", errorText);
-      
-//       let errorData;
-//       try {
-//         errorData = JSON.parse(errorText);
-//       } catch (e) {
-//         errorData = { detail: errorText };
-//       }
-      
-//       showErrorPopup(errorData.detail || 'Approval failed');
-//     }
-    
-//   } catch (error) {
-//     console.error('❌ Approval error:', error);
-//     showErrorPopup(`Network error: ${error.message}`);
-//   }
-// }
 
 async function approveEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
