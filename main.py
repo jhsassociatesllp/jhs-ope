@@ -2088,7 +2088,9 @@ async def delete_temp_entry(
 # SUBMIT FINAL - Move from Temp_OPE_data to OPE_data
 # ============================================
             
-# ✅ UPDATED: Submit final with dynamic approval levels based on limit
+# ============================================
+# SUBMIT ALL ENTRIES - COMPLETE UPDATED VERSION
+# ============================================
 @app.post("/api/ope/submit-final")
 async def submit_final_entries(
     request: Request,
@@ -2167,34 +2169,60 @@ async def submit_final_entries(
         
         print(f"👔 Reporting Manager: {reporting_manager_code} ({reporting_manager_name})")
         
-        # ✅ CALCULATE TOTAL AMOUNT FOR THIS MONTH
-        total_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
+        # ✅ CALCULATE TOTAL AMOUNT FOR NEW ENTRIES
+        new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
         
-        print(f"💰 Total amount: ₹{total_amount}")
+        print(f"💰 New entries amount: ₹{new_entries_amount}")
         print(f"🎯 OPE Limit: ₹{ope_limit}")
         
-        # ✅ DYNAMIC APPROVAL LEVELS BASED ON AMOUNT VS LIMIT
-        if total_amount > ope_limit:
+        # ✅ CHECK IF STATUS DOCUMENT EXISTS AND GET EXISTING TOTAL
+        status_doc = await db["Status"].find_one({"employeeId": employee_code})
+        
+        existing_total = 0
+        month_exists = False
+        existing_month_index = -1
+        
+        if status_doc:
+            approval_status = status_doc.get("approval_status", [])
+            for i, ps in enumerate(approval_status):
+                if ps.get("payroll_month") == formatted_month_range:
+                    # ✅ MONTH EXISTS - Get existing total
+                    existing_total = ps.get("total_amount", 0)
+                    month_exists = True
+                    existing_month_index = i
+                    print(f"📊 Found existing month entry with total: ₹{existing_total}")
+                    break
+        
+        # ✅ CALCULATE CUMULATIVE TOTAL
+        cumulative_total = existing_total + new_entries_amount
+        
+        print(f"\n{'='*60}")
+        print(f"💰 AMOUNT CALCULATION:")
+        print(f"   Previous Total: ₹{existing_total}")
+        print(f"   New Entries: +₹{new_entries_amount}")
+        print(f"   Cumulative Total: ₹{cumulative_total}")
+        print(f"   OPE Limit: ₹{ope_limit}")
+        print(f"{'='*60}\n")
+        
+        # ✅ DYNAMIC APPROVAL LEVELS BASED ON CUMULATIVE TOTAL VS LIMIT
+        if cumulative_total > ope_limit:
             ope_label = "Greater"
             total_levels = 3
-            print(f"📊 Amount EXCEEDS limit → 3-level approval required")
+            print(f"📊 Cumulative amount EXCEEDS limit → 3-level approval required")
         else:
             ope_label = "Less"
             total_levels = 2
-            print(f"📊 Amount WITHIN limit → 2-level approval required")
+            print(f"📊 Cumulative amount WITHIN limit → 2-level approval required")
         
         current_time = datetime.utcnow().isoformat()
         
-        # ✅ CREATE OR UPDATE STATUS DOCUMENT (ONE PER EMPLOYEE)
-        status_doc = await db["Status"].find_one({"employeeId": employee_code})
-        
-        # Create payroll entry with DYNAMIC levels
+        # ✅ CREATE PAYROLL ENTRY WITH CUMULATIVE TOTAL
         payroll_entry = {
             "payroll_month": formatted_month_range,
             "ope_label": ope_label,
             "total_levels": total_levels,
-            "limit": ope_limit,  # ✅ Use employee's actual limit
-            "total_amount": total_amount,
+            "limit": ope_limit,
+            "total_amount": cumulative_total,  # ✅ CUMULATIVE TOTAL
             "L1": {
                 "status": False,
                 "approver_name": reporting_manager_name,
@@ -2225,6 +2253,7 @@ async def submit_final_entries(
             }
             print(f"✅ Added L3 (HR) level for approval")
         
+        # ✅ CREATE OR UPDATE STATUS DOCUMENT
         if not status_doc:
             # ✅ CREATE NEW STATUS DOCUMENT
             new_status_doc = {
@@ -2235,27 +2264,43 @@ async def submit_final_entries(
             result = await db["Status"].insert_one(new_status_doc)
             status_doc_id = str(result.inserted_id)
             print(f"✅ Created NEW Status document: {status_doc_id}")
+            
         else:
-            # ✅ UPDATE EXISTING STATUS DOCUMENT - ADD NEW PAYROLL MONTH
+            # ✅ UPDATE EXISTING STATUS DOCUMENT
             status_doc_id = str(status_doc["_id"])
             
-            # Check if this payroll month already exists
-            approval_status = status_doc.get("approval_status", [])
-            month_exists = False
-            
-            for i, ps in enumerate(approval_status):
-                if ps.get("payroll_month") == formatted_month_range:
-                    # Update existing month
-                    await db["Status"].update_one(
-                        {"employeeId": employee_code},
-                        {"$set": {f"approval_status.{i}": payroll_entry}}
-                    )
-                    month_exists = True
-                    print(f"✅ Updated existing payroll month: {formatted_month_range}")
-                    break
-            
-            if not month_exists:
-                # Add new payroll month
+            if month_exists:
+                # ✅ UPDATE EXISTING MONTH WITH CUMULATIVE TOTAL
+                print(f"🔄 Updating existing month entry at index {existing_month_index}")
+                
+                update_fields = {
+                    f"approval_status.{existing_month_index}.total_amount": cumulative_total,
+                    f"approval_status.{existing_month_index}.ope_label": ope_label,
+                    f"approval_status.{existing_month_index}.total_levels": total_levels,
+                    f"approval_status.{existing_month_index}.submission_date": current_time
+                }
+                
+                # ✅ Add L3 if total_levels changed from 2 to 3
+                if total_levels == 3:
+                    update_fields[f"approval_status.{existing_month_index}.L3"] = {
+                        "status": False,
+                        "approver_name": "HR",
+                        "approver_code": "",
+                        "approved_date": None,
+                        "level_name": "HR"
+                    }
+                    update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = partner
+                    update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "Partner"
+                
+                await db["Status"].update_one(
+                    {"employeeId": employee_code},
+                    {"$set": update_fields}
+                )
+                
+                print(f"✅ Updated existing payroll month with cumulative total: ₹{cumulative_total}")
+                
+            else:
+                # ✅ ADD NEW PAYROLL MONTH
                 await db["Status"].update_one(
                     {"employeeId": employee_code},
                     {"$push": {"approval_status": payroll_entry}}
@@ -2295,7 +2340,7 @@ async def submit_final_entries(
             await db["OPE_data"].insert_one(new_doc)
             print(f"✅ Created new OPE_data document")
         else:
-            month_exists = False
+            month_exists_in_ope = False
             ope_data_array = ope_doc.get("Data", [])
             
             for i, data_item in enumerate(ope_data_array):
@@ -2305,11 +2350,11 @@ async def submit_final_entries(
                             {"employeeId": employee_code},
                             {"$push": {f"Data.{i}.{formatted_month_range}": entry}}
                         )
-                    month_exists = True
+                    month_exists_in_ope = True
                     print(f"✅ Appended to existing month in OPE_data")
                     break
             
-            if not month_exists:
+            if not month_exists_in_ope:
                 await db["OPE_data"].update_one(
                     {"employeeId": employee_code},
                     {"$push": {"Data": {formatted_month_range: entries_to_submit}}}
@@ -2351,19 +2396,25 @@ async def submit_final_entries(
             await db["Temp_OPE_data"].delete_one({"employeeId": employee_code})
             print(f"✅ Deleted empty Temp_OPE_data document")
         
-        print(f"\n✅✅ SUBMISSION COMPLETE ✅✅")
-        print(f"   Total Amount: ₹{total_amount}")
+        print(f"\n{'='*60}")
+        print(f"✅✅ SUBMISSION COMPLETE ✅✅")
+        print(f"   Previous Total: ₹{existing_total}")
+        print(f"   New Entries: +₹{new_entries_amount}")
+        print(f"   Cumulative Total: ₹{cumulative_total}")
         print(f"   OPE Limit: ₹{ope_limit}")
         print(f"   Approval Levels: {total_levels}")
-        print(f"   OPE Label: {ope_label}\n")
+        print(f"   OPE Label: {ope_label}")
+        print(f"{'='*60}\n")
         
         return {
             "message": "Entries submitted successfully for approval",
             "submitted_count": len(entries_to_submit),
             "month_range": formatted_month_range,
             "reporting_manager": reporting_manager_code,
-            "total_amount": total_amount,
-            "ope_limit": ope_limit,  # ✅ Return limit in response
+            "previous_total": existing_total,  # ✅ NEW
+            "new_entries_amount": new_entries_amount,  # ✅ NEW
+            "total_amount": cumulative_total,  # ✅ CHANGED TO CUMULATIVE
+            "ope_limit": ope_limit,
             "ope_label": ope_label,
             "total_levels": total_levels,
             "status": "pending_approval"
@@ -2376,7 +2427,6 @@ async def submit_final_entries(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.post("/api/ope/manager/approve/{employee_code}")

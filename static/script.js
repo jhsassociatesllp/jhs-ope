@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-// API_URL = "http://127.0.0.1:8000";
-API_URL = "";
+API_URL = "http://127.0.0.1:8000";
+// API_URL = "";
 
 
 // Add CSS animations for popups
@@ -2746,6 +2746,113 @@ async function saveAllEntries() {
 // SUBMIT ALL ENTRIES - FIXED VERSION
 // ============================================
 // // ✅ UPDATED: Submit with limit info
+// async function submitAllEntries() {
+//   const token = localStorage.getItem('access_token');
+//   const empCode = localStorage.getItem('employee_code');
+  
+//   if (!token || !empCode) {
+//     showErrorPopup('Authentication required. Please login again.');
+//     window.location.href = 'login.html';
+//     return;
+//   }
+  
+//   const monthRangeSelect = document.getElementById('monthRange');
+//   const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
+  
+//   if (!monthRange) {
+//     showErrorPopup('Please select month range first!');
+//     return;
+//   }
+  
+//   const tbody = document.getElementById('entryTableBody');
+//   const rows = tbody.querySelectorAll('tr');
+  
+//   let hasSavedEntries = false;
+//   for (const row of rows) {
+//     if (row.dataset.savedEntryId) {
+//       hasSavedEntries = true;
+//       break;
+//     }
+//   }
+  
+//   if (!hasSavedEntries) {
+//     showErrorPopup('Please save your entries first using "Save Entry" button before submitting!');
+//     return;
+//   }
+  
+//   // Confirmation
+//   const confirmSubmit = await showConfirmPopup(
+//     'Submit Confirmation',
+//     'Are you sure you want to submit? After submission, you cannot edit or delete these entries.',
+//     'Yes, Submit',
+//     'Cancel'
+//   );
+  
+//   if (!confirmSubmit) {
+//     return;
+//   }
+  
+//   const submitBtn = document.querySelector('.btn-submit');
+//   if (submitBtn) {
+//     submitBtn.disabled = true;
+//     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+//   }
+  
+//   try {
+//     console.log(`🚀 Submitting all temporary entries to OPE_data...`);
+    
+//     const response = await fetch(`${API_URL}/api/ope/submit-final`, {
+//       method: 'POST',
+//       headers: {
+//         'Authorization': `Bearer ${token}`,
+//         'Content-Type': 'application/json'
+//       },
+//       body: JSON.stringify({
+//         month_range: monthRange
+//       })
+//     });
+    
+//     if (response.ok) {
+//       const result = await response.json();
+      
+//       // ✅ Show detailed success message with approval info
+//       let approvalInfo = '';
+//       if (result.total_levels === 3) {
+//         approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ Partner\n3️⃣ HR`;
+//       } else {
+//         approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ HR`;
+//       }
+      
+//       showSuccessPopup(`All entries submitted successfully!
+
+// Total submitted: ${result.submitted_count}${approvalInfo}
+
+// Your entries are now under review.`);
+      
+//       // Clear the form
+//       tbody.innerHTML = '';
+//       entryCounter = 0;
+//       addNewEntryRow();
+      
+//       // Reset month selection
+//       monthRangeSelect.value = '';
+      
+//     } else {
+//       const errorData = await response.json();
+//       showErrorPopup(errorData.detail || 'Submission failed');
+//     }
+    
+//   } catch (err) {
+//     console.error(`❌ Submit error:`, err);
+//     showErrorPopup(`Network error: ${err.message}`);
+//   } finally {
+//     if (submitBtn) {
+//       submitBtn.disabled = false;
+//       submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit All Entries';
+//     }
+//   }
+// }
+
 async function submitAllEntries() {
   const token = localStorage.getItem('access_token');
   const empCode = localStorage.getItem('employee_code');
@@ -2815,17 +2922,60 @@ async function submitAllEntries() {
     if (response.ok) {
       const result = await response.json();
       
-      // ✅ Show detailed success message with approval info
+      console.log("✅ Submit response:", result);
+      
+      // ✅ UPDATED: Show detailed success message with cumulative info
       let approvalInfo = '';
-      if (result.total_levels === 3) {
-        approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ Partner\n3️⃣ HR`;
+      
+      if (result.previous_total > 0) {
+        // ✅ NOT FIRST SUBMISSION - Show cumulative calculation
+        if (result.total_levels === 3) {
+          approvalInfo = `\n\n⚠️ Cumulative amount exceeds limit!\n\n` +
+                        `📊 Amount Breakdown:\n` +
+                        `   Previous Total: ₹${result.previous_total.toFixed(2)}\n` +
+                        `   New Entries: +₹${result.new_entries_amount.toFixed(2)}\n` +
+                        `   ━━━━━━━━━━━━━━━━━━━━\n` +
+                        `   Cumulative Total: ₹${result.total_amount.toFixed(2)}\n` +
+                        `   OPE Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
+                        `🔄 Approval required from:\n` +
+                        `   1️⃣ Reporting Manager\n` +
+                        `   2️⃣ Partner\n` +
+                        `   3️⃣ HR`;
+        } else {
+          approvalInfo = `\n\n✅ Cumulative amount within limit!\n\n` +
+                        `📊 Amount Breakdown:\n` +
+                        `   Previous Total: ₹${result.previous_total.toFixed(2)}\n` +
+                        `   New Entries: +₹${result.new_entries_amount.toFixed(2)}\n` +
+                        `   ━━━━━━━━━━━━━━━━━━━━\n` +
+                        `   Cumulative Total: ₹${result.total_amount.toFixed(2)}\n` +
+                        `   OPE Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
+                        `🔄 Approval required from:\n` +
+                        `   1️⃣ Reporting Manager\n` +
+                        `   2️⃣ HR`;
+        }
       } else {
-        approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ HR`;
+        // ✅ FIRST SUBMISSION - Normal message
+        if (result.total_levels === 3) {
+          approvalInfo = `\n\n⚠️ Amount exceeds limit!\n` +
+                        `Total: ₹${result.total_amount.toFixed(2)}\n` +
+                        `Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
+                        `Approval required from:\n` +
+                        `1️⃣ Reporting Manager\n` +
+                        `2️⃣ Partner\n` +
+                        `3️⃣ HR`;
+        } else {
+          approvalInfo = `\n\n✅ Within limit!\n` +
+                        `Total: ₹${result.total_amount.toFixed(2)}\n` +
+                        `Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
+                        `Approval required from:\n` +
+                        `1️⃣ Reporting Manager\n` +
+                        `2️⃣ HR`;
+        }
       }
       
       showSuccessPopup(`All entries submitted successfully!
 
-Total submitted: ${result.submitted_count}${approvalInfo}
+📦 Total Entries Submitted: ${result.submitted_count}${approvalInfo}
 
 Your entries are now under review.`);
       
