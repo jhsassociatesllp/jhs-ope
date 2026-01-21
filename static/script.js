@@ -2218,7 +2218,7 @@ function copyRow(rowId) {
     remarks: row.querySelector(`input[name="remarks_${rowId}"]`).value
   };
   
-  showSuccessPopup('Row data copied!');
+  // showSuccessPopup('Row data copied!');
 }
 
 // Paste Row Data
@@ -2240,7 +2240,7 @@ function pasteRow(rowId) {
   row.querySelector(`select[name="travelmode_${rowId}"]`).value = copiedRowData.travelmode;
   row.querySelector(`input[name="remarks_${rowId}"]`).value = copiedRowData.remarks;
   
-  showSuccessPopup('Data pasted successfully!');
+  // showSuccessPopup('Data pasted successfully!');
 }
 
 // Delete Entry Row
