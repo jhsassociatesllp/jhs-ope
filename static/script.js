@@ -1559,7 +1559,145 @@ function showNoData() {
 
 // 14. Navigation Setup (OPE aur History ke beech switch karne ke liye)
 
+// function setupNavigation() {
+//   const navOPE = document.getElementById('navOPE');
+//   const navHistory = document.getElementById('navHistory');
+//   const navStatus = document.getElementById('navStatus');
+//   const navPending = document.getElementById('navPending');
+//   const navApprove = document.getElementById('navApprove');
+//   const navReject = document.getElementById('navReject');
+  
+//   const opeSection = document.getElementById('opeSection');
+//   const historySection = document.getElementById('historySection');
+//   const statusSection = document.getElementById('statusSection');
+//   const pendingSection = document.getElementById('pendingSection');
+//   const approveSection = document.getElementById('approveSection');
+//   const rejectSection = document.getElementById('rejectSection');
+
+//   // Helper function
+//   function switchSection(activeNav, activeSection, loadDataCallback) {
+//     // Remove active from all nav items
+//     document.querySelectorAll('.nav-item').forEach(item => {
+//       item.classList.remove('active');
+//     });
+//     activeNav.classList.add('active');
+    
+//     // Hide ALL sections properly
+//     document.querySelectorAll('.content-section').forEach(section => {
+//       section.classList.remove('active');
+//       section.style.display = 'none';  
+//     });
+    
+//     // Show selected section
+//     if (activeSection) {
+//       activeSection.classList.add('active');
+//       activeSection.style.display = 'block';  
+//     }
+    
+//     // Close mobile menu
+//     if (window.innerWidth <= 768) {
+//       document.querySelector('.sidebar').classList.remove('mobile-active');
+//     }
+    
+//     // Load data if callback provided
+//     if (loadDataCallback) {
+//       loadDataCallback();
+//     }
+//   }
+
+//   if (navOPE) {
+//     navOPE.addEventListener('click', function() {
+//       switchSection(navOPE, opeSection);
+//     });
+//   }
+
+//   // Update the navHistory click event
+// if (navHistory) {
+//     navHistory.addEventListener('click', async function() {
+//         console.log("📌 History nav clicked");
+        
+//         switchSection(navHistory, historySection, async () => {
+//             const token = localStorage.getItem('access_token');
+//             const empCode = localStorage.getItem('employee_code');
+            
+//             console.log("🔑 Token:", token ? "exists" : "missing");
+//             console.log("👤 EmpCode:", empCode);
+            
+//             if (token && empCode) {
+//                 console.log("🚀 Loading history data...");
+//                 await loadHistoryData(token, empCode);
+                
+//                 console.log("📊 allHistoryData after load:", allHistoryData);
+                
+//                 // ✅ CRITICAL FIX: Force display table after loading
+//                 displayHistoryTable(allHistoryData);
+//             } else {
+//                 console.error("❌ Missing token or empCode");
+//             }
+//         });
+//     });
+// }
+
+//   if (navStatus) {
+//     navStatus.addEventListener('click', async function() {
+//         switchSection(navStatus, statusSection, async () => {
+//             const token = localStorage.getItem('access_token');
+//             const empCode = localStorage.getItem('employee_code');
+            
+//             if (token && empCode) {
+//                 await loadStatusData(token, empCode);
+//             }
+//         });
+//     });
+// }
+
+//   if (navPending) {
+//     navPending.addEventListener('click', async function() {
+//       switchSection(navPending, pendingSection, async () => {
+//         const token = localStorage.getItem('access_token');
+//         const empCode = localStorage.getItem('employee_code');
+        
+//         if (token && empCode) {
+//           await loadPendingData(token, empCode);
+//         }
+//       });
+//     });
+//   }
+
+//   if (navApprove) {
+//     navApprove.addEventListener('click', async function() {
+//       switchSection(navApprove, approveSection, async () => {
+//         const token = localStorage.getItem('access_token');
+//         const empCode = localStorage.getItem('employee_code');
+        
+//         if (token && empCode) {
+//           await loadApproveData(token, empCode);
+//         }
+//       });
+//     });
+//   }
+
+//   if (navReject) {
+//     navReject.addEventListener('click', async function() {
+//       switchSection(navReject, rejectSection, async () => {
+//         const token = localStorage.getItem('access_token');
+//         const empCode = localStorage.getItem('employee_code');
+        
+//         if (token && empCode) {
+//           await loadRejectData(token, empCode);
+//         }
+//       });
+//     });
+//   }
+// }
+
+// ============================================
+// FIXED: setupNavigation function
+// ============================================
+
 function setupNavigation() {
+  console.log("🔧 Setting up navigation...");
+  
   const navOPE = document.getElementById('navOPE');
   const navHistory = document.getElementById('navHistory');
   const navStatus = document.getElementById('navStatus');
@@ -1574,122 +1712,151 @@ function setupNavigation() {
   const approveSection = document.getElementById('approveSection');
   const rejectSection = document.getElementById('rejectSection');
 
-  // Helper function
+  // Helper function to switch sections
   function switchSection(activeNav, activeSection, loadDataCallback) {
+    console.log("📌 Switching to section:", activeSection?.id || 'unknown');
+    
     // Remove active from all nav items
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');
     });
-    activeNav.classList.add('active');
     
-    // Hide ALL sections properly
+    if (activeNav) {
+      activeNav.classList.add('active');
+    }
+    
+    // Hide ALL sections
     document.querySelectorAll('.content-section').forEach(section => {
       section.classList.remove('active');
-      section.style.display = 'none';  
+      section.style.display = 'none';
     });
     
     // Show selected section
     if (activeSection) {
       activeSection.classList.add('active');
-      activeSection.style.display = 'block';  
+      activeSection.style.display = 'block';
+      console.log("✅ Section displayed:", activeSection.id);
     }
     
-    // Close mobile menu
-    if (window.innerWidth <= 768) {
-      document.querySelector('.sidebar').classList.remove('mobile-active');
+    // Close mobile menu on navigation
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && sidebar.classList.contains('mobile-active')) {
+      sidebar.classList.remove('mobile-active');
+      console.log("✅ Mobile menu closed");
     }
     
     // Load data if callback provided
-    if (loadDataCallback) {
+    if (loadDataCallback && typeof loadDataCallback === 'function') {
+      console.log("📥 Loading data for section...");
       loadDataCallback();
     }
   }
 
+  // OPE Navigation
   if (navOPE) {
-    navOPE.addEventListener('click', function() {
+    navOPE.addEventListener('click', function(e) {
+      e.preventDefault();
+      console.log("📋 OPE clicked");
       switchSection(navOPE, opeSection);
     });
   }
 
-  // Update the navHistory click event
-if (navHistory) {
-    navHistory.addEventListener('click', async function() {
-        console.log("📌 History nav clicked");
+  // History Navigation
+  if (navHistory) {
+    navHistory.addEventListener('click', async function(e) {
+      e.preventDefault();
+      console.log("📜 History clicked");
+      
+      switchSection(navHistory, historySection, async () => {
+        const token = localStorage.getItem('access_token');
+        const empCode = localStorage.getItem('employee_code');
         
-        switchSection(navHistory, historySection, async () => {
-            const token = localStorage.getItem('access_token');
-            const empCode = localStorage.getItem('employee_code');
-            
-            console.log("🔑 Token:", token ? "exists" : "missing");
-            console.log("👤 EmpCode:", empCode);
-            
-            if (token && empCode) {
-                console.log("🚀 Loading history data...");
-                await loadHistoryData(token, empCode);
-                
-                console.log("📊 allHistoryData after load:", allHistoryData);
-                
-                // ✅ CRITICAL FIX: Force display table after loading
-                displayHistoryTable(allHistoryData);
-            } else {
-                console.error("❌ Missing token or empCode");
-            }
-        });
+        if (token && empCode) {
+          console.log("📥 Loading history data...");
+          await loadHistoryData(token, empCode);
+          displayHistoryTable(allHistoryData);
+        }
+      });
     });
-}
+  }
 
+  // Status Navigation
   if (navStatus) {
-    navStatus.addEventListener('click', async function() {
-        switchSection(navStatus, statusSection, async () => {
-            const token = localStorage.getItem('access_token');
-            const empCode = localStorage.getItem('employee_code');
-            
-            if (token && empCode) {
-                await loadStatusData(token, empCode);
-            }
-        });
+    navStatus.addEventListener('click', async function(e) {
+      e.preventDefault();
+      console.log("📊 Status clicked");
+      
+      switchSection(navStatus, statusSection, async () => {
+        const token = localStorage.getItem('access_token');
+        const empCode = localStorage.getItem('employee_code');
+        
+        if (token && empCode) {
+          console.log("📥 Loading status data...");
+          await loadStatusData(token, empCode);
+        }
+      });
     });
-}
+  }
 
+  // Pending Navigation
   if (navPending) {
-    navPending.addEventListener('click', async function() {
+    navPending.addEventListener('click', async function(e) {
+      e.preventDefault();
+      console.log("⏳ Pending clicked");
+      
       switchSection(navPending, pendingSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
         
         if (token && empCode) {
+          console.log("📥 Loading pending data...");
           await loadPendingData(token, empCode);
         }
       });
     });
   }
 
+  // Approve Navigation
   if (navApprove) {
-    navApprove.addEventListener('click', async function() {
+    navApprove.addEventListener('click', async function(e) {
+      e.preventDefault();
+      console.log("✅ Approve clicked");
+      
       switchSection(navApprove, approveSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
         
         if (token && empCode) {
+          console.log("📥 Loading approve data...");
           await loadApproveData(token, empCode);
         }
       });
     });
   }
 
+  // Reject Navigation
   if (navReject) {
-    navReject.addEventListener('click', async function() {
+    navReject.addEventListener('click', async function(e) {
+      e.preventDefault();
+      console.log("❌ Reject clicked");
+      
       switchSection(navReject, rejectSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
         
         if (token && empCode) {
+          console.log("📥 Loading reject data...");
           await loadRejectData(token, empCode);
         }
       });
     });
   }
+
+  console.log("✅ Navigation setup complete!");
 }
+
+// Make it globally accessible
+window.setupNavigation = setupNavigation;
 
 // 15. Success Popup Show karne ka function
 function showSuccessPopup(message) {
@@ -4155,6 +4322,113 @@ function showPendingNoData() {
 // APPROVE SECTION
 let allApproveData = [];
 
+// async function loadApproveData(token, empCode) {
+//     try {
+//         console.log("🔍 Loading approve data for:", empCode);
+        
+//         document.getElementById('approveLoadingDiv').style.display = 'block';
+//         document.getElementById('approveTableSection').style.display = 'none';
+//         document.getElementById('approveNoDataDiv').style.display = 'none';
+
+//         // ✅ CHECK IF USER IS HR
+//         const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+//         let approvedEmployeeCodes = [];
+        
+//         if (isHR) {
+//             console.log("👔 USER IS HR - Fetching HR approved entries");
+            
+//             // ✅ FOR HR: Get all employees with fully approved status
+//             const statusDocs = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
+//                 headers: { 'Authorization': `Bearer ${token}` }
+//             });
+            
+//             if (statusDocs.ok) {
+//                 const data = await statusDocs.json();
+//                 approvedEmployeeCodes = data.employee_codes || [];
+//             }
+//         } else {
+//             console.log("👔 USER IS MANAGER - Fetching manager approved entries");
+            
+//             // ✅ FOR MANAGERS: Use existing logic
+//             const approvedListResponse = await fetch(
+//                 `${API_URL}/api/ope/manager/approved-list`, 
+//                 {
+//                     headers: { 'Authorization': `Bearer ${token}` }
+//                 }
+//             );
+
+//             if (approvedListResponse.ok) {
+//                 const approvedListData = await approvedListResponse.json();
+//                 approvedEmployeeCodes = approvedListData.employee_codes || [];
+//             }
+//         }
+
+//         console.log("✅ Approved employees:", approvedEmployeeCodes);
+
+//         if (approvedEmployeeCodes.length === 0) {
+//             showApproveNoData();
+//             return;
+//         }
+
+//         // ✅ Fetch approved entries for each employee
+//         allApproveData = [];
+
+//         for (const empCodeLoop of approvedEmployeeCodes) {
+//             console.log(`📥 Fetching approved entries for: ${empCodeLoop}`);
+            
+//             try {
+//                 const response = await fetch(
+//                     `${API_URL}/api/ope/approved/${empCodeLoop}`, 
+//                     {
+//                         headers: { 'Authorization': `Bearer ${token}` }
+//                     }
+//                 );
+
+//                 if (response.ok) {
+//                     const data = await response.json();
+//                     const approvedCount = data.approved ? data.approved.length : 0;
+//                     console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
+                    
+//                     if (data.approved && data.approved.length > 0) {
+//                         allApproveData = allApproveData.concat(data.approved);
+//                     }
+//                 }
+//             } catch (err) {
+//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
+//             }
+//         }
+
+//         console.log("\n✅ Total approved entries loaded:", allApproveData.length);
+
+//         if (allApproveData.length === 0) {
+//             showApproveNoData();
+//         } else {
+//             // Remove duplicates
+//             const uniqueApproveData = [];
+//             const seenIds = new Set();
+            
+//             allApproveData.forEach(entry => {
+//                 if (!seenIds.has(entry._id)) {
+//                     seenIds.add(entry._id);
+//                     uniqueApproveData.push(entry);
+//                 }
+//             });
+            
+//             allApproveData = uniqueApproveData;
+//             console.log("✅ After removing duplicates:", allApproveData.length);
+            
+//             populateApproveMonthFilter();
+//             displayApproveEmployeeTable(allApproveData);
+//         }
+        
+//     } catch (error) {
+//         console.error('❌ Error in loadApproveData:', error);
+//         document.getElementById('approveLoadingDiv').style.display = 'none';
+//         showApproveNoData();
+//     }
+// }
+
 async function loadApproveData(token, empCode) {
     try {
         console.log("🔍 Loading approve data for:", empCode);
@@ -4171,19 +4445,18 @@ async function loadApproveData(token, empCode) {
         if (isHR) {
             console.log("👔 USER IS HR - Fetching HR approved entries");
             
-            // ✅ FOR HR: Get all employees with fully approved status
-            const statusDocs = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
+            // ✅ FOR HR: Get all employees with HR approved entries
+            const response = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
-            if (statusDocs.ok) {
-                const data = await statusDocs.json();
+            if (response.ok) {
+                const data = await response.json();
                 approvedEmployeeCodes = data.employee_codes || [];
             }
         } else {
             console.log("👔 USER IS MANAGER - Fetching manager approved entries");
             
-            // ✅ FOR MANAGERS: Use existing logic
             const approvedListResponse = await fetch(
                 `${API_URL}/api/ope/manager/approved-list`, 
                 {
@@ -4262,128 +4535,6 @@ async function loadApproveData(token, empCode) {
     }
 }
 
-// function displayApproveEmployeeTable(data) {
-//     console.log("🎨 Displaying approve employee table");
-    
-//     const tbody = document.getElementById('approveTableBody');
-//     if (!tbody) {
-//         console.error("❌ approveTableBody not found!");
-//         return;
-//     }
-
-//     tbody.innerHTML = '';
-
-//     if (!data || data.length === 0) {
-//         showApproveNoData();
-//         return;
-//     }
-
-//     // ✅ GROUP BY EMPLOYEE
-//     const groupedByEmployee = {};
-    
-//     data.forEach((entry) => {
-//         const empId = entry.employee_id || 'Unknown';
-        
-//         if (!groupedByEmployee[empId]) {
-//             groupedByEmployee[empId] = {
-//                 employeeId: empId,
-//                 employeeName: 'Loading...',
-//                 approvedCount: 0,
-//                 entries: []
-//             };
-//         }
-        
-//         groupedByEmployee[empId].approvedCount++;
-//         groupedByEmployee[empId].entries.push(entry);
-//     });
-    
-//     console.log("✅ Grouped by employee:", groupedByEmployee);
-    
-//     // ✅ DISPLAY EACH EMPLOYEE AS ONE ROW
-//     Object.values(groupedByEmployee).forEach((employeeData) => {
-//         const row = document.createElement('tr');
-//         row.style.cssText = 'transition: background-color 0.2s ease;';
-        
-//         row.addEventListener('mouseenter', function() {
-//             this.style.backgroundColor = '#f0fdf4';
-//         });
-//         row.addEventListener('mouseleave', function() {
-//             this.style.backgroundColor = '';
-//         });
-        
-//         // Get employee name from first entry
-//         const firstName = employeeData.entries[0]?.employee_name || employeeData.employeeId;
-        
-//         row.innerHTML = `
-//             <td style="text-align: center; font-weight: 600; color: #475569; font-size: 15px;">
-//                 ${employeeData.employeeId}
-//             </td>
-//             <td style="text-align: left;">
-//                 <a href="#" onclick="showApprovedEmployeeModal('${employeeData.employeeId}'); return false;" 
-//                    style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-//                     <i class="fas fa-user-circle" style="font-size: 18px;"></i>
-//                     ${firstName}
-//                 </a>
-//             </td>
-//             <td style="text-align: center;">
-//                 <button onclick="rejectApprovedEmployee('${employeeData.employeeId}')" 
-//                         style="
-//                             padding: 10px 20px; 
-//                             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); 
-//                             color: white; 
-//                             border: none; 
-//                             border-radius: 8px; 
-//                             cursor: pointer; 
-//                             font-weight: 600; 
-//                             font-size: 14px;
-//                             display: inline-flex; 
-//                             align-items: center; 
-//                             gap: 6px;
-//                             transition: all 0.3s ease;
-//                             box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
-//                         "
-//                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.4)';"
-//                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(239, 68, 68, 0.3)';">
-//                     <i class="fas fa-times-circle"></i> Reject All
-//                 </button>
-//             </td>
-//         `;
-        
-//         tbody.appendChild(row);
-//     });
-
-//     document.getElementById('approveLoadingDiv').style.display = 'none';
-//     document.getElementById('approveTableSection').style.display = 'block';
-// }
-
-
-
-// function populateApproveMonthFilter() {
-//     const monthSet = new Set();
-//     allApproveData.forEach(item => {
-//         if (item.month_range) monthSet.add(item.month_range);
-//     });
-
-//     const select = document.getElementById('approveMonthFilter');
-//     select.innerHTML = '<option value="">All Months</option>';
-
-//     Array.from(monthSet).sort().forEach(month => {
-//         const option = document.createElement('option');
-//         option.value = month;
-//         option.textContent = month;
-//         select.appendChild(option);
-//     });
-
-//     select.addEventListener('change', function() {
-//         const selectedMonth = this.value;
-//         if (selectedMonth === '') {
-//             displayApproveTable(allApproveData);
-//         } else {
-//             const filteredData = allApproveData.filter(item => item.month_range === selectedMonth);
-//             displayApproveTable(filteredData);
-//         }
-//     });
-// }
 
 function displayApproveEmployeeTable(data) {
     console.log("🎨 Displaying approve employee table");
@@ -4934,8 +5085,64 @@ function displayApproveTable(data) {
     console.log(`✅ Displayed ${uniqueData.length} approved entries`);
 }
 
+// async function rejectApprovedEmployee(employeeId) {
+//     const token = localStorage.getItem('access_token');
+    
+//     try {
+//         console.log("❌ Rejecting all approved entries for:", employeeId);
+        
+//         const reason = await showRejectReasonPopup();
+        
+//         if (!reason) {
+//             return;
+//         }
+        
+//         // Get all approved entries for this employee
+//         const employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
+        
+//         if (employeeEntries.length === 0) {
+//             showErrorPopup('No approved entries found');
+//             return;
+//         }
+        
+//         let rejectedCount = 0;
+        
+//         for (const entry of employeeEntries) {
+//             const response = await fetch(`${API_URL}/api/ope/manager/reject-single`, {
+//                 method: 'POST',
+//                 headers: {
+//                     'Authorization': `Bearer ${token}`,
+//                     'Content-Type': 'application/json'
+//                 },
+//                 body: JSON.stringify({ 
+//                     entry_id: entry._id,
+//                     employee_id: employeeId,
+//                     reason: reason 
+//                 })
+//             });
+            
+//             if (response.ok) {
+//                 rejectedCount++;
+//             }
+//         }
+        
+//         if (rejectedCount > 0) {
+//             showSuccessPopup(`Rejected ${rejectedCount} entries for employee ${employeeId}`);
+            
+//             // Reload approve data
+//             const empCode = localStorage.getItem('employee_code');
+//             await loadApproveData(token, empCode);
+//         }
+        
+//     } catch (error) {
+//         console.error('Rejection error:', error);
+//         showErrorPopup('Network error during rejection');
+//     }
+// }
+
 async function rejectApprovedEmployee(employeeId) {
     const token = localStorage.getItem('access_token');
+    const currentEmpCode = localStorage.getItem('employee_code');
     
     try {
         console.log("❌ Rejecting all approved entries for:", employeeId);
@@ -4956,31 +5163,59 @@ async function rejectApprovedEmployee(employeeId) {
         
         let rejectedCount = 0;
         
-        for (const entry of employeeEntries) {
-            const response = await fetch(`${API_URL}/api/ope/manager/reject-single`, {
+        // ✅ CHECK IF USER IS HR
+        const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        
+        if (isHR) {
+            // ✅ HR BULK REJECT
+            const response = await fetch(`${API_URL}/api/ope/hr/reject/${employeeId}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    entry_id: entry._id,
-                    employee_id: employeeId,
-                    reason: reason 
-                })
+                body: JSON.stringify({ reason: reason })
             });
             
             if (response.ok) {
-                rejectedCount++;
+                const result = await response.json();
+                showSuccessPopup(`HR rejected ${result.rejected_count} entries for employee ${employeeId}`);
+                
+                // Reload approve and reject data
+                await loadApproveData(token, currentEmpCode);
+                await loadRejectData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Rejection failed');
             }
-        }
-        
-        if (rejectedCount > 0) {
-            showSuccessPopup(`Rejected ${rejectedCount} entries for employee ${employeeId}`);
+        } else {
+            // ✅ MANAGER SINGLE-ENTRY REJECT
+            for (const entry of employeeEntries) {
+                const response = await fetch(`${API_URL}/api/ope/manager/reject-single`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        entry_id: entry._id,
+                        employee_id: employeeId,
+                        reason: reason 
+                    })
+                });
+                
+                if (response.ok) {
+                    rejectedCount++;
+                }
+            }
             
-            // Reload approve data
-            const empCode = localStorage.getItem('employee_code');
-            await loadApproveData(token, empCode);
+            if (rejectedCount > 0) {
+                showSuccessPopup(`Rejected ${rejectedCount} entries for employee ${employeeId}`);
+                
+                // Reload approve and reject data
+                await loadApproveData(token, currentEmpCode);
+                await loadRejectData(token, currentEmpCode);
+            }
         }
         
     } catch (error) {
@@ -6112,8 +6347,69 @@ async function rejectApprovedEntry(entryId, employeeId) {
   }
 }
 
+// async function approveRejectedEmployee(employeeId) {
+//     const token = localStorage.getItem('access_token');
+    
+//     try {
+//         console.log("✅ Approving all rejected entries for:", employeeId);
+        
+//         const confirmed = await showConfirmPopup(
+//             'Approve All Rejected Entries',
+//             `Are you sure you want to approve all rejected entries for employee ${employeeId}?`,
+//             'Yes, Approve All',
+//             'Cancel'
+//         );
+        
+//         if (!confirmed) {
+//             return;
+//         }
+        
+//         // Get all rejected entries for this employee
+//         const employeeEntries = allRejectData.filter(e => e.employee_id === employeeId);
+        
+//         if (employeeEntries.length === 0) {
+//             showErrorPopup('No rejected entries found');
+//             return;
+//         }
+        
+//         let approvedCount = 0;
+        
+//         // ✅ Approve each entry one by one
+//         for (const entry of employeeEntries) {
+//             const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
+//                 method: 'POST',
+//                 headers: {
+//                     'Authorization': `Bearer ${token}`,
+//                     'Content-Type': 'application/json'
+//                 },
+//                 body: JSON.stringify({ 
+//                     entry_id: entry._id,
+//                     employee_id: employeeId
+//                 })
+//             });
+            
+//             if (response.ok) {
+//                 approvedCount++;
+//             }
+//         }
+        
+//         if (approvedCount > 0) {
+//             showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
+            
+//             // ✅ Reload reject data
+//             const empCode = localStorage.getItem('employee_code');
+//             await loadRejectData(token, empCode);
+//         }
+        
+//     } catch (error) {
+//         console.error('Approval error:', error);
+//         showErrorPopup('Network error during approval');
+//     }
+// }
+
 async function approveRejectedEmployee(employeeId) {
     const token = localStorage.getItem('access_token');
+    const currentEmpCode = localStorage.getItem('employee_code');
     
     try {
         console.log("✅ Approving all rejected entries for:", employeeId);
@@ -6139,31 +6435,57 @@ async function approveRejectedEmployee(employeeId) {
         
         let approvedCount = 0;
         
-        // ✅ Approve each entry one by one
-        for (const entry of employeeEntries) {
-            const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
+        // ✅ CHECK IF USER IS HR
+        const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        
+        if (isHR) {
+            // ✅ HR BULK APPROVE
+            const response = await fetch(`${API_URL}/api/ope/hr/approve/${employeeId}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    entry_id: entry._id,
-                    employee_id: employeeId
-                })
+                }
             });
             
             if (response.ok) {
-                approvedCount++;
+                const result = await response.json();
+                showSuccessPopup(`HR approved ${result.approved_count} entries for employee ${employeeId}`);
+                
+                // Reload reject and approve data
+                await loadRejectData(token, currentEmpCode);
+                await loadApproveData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Approval failed');
             }
-        }
-        
-        if (approvedCount > 0) {
-            showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
+        } else {
+            // ✅ MANAGER SINGLE-ENTRY APPROVE
+            for (const entry of employeeEntries) {
+                const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        entry_id: entry._id,
+                        employee_id: employeeId
+                    })
+                });
+                
+                if (response.ok) {
+                    approvedCount++;
+                }
+            }
             
-            // ✅ Reload reject data
-            const empCode = localStorage.getItem('employee_code');
-            await loadRejectData(token, empCode);
+            if (approvedCount > 0) {
+                showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
+                
+                // Reload reject and approve data
+                await loadRejectData(token, currentEmpCode);
+                await loadApproveData(token, currentEmpCode);
+            }
         }
         
     } catch (error) {
@@ -6272,70 +6594,95 @@ async function checkUserRole() {
 }
 
 // Toggle visibility of manager-only sidebar buttons
+// function toggleManagerButtons(isManager) {
+//   const navPending = document.getElementById('navPending');
+//   const navApprove = document.getElementById('navApprove');
+//   const navReject = document.getElementById('navReject');
+  
+//   console.log("🔧 toggleManagerButtons called with isManager:", isManager);
+  
+//   if (isManager) {
+//     console.log("👔 User is a manager - showing buttons");
+//     if (navPending) {
+//       navPending.style.display = 'flex';
+//       console.log("✅ Pending button shown");
+//     }
+//     if (navApprove) {
+//       navApprove.style.display = 'flex';
+//       console.log("✅ Approve button shown");
+//     }
+//     if (navReject) {
+//       navReject.style.display = 'flex';
+//       console.log("✅ Reject button shown");
+//     }
+//   } else {
+//     console.log("👤 User is an employee - hiding buttons");
+//     if (navPending) navPending.style.display = 'none';
+//     if (navApprove) navApprove.style.display = 'none';
+//     if (navReject) navReject.style.display = 'none';
+//   }
+// }
+
+// ============================================
+// FIXED: toggleManagerButtons function
+// ============================================
+
 function toggleManagerButtons(isManager) {
+  console.log("🔧 toggleManagerButtons called with isManager:", isManager);
+  
   const navPending = document.getElementById('navPending');
   const navApprove = document.getElementById('navApprove');
   const navReject = document.getElementById('navReject');
   
-  console.log("🔧 toggleManagerButtons called with isManager:", isManager);
-  
   if (isManager) {
-    console.log("👔 User is a manager - showing buttons");
+    console.log("👔 USER IS MANAGER - Showing manager buttons");
+    
     if (navPending) {
       navPending.style.display = 'flex';
+      navPending.classList.add('show');
       console.log("✅ Pending button shown");
     }
+    
     if (navApprove) {
       navApprove.style.display = 'flex';
+      navApprove.classList.add('show');
       console.log("✅ Approve button shown");
     }
+    
     if (navReject) {
       navReject.style.display = 'flex';
+      navReject.classList.add('show');
       console.log("✅ Reject button shown");
     }
   } else {
-    console.log("👤 User is an employee - hiding buttons");
-    if (navPending) navPending.style.display = 'none';
-    if (navApprove) navApprove.style.display = 'none';
-    if (navReject) navReject.style.display = 'none';
+    console.log("👤 USER IS EMPLOYEE - Hiding manager buttons");
+    
+    if (navPending) {
+      navPending.style.display = 'none';
+      navPending.classList.remove('show');
+      console.log("✅ Pending button hidden");
+    }
+    
+    if (navApprove) {
+      navApprove.style.display = 'none';
+      navApprove.classList.remove('show');
+      console.log("✅ Approve button hidden");
+    }
+    
+    if (navReject) {
+      navReject.style.display = 'none';
+      navReject.classList.remove('show');
+      console.log("✅ Reject button hidden");
+    }
   }
 }
 
+// Make it globally accessible
+window.toggleManagerButtons = toggleManagerButtons;
+
+console.log("✅ Manager Buttons Toggle initialized!");
+
 // Update checkUserRole to use isManager
-// async function checkUserRole() {
-//   try {
-//     const token = localStorage.getItem("access_token");
-//     const empCode = localStorage.getItem("employee_code");
-    
-//     console.log("🔍 Checking user role...");
-    
-//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-//       headers: {
-//         Authorization: `Bearer ${token}`
-//       }
-//     });
-    
-//     if (!response.ok) {
-//       console.error("❌ Role check failed");
-//       return false;
-//     }
-    
-//     const data = await response.json();
-//     console.log("✅ Role check result:", data);
-    
-//     // Store role in localStorage using isManager
-//     localStorage.setItem("is_manager", data.isManager);
-    
-//     // Show/hide manager-only buttons
-//     toggleManagerButtons(data.isManager);
-    
-//     return data.isManager;
-    
-//   } catch (error) {
-//     console.error("❌ Error checking role:", error);
-//     return false;
-//   }
-// }
 
 async function checkUserRole() {
   try {
@@ -7086,285 +7433,6 @@ async function loadStatusData(token, empCode) {
 }
 
 
-// function displayStatusTable(data) {
-//     console.log("🎨 Displaying status table");
-    
-//     const tbody = document.getElementById('statusTableBody');
-//     if (!tbody) {
-//         console.error("❌ statusTableBody not found!");
-//         return;
-//     }
-
-//     tbody.innerHTML = '';
-
-//     if (!data || data.length === 0) {
-//         showStatusNoData();
-//         return;
-//     }
-
-//     // ✅ Display each payroll month as one row
-//     data.forEach((entry) => {
-//         const row = document.createElement('tr');
-        
-//         const L1 = entry.L1 || {};
-//         const L2 = entry.L2 || {};
-//         const L3 = entry.L3 || {};
-//         const totalLevels = entry.total_levels || 2;
-//         const currentLevel = entry.current_level || 'L1';
-//         const overallStatus = entry.overall_status || 'pending';
-        
-//         // Generate status tracker HTML
-//         let statusTrackerHTML = `
-//             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-//                 <!-- L1 -->
-//                 <div style="
-//                     display: flex;
-//                     align-items: center;
-//                     gap: 8px;
-//                     padding: 10px 12px;
-//                     border-radius: 8px;
-//                     background: ${L1.status ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : currentLevel === 'L1' ? '#fef3c7' : '#f1f5f9'};
-//                     border: 2px solid ${L1.status ? '#059669' : currentLevel === 'L1' ? '#f59e0b' : '#e2e8f0'};
-//                     min-width: 150px;
-//                 ">
-//                     <i class="fas ${L1.status ? 'fa-check-circle' : currentLevel === 'L1' ? 'fa-clock' : 'fa-circle'}" 
-//                        style="color: ${L1.status ? 'white' : currentLevel === 'L1' ? '#f59e0b' : '#94a3b8'}; font-size: 18px;"></i>
-//                     <div>
-//                         <div style="font-size: 11px; font-weight: 700; color: ${L1.status ? 'white' : '#475569'}; margin-bottom: 3px; text-transform: uppercase;">
-//                             L1 - ${L1.level_name || 'Reporting Manager'}
-//                         </div>
-//                         <div style="font-size: 10px; font-weight: 600; color: ${L1.status ? 'rgba(255,255,255,0.95)' : '#64748b'};">
-//                             ${L1.status ? '✓ Approved by ' + L1.approver_name : '⏳ Pending'}
-//                         </div>
-//                         ${L1.status && L1.approved_date ? `
-//                             <div style="font-size: 9px; color: ${L1.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'}; margin-top: 2px;">
-//                                 ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
-//                             </div>
-//                         ` : ''}
-//                     </div>
-//                 </div>
-                
-//                 <i class="fas fa-arrow-right" style="color: ${L1.status ? '#10b981' : '#94a3b8'}; font-size: 16px;"></i>
-                
-//                 <!-- L2 -->
-//                 <div style="
-//                     display: flex;
-//                     align-items: center;
-//                     gap: 8px;
-//                     padding: 10px 14px;
-//                     border-radius: 8px;
-//                     background: ${L2.status ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : currentLevel === 'L2' ? '#fef3c7' : '#f1f5f9'};
-//                     border: 2px solid ${L2.status ? '#059669' : currentLevel === 'L2' ? '#f59e0b' : '#e2e8f0'};
-//                     min-width: 180px;
-//                 ">
-//                     <i class="fas ${L2.status ? 'fa-check-circle' : currentLevel === 'L2' ? 'fa-clock' : 'fa-circle'}" 
-//                        style="color: ${L2.status ? 'white' : currentLevel === 'L2' ? '#f59e0b' : '#94a3b8'}; font-size: 18px;"></i>
-//                     <div>
-//                         <div style="font-size: 11px; font-weight: 700; color: ${L2.status ? 'white' : '#475569'}; margin-bottom: 3px; text-transform: uppercase;">
-//                             L2 - ${L2.level_name || 'Partner'}
-//                         </div>
-//                         <div style="font-size: 10px; font-weight: 600; color: ${L2.status ? 'rgba(255,255,255,0.95)' : '#64748b'};">
-//                             ${L2.status ? '✓ Approved by ' + L2.approver_name : '⏳ Pending'}
-//                         </div>
-//                         ${L2.status && L2.approved_date ? `
-//                             <div style="font-size: 9px; color: ${L2.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'}; margin-top: 2px;">
-//                                 ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
-//                             </div>
-//                         ` : ''}
-//                     </div>
-//                 </div>
-//         `;
-        
-//         // ✅ Add L3 only if totalLevels = 3
-//         if (totalLevels === 3) {
-//             statusTrackerHTML += `
-//                 <i class="fas fa-arrow-right" style="color: ${L2.status ? '#10b981' : '#94a3b8'}; font-size: 16px;"></i>
-                
-//                 <!-- L3 -->
-//                 <div style="
-//                     display: flex;
-//                     align-items: center;
-//                     gap: 8px;
-//                     padding: 10px 14px;
-//                     border-radius: 8px;
-//                     background: ${L3.status ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : currentLevel === 'L3' ? '#fef3c7' : '#f1f5f9'};
-//                     border: 2px solid ${L3.status ? '#059669' : currentLevel === 'L3' ? '#f59e0b' : '#e2e8f0'};
-//                     min-width: 180px;
-//                 ">
-//                     <i class="fas ${L3.status ? 'fa-check-circle' : currentLevel === 'L3' ? 'fa-clock' : 'fa-circle'}" 
-//                        style="color: ${L3.status ? 'white' : currentLevel === 'L3' ? '#f59e0b' : '#94a3b8'}; font-size: 18px;"></i>
-//                     <div>
-//                         <div style="font-size: 11px; font-weight: 700; color: ${L3.status ? 'white' : '#475569'}; margin-bottom: 3px; text-transform: uppercase;">
-//                             L3 - ${L3.level_name || 'HR'}
-//                         </div>
-//                         <div style="font-size: 10px; font-weight: 600; color: ${L3.status ? 'rgba(255,255,255,0.95)' : '#64748b'};">
-//                             ${L3.status ? '✓ Approved by ' + L3.approver_name : '⏳ Pending'}
-//                         </div>
-//                         ${L3.status && L3.approved_date ? `
-//                             <div style="font-size: 9px; color: ${L3.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'}; margin-top: 2px;">
-//                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
-//                             </div>
-//                         ` : ''}
-//                     </div>
-//                 </div>
-//             `;
-//         }
-        
-//         statusTrackerHTML += `</div>`;
-        
-//         row.innerHTML = `
-//             <td style="font-weight: 600; color: #475569; font-size: 15px;">${entry.payroll_month || '-'}</td>
-//             <td style="font-weight: 700; color: #059669; font-size: 16px;">₹${(entry.total_amount || 0).toFixed(2)}</td>
-//             <td>
-//                 <div style="display: flex; flex-direction: column; gap: 4px;">
-//                     <span style="
-//                         background: ${overallStatus === 'approved' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'};
-//                         color: white;
-//                         padding: 6px 10px;
-//                         border-radius: 20px;
-//                         font-size: 12px;
-//                         font-weight: 600;
-//                         display: inline-block;
-//                     ">
-//                         ${overallStatus === 'approved' ? '✓ COMPLETED' : '⏳ IN PROGRESS'}
-//                     </span>
-//                     <span style="font-size: 11px; color: #64748b;">  
-//                         Levels: <strong>${totalLevels}</strong> | 
-//                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
-//                     </span>
-//                 </div>
-//             </td>
-//             <td style="padding: 10px;">
-//                 ${statusTrackerHTML}
-//             </td>
-//         `;
-        
-//         tbody.appendChild(row);
-//     });
-
-//     document.getElementById('statusLoadingDiv').style.display = 'none';
-//     document.getElementById('statusTableSection').style.display = 'block';
-// }
-
-// function displayStatusTable(data) {
-//     console.log("🎨 Displaying status table");
-    
-//     const tbody = document.getElementById('statusTableBody');
-//     if (!tbody) {
-//         console.error("❌ statusTableBody not found!");
-//         return;
-//     }
-
-//     tbody.innerHTML = '';
-
-//     if (!data || data.length === 0) {
-//         showStatusNoData();
-//         return;
-//     }
-
-//     data.forEach((entry) => {
-//         const row = document.createElement('tr');
-        
-//         const L1 = entry.L1 || {};
-//         const L2 = entry.L2 || {};
-//         const L3 = entry.L3 || {};
-//         const totalLevels = entry.total_levels || 2;
-//         const currentLevel = entry.current_level || 'L1';
-//         const overallStatus = entry.overall_status || 'pending';
-        
-//         // Generate status tracker HTML
-//         let statusTrackerHTML = `<div class="approval-tracker">`;
-        
-//         // L1
-//         const l1Class = L1.status ? 'approved' : (currentLevel === 'L1' ? 'pending' : 'inactive');
-//         statusTrackerHTML += `
-//             <div class="approval-level ${l1Class}">
-//                 <i class="fas ${L1.status ? 'fa-check-circle' : (currentLevel === 'L1' ? 'fa-clock' : 'fa-circle')}"></i>
-//                 <div class="level-info">
-//                     <div class="level-title">L1 - ${L1.level_name || 'REPORTING MANAGER'}</div>
-//                     <div class="level-status">
-//                         ${L1.status ? '✓ Approved by ' + (L1.approver_name || 'Manager') : '⏳ Pending'}
-//                     </div>
-//                     ${L1.status && L1.approved_date ? `
-//                         <div class="level-date">
-//                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-//                         </div>
-//                     ` : ''}
-//                 </div>
-//             </div>
-//             <i class="fas fa-arrow-right approval-arrow ${L1.status ? 'active' : 'inactive'}"></i>
-//         `;
-        
-//         // L2
-//         const l2Class = L2.status ? 'approved' : (currentLevel === 'L2' ? 'pending' : 'inactive');
-//         statusTrackerHTML += `
-//             <div class="approval-level ${l2Class}">
-//                 <i class="fas ${L2.status ? 'fa-check-circle' : (currentLevel === 'L2' ? 'fa-clock' : 'fa-circle')}"></i>
-//                 <div class="level-info">
-//                     <div class="level-title">L2 - ${L2.level_name || 'PARTNER'}</div>
-//                     <div class="level-status">
-//                         ${L2.status ? '✓ Approved by ' + (L2.approver_name || 'Partner') : '⏳ Pending'}
-//                     </div>
-//                     ${L2.status && L2.approved_date ? `
-//                         <div class="level-date">
-//                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-//                         </div>
-//                     ` : ''}
-//                 </div>
-//             </div>
-//         `;
-        
-//         // L3 (only if total_levels = 3)
-//         if (totalLevels === 3) {
-//             const l3Class = L3.status ? 'approved' : (currentLevel === 'L3' ? 'pending' : 'inactive');
-//             statusTrackerHTML += `
-//                 <i class="fas fa-arrow-right approval-arrow ${L2.status ? 'active' : 'inactive'}"></i>
-//                 <div class="approval-level ${l3Class}">
-//                     <i class="fas ${L3.status ? 'fa-check-circle' : (currentLevel === 'L3' ? 'fa-clock' : 'fa-circle')}"></i>
-//                     <div class="level-info">
-//                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
-//                         <div class="level-status">
-//                             ${L3.status ? '✓ Approved by ' + (L3.approver_name || 'HR') : '⏳ Pending'}
-//                         </div>
-//                         ${L3.status && L3.approved_date ? `
-//                             <div class="level-date">
-//                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-//                             </div>
-//                         ` : ''}
-//                     </div>
-//                 </div>
-//             `;
-//         }
-        
-//         statusTrackerHTML += `</div>`;
-        
-//         row.innerHTML = `
-//             <td>${entry.payroll_month || '-'}</td>
-//             <td>₹${(entry.total_amount || 0).toFixed(2)}</td>
-//             <td>
-//                 <div class="status-badge-container">
-//                     <span class="status-badge ${overallStatus === 'approved' ? 'completed' : 'pending'}">
-//                         ${overallStatus === 'approved' ? '✓ COMPLETED' : '⏳ IN PROGRESS'}
-//                     </span>
-//                     <div class="status-info"> 
-//                         Levels: <strong>${totalLevels}</strong> | 
-//                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
-//                     </div>
-//                 </div>
-//             </td>
-//             <td>
-//                 ${statusTrackerHTML}
-//             </td>
-//         `;
-        
-//         tbody.appendChild(row);
-//     });
-
-//     document.getElementById('statusLoadingDiv').style.display = 'none';
-//     document.getElementById('statusTableSection').style.display = 'block';
-// }
-
-
 function displayStatusTable(data) {
     console.log("🎨 Displaying status table");
     
@@ -7667,3 +7735,72 @@ function getOverallStatusLabel(overallStatus, currentLevel, L1, L2, L3) {
         return '⏳ PENDING AT REPORTING MANAGER';
     }
 }
+
+// ============================================
+// MOBILE MENU TOGGLE - FIXED VERSION
+// ============================================
+
+// Toggle mobile menu
+function toggleMobileMenu() {
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (!sidebar) {
+        console.error("❌ Sidebar not found!");
+        return;
+    }
+    
+    console.log("📱 Mobile menu toggle clicked");
+    
+    // Toggle the mobile-active class
+    sidebar.classList.toggle('mobile-active');
+    console.log("✅ Sidebar toggled - mobile-active:", sidebar.classList.contains('mobile-active'));
+}
+
+// Close mobile menu when clicking on navigation items
+document.addEventListener('DOMContentLoaded', function() {
+    const navItems = document.querySelectorAll('.nav-item');
+    
+    navItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            console.log("🔗 Navigation item clicked:", this.textContent.trim());
+            
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (sidebar && sidebar.classList.contains('mobile-active')) {
+                // Close mobile menu after clicking
+                sidebar.classList.remove('mobile-active');
+                console.log("✅ Mobile menu closed after nav click");
+            }
+        });
+    });
+    
+    // Close menu when clicking outside sidebar
+    document.addEventListener('click', function(e) {
+        const sidebar = document.querySelector('.sidebar');
+        const toggleBtn = document.querySelector('.mobile-menu-toggle');
+        
+        if (sidebar && toggleBtn && 
+            !sidebar.contains(e.target) && 
+            !toggleBtn.contains(e.target) &&
+            sidebar.classList.contains('mobile-active')) {
+            
+            sidebar.classList.remove('mobile-active');
+            console.log("✅ Mobile menu closed (clicked outside)");
+        }
+    });
+    
+    // Handle window resize - close menu on resize to desktop
+    window.addEventListener('resize', function() {
+        const sidebar = document.querySelector('.sidebar');
+        
+        if (window.innerWidth > 768 && sidebar && sidebar.classList.contains('mobile-active')) {
+            sidebar.classList.remove('mobile-active');
+            console.log("✅ Mobile menu closed (window resized to desktop)");
+        }
+    });
+});
+
+// Make it accessible globally
+window.toggleMobileMenu = toggleMobileMenu;
+
+console.log("✅ Mobile Menu Toggle initialized successfully!");

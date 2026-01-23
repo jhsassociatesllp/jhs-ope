@@ -160,220 +160,38 @@ body {
     opacity: 0.7;
 }
 
-/* ============================================
-   MOBILE MENU - FIXED STYLING
-   ============================================ */
-
-/* Mobile Menu Toggle Button - HIDDEN BY DEFAULT */
+/* Mobile Menu Toggle */
 .mobile-menu-toggle {
-    display: none !important;
+    display: none;
     position: fixed;
     top: 20px;
     left: 20px;
     z-index: 1001;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--primary-color);
     color: white;
     border: none;
-    width: 50px;
-    height: 50px;
+    width: 48px;
+    height: 48px;
     border-radius: 12px;
     font-size: 20px;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: var(--shadow-lg);
     transition: all 0.3s ease;
-    align-items: center;
-    justify-content: center;
 }
 
 .mobile-menu-toggle:hover {
-    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    background: var(--primary-dark);
     transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
-.mobile-menu-toggle:active {
-    transform: scale(0.95);
+/* Hide manager buttons by default */
+#navPending,
+#navApprove,
+#navReject {
+  display: none;
 }
 
-/* ============================================
-   RESPONSIVE DESIGN - DESKTOP (> 768px)
-   ============================================ */
-@media (min-width: 769px) {
-    /* HIDE toggle button on desktop */
-    .mobile-menu-toggle {
-        display: none !important;
-    }
-    
-    /* Desktop sidebar styling */
-    .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 280px;
-        height: 100vh;
-        background: var(--sidebar-bg);
-        color: var(--sidebar-text);
-        display: flex;
-        flex-direction: column;
-        box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
-        z-index: 1000;
-        transform: translateX(0) !important;
-        transition: transform 0.3s ease;
-    }
-    
-    /* Desktop main content */
-    .main-content {
-        margin-left: 280px;
-        flex: 1;
-        padding: 30px;
-        max-width: calc(100% - 280px);
-        min-height: 100vh;
-    }
-}
 
-/* ============================================
-   RESPONSIVE DESIGN - MOBILE (≤ 768px)
-   ============================================ */
-@media (max-width: 768px) {
-    /* SHOW toggle button on mobile */
-    .mobile-menu-toggle {
-        display: flex !important;
-        position: fixed;
-        top: 20px;
-        left: 20px;
-        z-index: 1001;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        width: 50px;
-        height: 50px;
-        border-radius: 12px;
-        font-size: 20px;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        transition: all 0.3s ease;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    /* Sidebar positioning for mobile */
-    .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 280px;
-        height: 100vh;
-        background: var(--sidebar-bg);
-        color: var(--sidebar-text);
-        display: flex;
-        flex-direction: column;
-        box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
-        z-index: 1000;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-        overflow-y: auto;
-    }
-    
-    /* Show sidebar when active */
-    .sidebar.mobile-active {
-        transform: translateX(0);
-    }
-    
-    /* Overlay when menu is open */
-    .sidebar.mobile-active::before {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: -1;
-    }
-    
-    /* Main content adjustment */
-    .main-content {
-        margin-left: 0;
-        max-width: 100%;
-        padding: 80px 15px 20px;
-    }
-    
-    /* Page header responsive */
-    .page-header h1 {
-        font-size: 24px;
-    }
-    
-    .page-header p {
-        font-size: 14px;
-    }
-    
-    .details-grid {
-        grid-template-columns: 1fr;
-        gap: 15px;
-    }
-    
-    .card-body {
-        padding: 20px;
-    }
-    
-    .entry-buttons-container {
-        flex-direction: column;
-    }
-    
-    .month-dropdown-container,
-    .month-filter {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
-    
-    .month-dropdown-container select,
-    .month-filter select {
-        max-width: 100%;
-    }
-    
-    .entry-table,
-    .history-table {
-        min-width: 1500px;
-        font-size: 13px;
-    }
-    
-    .entry-table th,
-    .entry-table td,
-    .history-table th,
-    .history-table td {
-        padding: 10px 8px;
-    }
-}
-
-/* ============================================
-   RESPONSIVE DESIGN - TABLET (769px - 1024px)
-   ============================================ */
-@media (min-width: 769px) and (max-width: 1024px) {
-    .mobile-menu-toggle {
-        display: none !important;
-    }
-    
-    .sidebar {
-        width: 240px;
-        transform: translateX(0) !important;
-    }
-    
-    .main-content {
-        margin-left: 240px;
-        max-width: calc(100% - 240px);
-    }
-    
-    .sidebar-nav {
-        padding: 15px 0;
-    }
-    
-    .nav-item {
-        padding: 12px 20px;
-        font-size: 14px;
-        margin: 3px 10px;
-    }
-}
 /* ============================================
    MAIN CONTENT STYLES
    ============================================ */
@@ -603,82 +421,6 @@ body {
     min-width: 1800px;
     border-collapse: collapse;
     background: white;
-}
-
-/* ✅ UPDATED: Better width for Pending/Approve/Reject tables */
-#pendingTableSection .history-table,
-#approveTableSection .history-table,
-#rejectTableSection .history-table {
-    width: 100% !important;
-    min-width: auto !important;
-    max-width: 1000px;
-    margin: 0 auto;
-    border-radius: 20px;
-    
-}
-
-#pendingTableSection .history-table th:nth-child(1),
-#approveTableSection .history-table th:nth-child(1),
-#rejectTableSection .history-table th:nth-child(1) {
-    width: 20%;
-    text-align: center;
-    padding: 14px 20px;
-}
-
-#pendingTableSection .history-table th:nth-child(2),
-#approveTableSection .history-table th:nth-child(2),
-#rejectTableSection .history-table th:nth-child(2) {
-    width: 50%;
-    text-align: left;
-    padding: 14px 20px;
-}
-
-#pendingTableSection .history-table th:nth-child(3),
-#approveTableSection .history-table th:nth-child(3),
-#rejectTableSection .history-table th:nth-child(3) {
-    width: 30%;
-    text-align: center;
-    padding: 14px 20px;
-}
-
-#pendingTableSection .history-table td:nth-child(1),
-#approveTableSection .history-table td:nth-child(1),
-#rejectTableSection .history-table td:nth-child(1) {
-    width: 20%;
-    text-align: center;
-    padding: 16px 20px;
-}
-
-#pendingTableSection .history-table td:nth-child(2),
-#approveTableSection .history-table td:nth-child(2),
-#rejectTableSection .history-table td:nth-child(2) {
-    width: 50%;
-    text-align: left;
-    padding: 16px 20px;
-}
-
-#pendingTableSection .history-table td:nth-child(3),
-#approveTableSection .history-table td:nth-child(3),
-#rejectTableSection .history-table td:nth-child(3) {
-    width: 30%;
-    text-align: center;
-    padding: 16px 20px;
-}
-
-/* ✅ Table wrapper proper display */
-#pendingTableSection .table-wrapper,
-#approveTableSection .table-wrapper,
-#rejectTableSection .table-wrapper {
-    overflow-x: auto;
-    display: block;
-    padding: 0 20px;
-}
-
-/* ✅ Card body padding for better spacing */
-#pendingTableSection .card-body,
-#approveTableSection .card-body,
-#rejectTableSection .card-body {
-    padding: 20px;
 }
 
 .entry-table thead,
@@ -1195,10 +937,6 @@ body {
    STATUS SECTION - COMPACT TABLE DESIGN
    ============================================ */
 
-/* ============================================
-   STATUS SECTION - PERFECT WIDTH FIT
-   ============================================ */
-
 #statusSection .card {
     margin-bottom: 20px;
 }
@@ -1214,7 +952,6 @@ body {
     border-collapse: separate;
     border-spacing: 0;
     background: white;
-    min-width: 100%;
 }
 
 #statusSection .history-table thead {
@@ -1224,34 +961,33 @@ body {
 #statusSection .history-table thead th {
     color: white;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     padding: 14px 12px;
     text-align: left;
     border: none;
-    white-space: nowrap;
 }
 
 #statusSection .history-table thead th:first-child {
     border-top-left-radius: 12px;
-    width: 200px;
+    width: 180px; /* Fixed width for Payroll Month */
 }
 
 #statusSection .history-table thead th:nth-child(2) {
-    width: 140px;
-    text-align: right;
+    width: 140px; /* Fixed width for Total Amount */
+    text-align: center;
 }
 
 #statusSection .history-table thead th:nth-child(3) {
-    width: 180px;
+    width: 220px; /* Fixed width for Overall Status */
     text-align: center;
 }
 
 #statusSection .history-table thead th:last-child {
     border-top-right-radius: 12px;
-    width: auto;
-    flex: 1;
+    width: auto; /* Flexible width for Approval Tracker */
+    min-width: 600px;
 }
 
 #statusSection .history-table tbody tr {
@@ -1274,31 +1010,20 @@ body {
     font-size: 14px;
 }
 
-#statusSection .history-table tbody td:nth-child(1) {
+#statusSection .history-table tbody td:first-child {
     font-weight: 600;
     color: #1e293b;
-    width: 200px;
-    text-align: left;
 }
 
 #statusSection .history-table tbody td:nth-child(2) {
-    text-align: right;
+    text-align: center;
     font-weight: 700;
-    font-size: 15px;
+    font-size: 16px;
     color: #059669;
-    width: 140px;
 }
 
 #statusSection .history-table tbody td:nth-child(3) {
     text-align: center;
-    width: 180px;
-}
-
-#statusSection .history-table tbody td:nth-child(4) {
-    padding: 14px 12px;
-    width: auto;
-    flex: 1;
-    overflow: visible;
 }
 
 /* Status Badge Styling */
@@ -1310,57 +1035,52 @@ body {
 }
 
 .status-badge {
-    padding: 7px 14px;
+    padding: 7px 16px;
     border-radius: 20px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     white-space: nowrap;
 }
 
 .status-badge.completed {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .status-badge.pending {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
     color: white;
-    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
 }
 
 .status-info {
-    font-size: 10px;
+    font-size: 11px;
     color: #64748b;
     text-align: center;
-    line-height: 1.3;
+    line-height: 1.4;
 }
 
-/* Approval Tracker - Optimized Layout */
+/* Approval Tracker Styling */
 .approval-tracker {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
     padding: 4px 0;
-    justify-content: flex-start;
-    width: 100%;
 }
 
 .approval-level {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 10px 12px;
     border-radius: 8px;
-    min-width: 110px;
+    min-width: 160px;
+    max-width: 180px;
     border: 2px solid;
     transition: all 0.3s ease;
-    flex-shrink: 0;
-    background-color: white;
 }
 
 .approval-level.approved {
@@ -1379,7 +1099,7 @@ body {
 }
 
 .approval-level i {
-    font-size: 16px;
+    font-size: 18px;
     flex-shrink: 0;
 }
 
@@ -1401,7 +1121,7 @@ body {
 }
 
 .level-title {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     margin-bottom: 2px;
@@ -1420,7 +1140,7 @@ body {
 }
 
 .level-status {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -1440,7 +1160,7 @@ body {
 }
 
 .level-date {
-    font-size: 8px;
+    font-size: 9px;
     margin-top: 2px;
 }
 
@@ -1454,11 +1174,8 @@ body {
 }
 
 .approval-arrow {
-    font-size: 14px;
+    font-size: 16px;
     flex-shrink: 0;
-    width: 18px;
-    text-align: center;
-    margin: 0 -2px;
 }
 
 .approval-arrow.active {
@@ -1466,148 +1183,28 @@ body {
 }
 
 .approval-arrow.inactive {
-    color: #d1d5db;
+    color: #94a3b8;
 }
 
-/* Responsive Design */
-@media (max-width: 1600px) {
-    #statusSection .history-table thead th:first-child {
-        width: 180px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(1) {
-        width: 180px;
-    }
-    
-    .approval-level {
-        min-width: 100px;
-        padding: 8px 8px;
-    }
-    
-    .level-title {
-        font-size: 8px;
-    }
-    
-    .level-status {
-        font-size: 8px;
-    }
-}
-
+/* Responsive adjustments */
 @media (max-width: 1400px) {
-    #statusSection .history-table {
-        min-width: 100%;
-    }
-    
-    #statusSection .history-table thead th:first-child {
-        width: 160px;
-    }
-    
-    #statusSection .history-table thead th:nth-child(2) {
-        width: 130px;
-    }
-    
-    #statusSection .history-table thead th:nth-child(3) {
-        width: 160px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(1) {
-        width: 160px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(2) {
-        width: 130px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(3) {
-        width: 160px;
+    #statusSection .history-table thead th:last-child {
+        min-width: 500px;
     }
     
     .approval-level {
-        min-width: 95px;
-        padding: 7px 7px;
+        min-width: 140px;
+        max-width: 160px;
+        padding: 8px 10px;
     }
 }
 
 @media (max-width: 1200px) {
     .approval-tracker {
         flex-wrap: wrap;
-        gap: 4px;
     }
     
     .approval-level {
-        min-width: 90px;
-        padding: 7px 6px;
-        margin-bottom: 2px;
-    }
-    
-    .approval-arrow {
-        width: 100%;
-        font-size: 12px;
-        margin: 2px 0;
-    }
-}
-
-@media (max-width: 768px) {
-    #statusSection .history-table {
-        font-size: 13px;
-    }
-    
-    #statusSection .history-table thead th {
-        padding: 10px 8px;
-        font-size: 11px;
-    }
-    
-    #statusSection .history-table tbody td {
-        padding: 12px 8px;
-        font-size: 13px;
-    }
-    
-    #statusSection .history-table thead th:first-child {
-        width: 140px;
-    }
-    
-    #statusSection .history-table thead th:nth-child(2) {
-        width: 110px;
-    }
-    
-    #statusSection .history-table thead th:nth-child(3) {
-        width: 140px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(1) {
-        width: 140px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(2) {
-        width: 110px;
-    }
-    
-    #statusSection .history-table tbody td:nth-child(3) {
-        width: 140px;
-    }
-    
-    .approval-tracker {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-    }
-    
-    .approval-level {
-        width: 100%;
-        min-width: auto;
-        margin-bottom: 4px;
-    }
-    
-    .approval-arrow {
-        display: none;
-    }
-    
-    .status-badge {
-        padding: 6px 12px;
-        font-size: 10px;
-    }
-    
-    .status-info {
-        font-size: 9px;
+        min-width: 180px;
     }
 }
