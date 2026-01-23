@@ -780,8 +780,27 @@ function attachFormListeners(formElement, token, empCode) {
         const remarks = currentForm.querySelector('#remarks')?.value.trim();
         const monthRangeInput = document.getElementById('monthRange');
         const monthRange = monthRangeInput ? monthRangeInput.value : '';
+        // const pdfInput = currentForm.querySelector('#ticketpdf');
+        // const pdfFile = pdfInput?.files[0];
         const pdfInput = currentForm.querySelector('#ticketpdf');
-        const pdfFile = pdfInput?.files[0];
+const pdfFile = pdfInput?.files[0];
+
+// ✅ VALIDATE PDF SIZE
+if (pdfFile) {
+    const fileSizeInMB = pdfFile.size / (1024 * 1024);
+    
+    if (fileSizeInMB > 10) {
+        errors.push(`Entry #${i + 1}: PDF too large (${fileSizeInMB.toFixed(2)}MB). Max: 10MB`);
+        errorCount++;
+        continue;
+    }
+    
+    if (pdfFile.type !== 'application/pdf') {
+        errors.push(`Entry #${i + 1}: Only PDF files allowed`);
+        errorCount++;
+        continue;
+    }
+}
         
         if (error) error.textContent = '';
         
@@ -1991,6 +2010,10 @@ if (selectedMonth) {
         <option value="train_pass 1st">Train Pass - 1st Class</option>
         <option value="train_pass 2nd">Train Pass - 2nd Class</option>
         <option value="train_ticket">Train Ticket</option>
+        <option value="food_expence">Food Expence</option>
+        <option value="mobile_expence">Mobile Top Up</option>
+        <option value="mobile_recharge">Mobile Recharge</option>
+        <option value="wifi">Wifi</option>
         <option value="other">Other</option>
       </select>
     </td>
@@ -2098,6 +2121,30 @@ document.addEventListener('DOMContentLoaded', function() {
     // PDF file validation
     const pdfInput = document.getElementById('modalTicketPdf');
     const fileName = document.getElementById('modalFileName');
+
+    // ✅ VALIDATE PDF SIZE IN MODAL
+pdfInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const fileSizeInMB = file.size / (1024 * 1024);
+    
+    if (fileSizeInMB > 10) {
+        showErrorPopup(`❌ PDF too large!\n\nSize: ${fileSizeInMB.toFixed(2)}MB\nMax: 10MB`);
+        e.target.value = ''; // Clear file
+        document.getElementById('modalFileName').textContent = '';
+        return;
+    }
+    
+    if (file.type !== 'application/pdf') {
+        document.getElementById('modalFileName').textContent = '❌ Only PDF files allowed!';
+        document.getElementById('modalFileName').style.color = '#e53e3e';
+        e.target.value = '';
+    } else {
+        document.getElementById('modalFileName').textContent = '✅ ' + file.name;
+        document.getElementById('modalFileName').style.color = '#27ae60';
+    }
+});
     
     pdfInput.addEventListener('change', function(e) {
       const file = e.target.files[0];
@@ -2603,9 +2650,27 @@ async function saveAllEntries() {
     const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value;
     const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value;
     const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value.trim();
+    // const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
+    // const pdfFile = pdfInput?.files[0];
     const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
-    const pdfFile = pdfInput?.files[0];
+const pdfFile = pdfInput?.files[0];
+
+// ✅ VALIDATE PDF SIZE
+if (pdfFile) {
+    const fileSizeInMB = pdfFile.size / (1024 * 1024);
     
+    if (fileSizeInMB > 10) {
+        showErrorPopup(`❌ PDF file is too large!\n\nFile size: ${fileSizeInMB.toFixed(2)}MB\nMaximum allowed: 10MB\n\nPlease compress your PDF or upload a smaller file.`);
+        errorCount++;
+        continue; // Skip this entry
+    }
+    
+    if (pdfFile.type !== 'application/pdf') {
+        showErrorPopup('❌ Only PDF files are allowed!');
+        errorCount++;
+        continue;
+    }
+}
     // ✅ CHANGED: Don't count validation errors - just skip the row
     if (!date || !client || !projectId || !projectName || !projectType || 
         !locationFrom || !locationTo || !travelMode || !amount || parseFloat(amount) <= 0) {
