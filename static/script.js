@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-// API_URL = "http://127.0.0.1:8000";
-API_URL = "";
+API_URL = "http://127.0.0.1:8000";
+// API_URL = "";
 
 
 // Add CSS animations for popups
@@ -130,7 +130,7 @@ document.addEventListener('click', function(event) {
   }
 });
 
-// Success Popup Function
+
 // Success Popup Function - UPDATED
 function showSuccessPopup(message) {
   const overlay = document.createElement('div');
@@ -783,7 +783,7 @@ function attachFormListeners(formElement, token, empCode) {
         // const pdfInput = currentForm.querySelector('#ticketpdf');
         // const pdfFile = pdfInput?.files[0];
         const pdfInput = currentForm.querySelector('#ticketpdf');
-const pdfFile = pdfInput?.files[0];
+        const pdfFile = pdfInput?.files[0];
 
 // ✅ VALIDATE PDF SIZE
 if (pdfFile) {
@@ -1346,18 +1346,26 @@ window.viewPdf = function(entryId, isTemp = false) {
 };
 
 // 6. PDF Modal Open karne ka function
+// NEW CODE:
 function openPdfModal(base64Pdf) {
     const modal = document.getElementById('pdfModal');
     const viewer = document.getElementById('pdfViewer');
+    
+    // ✅ Set higher z-index to show in front of employee modal
+    modal.style.zIndex = '999999';
     
     viewer.src = `data:application/pdf;base64,${base64Pdf}`;
     modal.classList.add('active');
 }
 
 // 7. PDF Modal Close karne ka function
+// NEW CODE:
 function closePdfModal() {
     const modal = document.getElementById('pdfModal');
     modal.classList.remove('active');
+    
+    // ✅ Reset z-index
+    modal.style.zIndex = '';
     
     document.getElementById('pdfViewer').src = '';
 }
@@ -2970,7 +2978,7 @@ if (pdfFile) {
     showSuccessPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
   } else {
     // ✅ If nothing was saved, show a gentle message
-    showSuccessPopup('Please fill at least one complete entry to save.');
+    showErrorPopup('Please fill at least one complete entry to save.');
   }
 }
 
@@ -4217,6 +4225,7 @@ window.showPendingEmployeeModal = function(employeeId) {
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">To</th>
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Mode</th>
                                 <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Amount</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Remarks</th>
                                 <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0; font-size: 13px;">PDF</th>
                                 <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Action</th>
                             </tr>
@@ -4242,8 +4251,13 @@ window.showPendingEmployeeModal = function(employeeId) {
                     <td style="padding: 12px; text-align: right; font-weight: 700; color: #d97706; font-size: 14px;">
                         ₹${entry.amount || 0}
                     </td>
+                    <td style="padding: 12px; font-size: 13px; color: #475569; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;" 
+                        onclick="showFullRemarks('${(entry.remarks || 'NA').replace(/'/g, "&apos;").replace(/"/g, "&quot;")}')"
+                        title="Click to view full remarks">
+                        ${entry.remarks || 'NA'}
+                    </td>
                     <td style="padding: 12px; text-align: center;">
-                        ${entry.ticket_pdf 
+                        ${entry.ticket_pdf
                             ? `<button onclick="viewPdf('${entry._id}', false)" 
                                       style="
                                           background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
@@ -4308,6 +4322,132 @@ window.showPendingEmployeeModal = function(employeeId) {
     });
 }
 
+// ✅ NEW: Show Full Remarks Popup
+function showFullRemarks(remarks) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: fadeIn 0.2s ease;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 600px;
+        width: 90%;
+        max-height: 70vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-comment-alt" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Remarks</h2>
+        </div>
+        
+        <div style="
+            background: #f8fafc;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #374151;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        ">
+            ${remarks === 'NA' ? '<span style="color: #9ca3af; font-style: italic;">No remarks provided</span>' : remarks}
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRemarksBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRemarksBtn');
+
+    // Button hover effect
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+    });
+
+    // Close button click
+    closeBtn.addEventListener('click', () => {
+        overlay.style.opacity = '0';
+        overlay.style.transition = 'opacity 0.2s ease';
+        setTimeout(() => {
+            if (document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+            }
+        }, 200);
+    });
+
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.2s ease';
+            setTimeout(() => {
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                }
+            }, 200);
+        }
+    });
+}
+
+// Make it globally accessible
+window.showFullRemarks = showFullRemarks;
 
 // ✅ Store all pending data globally for filtering
 let allPendingData = [];

@@ -32,7 +32,7 @@ app = FastAPI()
 # CORS (agar HTML ko alag port se serve kar rahe ho)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # prod me restrict karna
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,7 +41,7 @@ app.add_middleware(
 # ---------- Mongo Connection ----------
 client = AsyncIOMotorClient(MONGO_URI)
 db = client[MONGO_DB]
-user_collection = db["user"]   # exactly same as Compass me dikh raha hai
+user_collection = db["user"]   
 
 
 # ---------- Models ----------
