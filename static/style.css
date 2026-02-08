@@ -1611,3 +1611,576 @@ body {
         font-size: 9px;
     }
 }
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-rm {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #1976d2;
+}
+
+.badge-employee {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #7b1fa2;
+}
+
+.employee-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.employee-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.employee-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 12px;
+}
+
+.employee-header h3 {
+  margin: 0 0 4px 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+}
+
+.employee-code {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.employee-details {
+  margin: 12px 0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.detail-row i {
+  width: 20px;
+  margin-right: 8px;
+  color: #3498db;
+}
+
+.pending-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff3cd;
+  color: #856404;
+  padding: 10px;
+  border-radius: 6px;
+  margin-top: 12px;
+  font-weight: 600;
+}
+
+.pending-count i {
+  margin-right: 8px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.error-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #e74c3c;
+}
+
+/* ========================================
+   PARTNER PENDING SECTION STYLING
+   ======================================== */
+
+.employee-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.employee-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.employee-card.expanded {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+}
+
+.employee-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-bottom: 1px solid #e9ecef;
+    transition: background 0.2s ease;
+}
+
+.employee-card-header:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+}
+
+.employee-info {
+    flex: 1;
+}
+
+.employee-name-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.employee-name-row h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.submitter-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rm-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.emp-badge {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+.employee-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.employee-meta span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.employee-meta i {
+    color: #495057;
+}
+
+.employee-summary {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.pending-count {
+    text-align: center;
+    padding: 8px 16px;
+    background: #fff3cd;
+    border-radius: 8px;
+}
+
+.count-number {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #856404;
+}
+
+.count-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #856404;
+    text-transform: uppercase;
+}
+
+.total-amount {
+    text-align: right;
+}
+
+.amount-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 2px;
+}
+
+.amount-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #28a745;
+}
+
+.toggle-icon {
+    font-size: 1.25rem;
+    color: #6c757d;
+    transition: transform 0.3s ease;
+}
+
+.toggle-icon.rotated {
+    transform: rotate(180deg);
+}
+
+.employee-card-body {
+    padding: 24px;
+    background: #f8f9fa;
+}
+
+/* Month Group Styling */
+.month-group {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.month-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.month-info h4 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.approval-flow-info {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.flow-badge,
+.current-level-badge,
+.rm-flow-badge,
+.emp-flow-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.rm-flow-badge {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.emp-flow-badge {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.month-total {
+    text-align: right;
+}
+
+.total-label {
+    display: block;
+    font-size: 0.75rem;
+    opacity: 0.9;
+    margin-bottom: 2px;
+}
+
+.total-amount {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+/* Table Styling */
+.entries-table-wrapper {
+    overflow-x: auto;
+}
+
+.entries-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.entries-table thead {
+    background: #f1f3f5;
+}
+
+.entries-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+}
+
+.entries-table tbody tr {
+    border-bottom: 1px solid #e9ecef;
+    transition: background 0.2s ease;
+}
+
+.entries-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.entries-table td {
+    padding: 12px;
+    vertical-align: middle;
+}
+
+.project-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.project-id {
+    font-weight: 600;
+    color: #495057;
+}
+
+.project-name {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.project-type-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.project-type-badge.billable {
+    background: #d4edda;
+    color: #155724;
+}
+
+.project-type-badge.non-billable {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.route {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+}
+
+.route .from,
+.route .to {
+    color: #495057;
+}
+
+.route i {
+    color: #6c757d;
+    font-size: 0.65rem;
+}
+
+.travel-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #e7f3ff;
+    color: #0056b3;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.amount-cell .amount {
+    font-weight: 600;
+    color: #28a745;
+}
+
+.ticket-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: #fff3cd;
+    color: #856404;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.ticket-link:hover {
+    background: #ffc107;
+    color: white;
+}
+
+.no-ticket {
+    color: #adb5bd;
+    font-size: 0.75rem;
+}
+
+.remarks-text {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #6c757d;
+}
+
+.actions-cell {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.btn-approve-single,
+.btn-reject-single {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.btn-approve-single {
+    background: #28a745;
+    color: white;
+}
+
+.btn-approve-single:hover {
+    background: #218838;
+    transform: scale(1.05);
+}
+
+.btn-reject-single {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-reject-single:hover {
+    background: #c82333;
+    transform: scale(1.05);
+}
+
+/* Bulk Actions */
+.bulk-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    margin-top: 16px;
+}
+
+.btn-approve-all,
+.btn-reject-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-approve-all {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.btn-approve-all:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+}
+
+.btn-reject-all {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.btn-reject-all:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(220, 53, 69, 0.4);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 16px;
+}
+
+.empty-state p {
+    font-size: 1.25rem;
+    margin: 8px 0;
+    color: #495057;
+}
+
+.empty-state small {
+    font-size: 0.875rem;
+    color: #6c757d;
+}

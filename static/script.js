@@ -534,7 +534,7 @@ document.addEventListener("DOMContentLoaded", () => {
       setText("empManager", data.reporting_manager_name);
       
       // ✅ NEW: Store OPE limit globally
-      window.employeeOPELimit = data.ope_limit || 5000;
+      window.employeeOPELimit = data.ope_limit ;
       
       console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
 
@@ -1564,140 +1564,6 @@ function showNoData() {
     document.getElementById('historyTableSection').style.display = 'none';
     document.getElementById('noDataDiv').style.display = 'block';
 }
-
-// 14. Navigation Setup (OPE aur History ke beech switch karne ke liye)
-
-// function setupNavigation() {
-//   const navOPE = document.getElementById('navOPE');
-//   const navHistory = document.getElementById('navHistory');
-//   const navStatus = document.getElementById('navStatus');
-//   const navPending = document.getElementById('navPending');
-//   const navApprove = document.getElementById('navApprove');
-//   const navReject = document.getElementById('navReject');
-  
-//   const opeSection = document.getElementById('opeSection');
-//   const historySection = document.getElementById('historySection');
-//   const statusSection = document.getElementById('statusSection');
-//   const pendingSection = document.getElementById('pendingSection');
-//   const approveSection = document.getElementById('approveSection');
-//   const rejectSection = document.getElementById('rejectSection');
-
-//   // Helper function
-//   function switchSection(activeNav, activeSection, loadDataCallback) {
-//     // Remove active from all nav items
-//     document.querySelectorAll('.nav-item').forEach(item => {
-//       item.classList.remove('active');
-//     });
-//     activeNav.classList.add('active');
-    
-//     // Hide ALL sections properly
-//     document.querySelectorAll('.content-section').forEach(section => {
-//       section.classList.remove('active');
-//       section.style.display = 'none';  
-//     });
-    
-//     // Show selected section
-//     if (activeSection) {
-//       activeSection.classList.add('active');
-//       activeSection.style.display = 'block';  
-//     }
-    
-//     // Close mobile menu
-//     if (window.innerWidth <= 768) {
-//       document.querySelector('.sidebar').classList.remove('mobile-active');
-//     }
-    
-//     // Load data if callback provided
-//     if (loadDataCallback) {
-//       loadDataCallback();
-//     }
-//   }
-
-//   if (navOPE) {
-//     navOPE.addEventListener('click', function() {
-//       switchSection(navOPE, opeSection);
-//     });
-//   }
-
-//   // Update the navHistory click event
-// if (navHistory) {
-//     navHistory.addEventListener('click', async function() {
-//         console.log("📌 History nav clicked");
-        
-//         switchSection(navHistory, historySection, async () => {
-//             const token = localStorage.getItem('access_token');
-//             const empCode = localStorage.getItem('employee_code');
-            
-//             console.log("🔑 Token:", token ? "exists" : "missing");
-//             console.log("👤 EmpCode:", empCode);
-            
-//             if (token && empCode) {
-//                 console.log("🚀 Loading history data...");
-//                 await loadHistoryData(token, empCode);
-                
-//                 console.log("📊 allHistoryData after load:", allHistoryData);
-                
-//                 // ✅ CRITICAL FIX: Force display table after loading
-//                 displayHistoryTable(allHistoryData);
-//             } else {
-//                 console.error("❌ Missing token or empCode");
-//             }
-//         });
-//     });
-// }
-
-//   if (navStatus) {
-//     navStatus.addEventListener('click', async function() {
-//         switchSection(navStatus, statusSection, async () => {
-//             const token = localStorage.getItem('access_token');
-//             const empCode = localStorage.getItem('employee_code');
-            
-//             if (token && empCode) {
-//                 await loadStatusData(token, empCode);
-//             }
-//         });
-//     });
-// }
-
-//   if (navPending) {
-//     navPending.addEventListener('click', async function() {
-//       switchSection(navPending, pendingSection, async () => {
-//         const token = localStorage.getItem('access_token');
-//         const empCode = localStorage.getItem('employee_code');
-        
-//         if (token && empCode) {
-//           await loadPendingData(token, empCode);
-//         }
-//       });
-//     });
-//   }
-
-//   if (navApprove) {
-//     navApprove.addEventListener('click', async function() {
-//       switchSection(navApprove, approveSection, async () => {
-//         const token = localStorage.getItem('access_token');
-//         const empCode = localStorage.getItem('employee_code');
-        
-//         if (token && empCode) {
-//           await loadApproveData(token, empCode);
-//         }
-//       });
-//     });
-//   }
-
-//   if (navReject) {
-//     navReject.addEventListener('click', async function() {
-//       switchSection(navReject, rejectSection, async () => {
-//         const token = localStorage.getItem('access_token');
-//         const empCode = localStorage.getItem('employee_code');
-        
-//         if (token && empCode) {
-//           await loadRejectData(token, empCode);
-//         }
-//       });
-//     });
-//   }
-// }
 
 // ============================================
 // FIXED: setupNavigation function
@@ -2969,11 +2835,11 @@ if (pdfFile) {
   // ✅ ONLY SHOW SUCCESS MESSAGE - NO ERROR POPUPS
   if (successCount > 0) {
     let approvalInfo = '';
-    if (totalAmount > window.employeeOPELimit) {
-      approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
-    } else {
-      approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
-    }
+    // if (totalAmount > window.employeeOPELimit) {
+    //   approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
+    // } else {
+    //   approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
+    // }
     
     showSuccessPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
   } else {
@@ -2985,113 +2851,6 @@ if (pdfFile) {
 // ============================================
 // SUBMIT ALL ENTRIES - FIXED VERSION
 // ============================================
-// // ✅ UPDATED: Submit with limit info
-// async function submitAllEntries() {
-//   const token = localStorage.getItem('access_token');
-//   const empCode = localStorage.getItem('employee_code');
-  
-//   if (!token || !empCode) {
-//     showErrorPopup('Authentication required. Please login again.');
-//     window.location.href = 'login.html';
-//     return;
-//   }
-  
-//   const monthRangeSelect = document.getElementById('monthRange');
-//   const monthRange = monthRangeSelect ? monthRangeSelect.value : '';
-  
-//   if (!monthRange) {
-//     showErrorPopup('Please select month range first!');
-//     return;
-//   }
-  
-//   const tbody = document.getElementById('entryTableBody');
-//   const rows = tbody.querySelectorAll('tr');
-  
-//   let hasSavedEntries = false;
-//   for (const row of rows) {
-//     if (row.dataset.savedEntryId) {
-//       hasSavedEntries = true;
-//       break;
-//     }
-//   }
-  
-//   if (!hasSavedEntries) {
-//     showErrorPopup('Please save your entries first using "Save Entry" button before submitting!');
-//     return;
-//   }
-  
-//   // Confirmation
-//   const confirmSubmit = await showConfirmPopup(
-//     'Submit Confirmation',
-//     'Are you sure you want to submit? After submission, you cannot edit or delete these entries.',
-//     'Yes, Submit',
-//     'Cancel'
-//   );
-  
-//   if (!confirmSubmit) {
-//     return;
-//   }
-  
-//   const submitBtn = document.querySelector('.btn-submit');
-//   if (submitBtn) {
-//     submitBtn.disabled = true;
-//     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-//   }
-  
-//   try {
-//     console.log(`🚀 Submitting all temporary entries to OPE_data...`);
-    
-//     const response = await fetch(`${API_URL}/api/ope/submit-final`, {
-//       method: 'POST',
-//       headers: {
-//         'Authorization': `Bearer ${token}`,
-//         'Content-Type': 'application/json'
-//       },
-//       body: JSON.stringify({
-//         month_range: monthRange
-//       })
-//     });
-    
-//     if (response.ok) {
-//       const result = await response.json();
-      
-//       // ✅ Show detailed success message with approval info
-//       let approvalInfo = '';
-//       if (result.total_levels === 3) {
-//         approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ Partner\n3️⃣ HR`;
-//       } else {
-//         approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${result.total_amount.toFixed(2)}\nLimit: ₹${result.ope_limit}\n\nApproval required from:\n1️⃣ Reporting Manager\n2️⃣ HR`;
-//       }
-      
-//       showSuccessPopup(`All entries submitted successfully!
-
-// Total submitted: ${result.submitted_count}${approvalInfo}
-
-// Your entries are now under review.`);
-      
-//       // Clear the form
-//       tbody.innerHTML = '';
-//       entryCounter = 0;
-//       addNewEntryRow();
-      
-//       // Reset month selection
-//       monthRangeSelect.value = '';
-      
-//     } else {
-//       const errorData = await response.json();
-//       showErrorPopup(errorData.detail || 'Submission failed');
-//     }
-    
-//   } catch (err) {
-//     console.error(`❌ Submit error:`, err);
-//     showErrorPopup(`Network error: ${err.message}`);
-//   } finally {
-//     if (submitBtn) {
-//       submitBtn.disabled = false;
-//       submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit All Entries';
-//     }
-//   }
-// }
 
 async function submitAllEntries() {
   const token = localStorage.getItem('access_token');
@@ -3155,6 +2914,7 @@ async function submitAllEntries() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        employee_code: empCode,
         month_range: monthRange
       })
     });
@@ -3164,58 +2924,35 @@ async function submitAllEntries() {
       
       console.log("✅ Submit response:", result);
       
-      // ✅ UPDATED: Show detailed success message with cumulative info
+      // ✅ Simple success message with null checks
       let approvalInfo = '';
       
-      if (result.previous_total > 0) {
-        // ✅ NOT FIRST SUBMISSION - Show cumulative calculation
-        if (result.total_levels === 3) {
-          approvalInfo = `\n\n⚠️ Cumulative amount exceeds limit!\n\n` +
-                        `📊 Amount Breakdown:\n` +
-                        `   Previous Total: ₹${result.previous_total.toFixed(2)}\n` +
-                        `   New Entries: +₹${result.new_entries_amount.toFixed(2)}\n` +
-                        `   ━━━━━━━━━━━━━━━━━━━━\n` +
-                        `   Cumulative Total: ₹${result.total_amount.toFixed(2)}\n` +
-                        `   OPE Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
-                        `🔄 Approval required from:\n` +
-                        `   1️⃣ Reporting Manager\n` +
-                        `   2️⃣ Partner\n` +
-                        `   3️⃣ HR`;
-        } else {
-          approvalInfo = `\n\n✅ Cumulative amount within limit!\n\n` +
-                        `📊 Amount Breakdown:\n` +
-                        `   Previous Total: ₹${result.previous_total.toFixed(2)}\n` +
-                        `   New Entries: +₹${result.new_entries_amount.toFixed(2)}\n` +
-                        `   ━━━━━━━━━━━━━━━━━━━━\n` +
-                        `   Cumulative Total: ₹${result.total_amount.toFixed(2)}\n` +
-                        `   OPE Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
-                        `🔄 Approval required from:\n` +
-                        `   1️⃣ Reporting Manager\n` +
-                        `   2️⃣ HR`;
-        }
-      } else {
-        // ✅ FIRST SUBMISSION - Normal message
-        if (result.total_levels === 3) {
-          approvalInfo = `\n\n⚠️ Amount exceeds limit!\n` +
-                        `Total: ₹${result.total_amount.toFixed(2)}\n` +
-                        `Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
-                        `Approval required from:\n` +
-                        `1️⃣ Reporting Manager\n` +
-                        `2️⃣ Partner\n` +
-                        `3️⃣ HR`;
-        } else {
-          approvalInfo = `\n\n✅ Within limit!\n` +
-                        `Total: ₹${result.total_amount.toFixed(2)}\n` +
-                        `Limit: ₹${result.ope_limit.toFixed(2)}\n\n` +
-                        `Approval required from:\n` +
-                        `1️⃣ Reporting Manager\n` +
-                        `2️⃣ HR`;
-        }
+      // Check if values exist before using them
+      const totalAmount = result.total_amount || result.cumulative_total || 0;
+      const approvalLevels = result.approval_levels || result.total_levels || 2;
+      const l1Approver = result.L1_approver || result.l1_approver || 'Approver';
+      
+      if (approvalLevels === 3) {
+        approvalInfo = `\n\n📊 Details:\n` +
+                      `   Total Amount: ₹${totalAmount.toFixed(2)}\n` +
+                      `   First Approver: ${l1Approver}\n\n` +
+                      `🔄 Approval Flow (3 levels):\n` +
+                      `   1️⃣ Reporting Manager\n` +
+                      `   2️⃣ Partner\n` +
+                      `   3️⃣ HR`;
+      } else if (approvalLevels === 2) {
+        approvalInfo = `\n\n📊 Details:\n` +
+                      `   Total Amount: ₹${totalAmount.toFixed(2)}\n` +
+                      `   First Approver: ${l1Approver}\n\n` +
+                      `🔄 Approval Flow (2 levels):\n` +
+                      `   1️⃣ ${l1Approver}\n` +
+                      `   2️⃣ HR`;
       }
       
-      showSuccessPopup(`All entries submitted successfully!
+      showSuccessPopup(`✅ All entries submitted successfully!
 
-📦 Total Entries Submitted: ${result.submitted_count}${approvalInfo}
+📦 Submitted: ${result.submitted_count} entries
+📅 Month: ${result.month_range}${approvalInfo}
 
 Your entries are now under review.`);
       
@@ -3518,48 +3255,73 @@ async function deleteSavedRow(rowId, entryId, monthRange) {
 
 // ✅ Add this in DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function() {
-  async function loadEmployeeDetails() {
-    const token = localStorage.getItem("access_token");
-    const empCode = localStorage.getItem("employee_code");
-    
-    try {
-      console.log("📡 Fetching employee details...");
-      const res = await fetch(`${API_URL}/api/employee/${empCode}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.error("❌ API FAILED:", res.status, err);
-        return;
+async function loadEmployeeDetails() {
+  const token = localStorage.getItem("access_token");
+  const empCode = localStorage.getItem("employee_code");
+  
+  try {
+    console.log("📡 Fetching employee details...");
+    const res = await fetch(`${API_URL}/api/employee/${empCode}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
       }
+    });
 
-      const data = await res.json();
-      console.log("✅ Employee data received:", data);
-
-      const setText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val ?? "-";
-      };
-
-      setText("empId", data.employee_id);
-      setText("empName", data.employee_name);
-      setText("empDesignation", data.designation);
-      setText("empGender", data.gender);
-      setText("empPartner", data.partner);
-      setText("empManager", data.reporting_manager_name);
-      
-      // ✅ NEW: Store OPE limit globally
-      window.employeeOPELimit = data.ope_limit || 5000;
-      
-      console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
-
-    } catch (err) {
-      console.error("❌ Fetch crashed:", err);
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("❌ API FAILED:", res.status, err);
+      // window.employeeOPELimit = 5000; // Fallback
+      return;
     }
+
+    const data = await res.json();
+    console.log("✅ Employee data received:", data);
+    
+    // 🔍 DEBUG: Check all keys (remove after testing)
+    console.log("🔍 Response keys:", Object.keys(data));
+
+    const setText = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val ?? "-";
+    };
+
+    setText("empId", data.employee_id);
+    setText("empName", data.employee_name);
+    setText("empDesignation", data.designation);
+    setText("empGender", data.gender);
+    setText("empPartner", data.partner);
+    setText("empManager", data.reporting_manager_name);
+    
+    // 🔥🔥🔥 HANDLE ALL POSSIBLE OPE LIMIT FIELD NAMES 🔥🔥🔥
+    window.employeeOPELimit = 
+      parseFloat(data.ope_limit) ||           // lowercase
+      parseFloat(data.OPE_limit) ||           // capital OPE
+      parseFloat(data["OPE Limit"]) ||        // with space (most likely!)
+      parseFloat(data.opeLimit) ||            // camelCase
+      parseFloat(data.ope_Limit) ||           // mixed case;                                   // fallback
+    
+    console.log(`💰 Employee OPE Limit: ₹${window.employeeOPELimit}`);
+    
+    // 🔍 DEBUG: Show what was found (remove after testing)
+    console.log("🔍 OPE Limit values:", {
+      "ope_limit": data.ope_limit,
+      "OPE_limit": data.OPE_limit,
+      "OPE Limit": data["OPE Limit"],
+      "opeLimit": data.opeLimit,
+      "Final value": window.employeeOPELimit
+    });
+    
+    // 🔥 OPTIONAL: Display limit in UI
+    const limitDisplay = document.getElementById("opeLimitDisplay");
+    if (limitDisplay) {
+      limitDisplay.textContent = `Your OPE Limit: ₹${window.employeeOPELimit.toLocaleString('en-IN')}`;
+    }
+
+  } catch (err) {
+    console.error("❌ Fetch crashed:", err);
+    // window.employeeOPELimit = 5000; // Fallback on error
   }
+}
   loadEmployeeDetails();
   setupNavigation();
   checkUserRole();
@@ -3737,67 +3499,6 @@ if (existingStyle) {
 // PENDING SECTION
 let allPendingEmployees = [];
 
-// async function loadPendingData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading pending data for:", empCode);
-        
-//         document.getElementById('pendingLoadingDiv').style.display = 'block';
-//         document.getElementById('pendingTableSection').style.display = 'none';
-//         document.getElementById('pendingNoDataDiv').style.display = 'none';
-
-//         // ✅ CHECK IF USER IS HR
-//         const isHR = (empCode.trim().toUpperCase() === "JHS729");
-        
-//         if (isHR) {
-//             console.log("👔 Loading HR pending data");
-//         } else {
-//             console.log("👔 Loading Manager pending data");
-//         }
-
-//         const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
-//             headers: { 'Authorization': `Bearer ${token}` }
-//         });
-
-//         if (!response.ok) {
-//             const errorText = await response.text();
-//             console.error("❌ Failed to fetch pending:", response.status, errorText);
-//             throw new Error('Failed to fetch pending entries');
-//         }
-
-//         const data = await response.json();
-//         const pendingEmployees = data.employees || [];
-
-//         console.log("✅ Pending employees:", pendingEmployees);
-//         console.log("📊 Total pending employees:", pendingEmployees.length);
-        
-//         // ✅ Store all pending data globally
-//         allPendingData = [];
-//         pendingEmployees.forEach(emp => {
-//             emp.entries.forEach(entry => {
-//                 allPendingData.push({
-//                     ...entry,
-//                     employee_id: emp.employeeId,
-//                     employee_name: emp.employeeName,
-//                     designation: emp.designation
-//                 });
-//             });
-//         });
-
-//         console.log("📊 Total pending entries:", allPendingData.length);
-        
-//         if (allPendingData.length === 0) {
-//             showPendingNoData();
-//         } else {
-//             populatePendingMonthFilter();
-//             displayPendingEmployeeTable(allPendingData);
-//         }
-//     } catch (error) {
-//         console.error('❌ Error:', error);
-//         document.getElementById('pendingLoadingDiv').style.display = 'none';
-//         showPendingNoData();
-//     }
-// }
-
 async function loadPendingData(token, empCode) {
     try {
         console.log("🔍 Loading pending data for:", empCode);
@@ -3806,87 +3507,84 @@ async function loadPendingData(token, empCode) {
         document.getElementById('pendingTableSection').style.display = 'none';
         document.getElementById('pendingNoDataDiv').style.display = 'none';
 
-        // ✅ CHECK IF USER IS HR
+        // ✅ CHECK USER ROLE
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
+        const isManager = localStorage.getItem("is_manager") === "true";
+        
+        let endpoint = "";
         
         if (isHR) {
-            console.log("👔 USER IS HR - Fetching L1/L2 approved entries");
-            
-            // ✅ FOR HR: Get entries where L1 (and L2 for 3-level) are approved
-            const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error("❌ Failed to fetch HR pending:", response.status, errorText);
-                throw new Error('Failed to fetch pending entries');
-            }
-
-            const data = await response.json();
-            const pendingEmployees = data.employees || [];
-
-            console.log("✅ HR Pending employees:", pendingEmployees);
-            console.log("📊 Total pending employees for HR:", pendingEmployees.length);
-            
-            // ✅ Store all pending data globally
-            allPendingData = [];
-            pendingEmployees.forEach(emp => {
-                emp.entries.forEach(entry => {
-                    allPendingData.push({
-                        ...entry,
-                        employee_id: emp.employeeId,
-                        employee_name: emp.employeeName,
-                        designation: emp.designation
-                    });
-                });
-            });
-
-            console.log("📊 Total HR pending entries:", allPendingData.length);
-            
-            if (allPendingData.length === 0) {
-                showPendingNoData();
-            } else {
-                populatePendingMonthFilter();
-                displayPendingEmployeeTable(allPendingData);
-            }
-            
+            console.log("👔 USER IS HR");
+            endpoint = `${API_URL}/api/ope/manager/pending`;
+        } else if (isPartner) {
+            console.log("👔 USER IS PARTNER");
+            endpoint = `${API_URL}/api/ope/partner/pending`;
+        } else if (isManager) {
+            console.log("👔 USER IS MANAGER");
+            endpoint = `${API_URL}/api/ope/manager/pending`;
         } else {
-            console.log("👔 USER IS MANAGER - Fetching manager pending entries");
+            console.error("❌ User has no approval permissions");
+            showPendingNoData();
+            return;
+        }
+        
+        console.log("📡 Fetching from:", endpoint);
+        
+        const response = await fetch(endpoint, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch pending entries');
+        }
+
+        const data = await response.json();
+        console.log("✅ API Response:", data);
+        
+        const pendingEmployees = data.employees || [];
+        
+        console.log("✅ Pending employees:", pendingEmployees.length);
+        
+        // ✅ CRITICAL FIX: Properly flatten all entries
+        allPendingData = [];
+        
+        pendingEmployees.forEach(emp => {
+            console.log(`📦 Processing employee: ${emp.employeeId} - ${emp.employeeName}`);
+            console.log(`   Entries: ${emp.entries ? emp.entries.length : 0}`);
             
-            const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error("❌ Failed to fetch manager pending:", response.status, errorText);
-                throw new Error('Failed to fetch pending entries');
-            }
-
-            const data = await response.json();
-            const pendingEmployees = data.employees || [];
-
-            console.log("✅ Manager Pending employees:", pendingEmployees);
-            
-            allPendingData = [];
-            pendingEmployees.forEach(emp => {
+            if (emp.entries && Array.isArray(emp.entries)) {
                 emp.entries.forEach(entry => {
                     allPendingData.push({
                         ...entry,
                         employee_id: emp.employeeId,
                         employee_name: emp.employeeName,
-                        designation: emp.designation
+                        designation: emp.designation,
+                        department: emp.department,
+                        reportingManager: emp.reportingManager,
+                        payroll_month: emp.payroll_month,
+                        total_amount: emp.total_amount,
+                        limit: emp.limit,
+                        total_levels: emp.total_levels,
+                        current_level: emp.current_level,
+                        L1_approver: emp.L1_approver,
+                        L1_approved_date: emp.L1_approved_date,
+                        submission_date: emp.submission_date
                     });
                 });
-            });
-
-            if (allPendingData.length === 0) {
-                showPendingNoData();
-            } else {
-                populatePendingMonthFilter();
-                displayPendingEmployeeTable(allPendingData);
             }
+        });
+        
+        console.log(`📊 Total pending entries after flatten: ${allPendingData.length}`);
+        console.log("📦 Sample entry:", allPendingData[0]);
+        
+        if (allPendingData.length === 0) {
+            console.log("📭 No pending data - showing no data message");
+            showPendingNoData();
+        } else {
+            console.log(`✅ Calling displayPendingEmployeeTable with ${allPendingData.length} entries`);
+            populatePendingMonthFilter();
+            displayPendingEmployeeTable(allPendingData);
         }
         
     } catch (error) {
@@ -3894,6 +3592,123 @@ async function loadPendingData(token, empCode) {
         document.getElementById('pendingLoadingDiv').style.display = 'none';
         showPendingNoData();
     }
+}
+
+async function approveEmployee(employeeId) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+  
+  try {
+    console.log("✅ Approving employee:", employeeId);
+    
+    const confirmed = await showConfirmPopup(
+      'Approve All Entries',
+      `Are you sure you want to approve all entries for ${employeeId}?`,
+      'Yes, Approve',
+      'Cancel'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    // ✅ DETERMINE ENDPOINT BASED ON USER ROLE
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    
+    let endpoint = "";
+    
+    if (isHR) {
+      endpoint = `${API_URL}/api/ope/hr/approve/${employeeId}`;
+    } else if (isPartner) {
+      endpoint = `${API_URL}/api/ope/partner/approve/${employeeId}`;
+    } else {
+      endpoint = `${API_URL}/api/ope/manager/approve/${employeeId}`;
+    }
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
+      
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+      
+      await loadPendingData(token, currentEmpCode);
+      
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Approval failed');
+    }
+    
+  } catch (error) {
+    console.error('Approval error:', error);
+    showErrorPopup(`Network error: ${error.message}`);
+  }
+}
+
+
+async function rejectEmployee(employeeId) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+  
+  try {
+    console.log("❌ Rejecting employee:", employeeId);
+    
+    const reason = await showRejectReasonPopup();
+    
+    if (!reason) {
+      return;
+    }
+    
+    // ✅ DETERMINE ENDPOINT BASED ON USER ROLE
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    
+    let endpoint = "";
+    
+    if (isHR) {
+      endpoint = `${API_URL}/api/ope/hr/reject/${employeeId}`;
+    } else if (isPartner) {
+      endpoint = `${API_URL}/api/ope/partner/reject/${employeeId}`;
+    } else {
+      endpoint = `${API_URL}/api/ope/manager/reject/${employeeId}`;
+    }
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reason: reason })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
+      
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+      
+      await loadPendingData(token, currentEmpCode);
+      
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Rejection failed');
+    }
+    
+  } catch (error) {
+    console.error('Rejection error:', error);
+    showErrorPopup('Network error during rejection');
+  }
 }
 
 function populatePendingMonthFilter() {
@@ -3969,6 +3784,7 @@ function handlePendingMonthChange() {
 
 function displayPendingEmployeeTable(data) {
     console.log("🎨 Displaying pending employee table");
+    console.log("📊 Input data:", data);  // ✅ YEH ADD KARO
     
     const tbody = document.getElementById('pendingTableBody');
     if (!tbody) {
@@ -3979,6 +3795,7 @@ function displayPendingEmployeeTable(data) {
     tbody.innerHTML = '';
 
     if (!data || data.length === 0) {
+        console.log("📭 No data to display - calling showPendingNoData");  // ✅ YEH ADD KARO
         showPendingNoData();
         return;
     }
@@ -4462,113 +4279,6 @@ function showPendingNoData() {
 // APPROVE SECTION
 let allApproveData = [];
 
-// async function loadApproveData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading approve data for:", empCode);
-        
-//         document.getElementById('approveLoadingDiv').style.display = 'block';
-//         document.getElementById('approveTableSection').style.display = 'none';
-//         document.getElementById('approveNoDataDiv').style.display = 'none';
-
-//         // ✅ CHECK IF USER IS HR
-//         const isHR = (empCode.trim().toUpperCase() === "JHS729");
-        
-//         let approvedEmployeeCodes = [];
-        
-//         if (isHR) {
-//             console.log("👔 USER IS HR - Fetching HR approved entries");
-            
-//             // ✅ FOR HR: Get all employees with fully approved status
-//             const statusDocs = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
-//                 headers: { 'Authorization': `Bearer ${token}` }
-//             });
-            
-//             if (statusDocs.ok) {
-//                 const data = await statusDocs.json();
-//                 approvedEmployeeCodes = data.employee_codes || [];
-//             }
-//         } else {
-//             console.log("👔 USER IS MANAGER - Fetching manager approved entries");
-            
-//             // ✅ FOR MANAGERS: Use existing logic
-//             const approvedListResponse = await fetch(
-//                 `${API_URL}/api/ope/manager/approved-list`, 
-//                 {
-//                     headers: { 'Authorization': `Bearer ${token}` }
-//                 }
-//             );
-
-//             if (approvedListResponse.ok) {
-//                 const approvedListData = await approvedListResponse.json();
-//                 approvedEmployeeCodes = approvedListData.employee_codes || [];
-//             }
-//         }
-
-//         console.log("✅ Approved employees:", approvedEmployeeCodes);
-
-//         if (approvedEmployeeCodes.length === 0) {
-//             showApproveNoData();
-//             return;
-//         }
-
-//         // ✅ Fetch approved entries for each employee
-//         allApproveData = [];
-
-//         for (const empCodeLoop of approvedEmployeeCodes) {
-//             console.log(`📥 Fetching approved entries for: ${empCodeLoop}`);
-            
-//             try {
-//                 const response = await fetch(
-//                     `${API_URL}/api/ope/approved/${empCodeLoop}`, 
-//                     {
-//                         headers: { 'Authorization': `Bearer ${token}` }
-//                     }
-//                 );
-
-//                 if (response.ok) {
-//                     const data = await response.json();
-//                     const approvedCount = data.approved ? data.approved.length : 0;
-//                     console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
-                    
-//                     if (data.approved && data.approved.length > 0) {
-//                         allApproveData = allApproveData.concat(data.approved);
-//                     }
-//                 }
-//             } catch (err) {
-//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
-//             }
-//         }
-
-//         console.log("\n✅ Total approved entries loaded:", allApproveData.length);
-
-//         if (allApproveData.length === 0) {
-//             showApproveNoData();
-//         } else {
-//             // Remove duplicates
-//             const uniqueApproveData = [];
-//             const seenIds = new Set();
-            
-//             allApproveData.forEach(entry => {
-//                 if (!seenIds.has(entry._id)) {
-//                     seenIds.add(entry._id);
-//                     uniqueApproveData.push(entry);
-//                 }
-//             });
-            
-//             allApproveData = uniqueApproveData;
-//             console.log("✅ After removing duplicates:", allApproveData.length);
-            
-//             populateApproveMonthFilter();
-//             displayApproveEmployeeTable(allApproveData);
-//         }
-        
-//     } catch (error) {
-//         console.error('❌ Error in loadApproveData:', error);
-//         document.getElementById('approveLoadingDiv').style.display = 'none';
-//         showApproveNoData();
-//     }
-// }
-
 async function loadApproveData(token, empCode) {
     try {
         console.log("🔍 Loading approve data for:", empCode);
@@ -4577,15 +4287,13 @@ async function loadApproveData(token, empCode) {
         document.getElementById('approveTableSection').style.display = 'none';
         document.getElementById('approveNoDataDiv').style.display = 'none';
 
-        // ✅ CHECK IF USER IS HR
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         let approvedEmployeeCodes = [];
         
         if (isHR) {
-            console.log("👔 USER IS HR - Fetching HR approved entries");
-            
-            // ✅ FOR HR: Get all employees with HR approved entries
+            console.log("👔 USER IS HR");
             const response = await fetch(`${API_URL}/api/ope/hr/approved-employees`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -4594,9 +4302,18 @@ async function loadApproveData(token, empCode) {
                 const data = await response.json();
                 approvedEmployeeCodes = data.employee_codes || [];
             }
-        } else {
-            console.log("👔 USER IS MANAGER - Fetching manager approved entries");
+        } else if (isPartner) {
+            console.log("👔 USER IS PARTNER");
+            const response = await fetch(`${API_URL}/api/ope/partner/approved-list`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             
+            if (response.ok) {
+                const data = await response.json();
+                approvedEmployeeCodes = data.employee_codes || [];
+            }
+        } else {
+            console.log("👔 USER IS MANAGER");
             const approvedListResponse = await fetch(
                 `${API_URL}/api/ope/manager/approved-list`, 
                 {
@@ -4621,8 +4338,6 @@ async function loadApproveData(token, empCode) {
         allApproveData = [];
 
         for (const empCodeLoop of approvedEmployeeCodes) {
-            console.log(`📥 Fetching approved entries for: ${empCodeLoop}`);
-            
             try {
                 const response = await fetch(
                     `${API_URL}/api/ope/approved/${empCodeLoop}`, 
@@ -4633,9 +4348,6 @@ async function loadApproveData(token, empCode) {
 
                 if (response.ok) {
                     const data = await response.json();
-                    const approvedCount = data.approved ? data.approved.length : 0;
-                    console.log(`✅ Got ${approvedCount} approved entries for ${empCodeLoop}`);
-                    
                     if (data.approved && data.approved.length > 0) {
                         allApproveData = allApproveData.concat(data.approved);
                     }
@@ -4645,12 +4357,9 @@ async function loadApproveData(token, empCode) {
             }
         }
 
-        console.log("\n✅ Total approved entries loaded:", allApproveData.length);
-
         if (allApproveData.length === 0) {
             showApproveNoData();
         } else {
-            // Remove duplicates
             const uniqueApproveData = [];
             const seenIds = new Set();
             
@@ -4662,8 +4371,6 @@ async function loadApproveData(token, empCode) {
             });
             
             allApproveData = uniqueApproveData;
-            console.log("✅ After removing duplicates:", allApproveData.length);
-            
             populateApproveMonthFilter();
             displayApproveEmployeeTable(allApproveData);
         }
@@ -4674,7 +4381,6 @@ async function loadApproveData(token, empCode) {
         showApproveNoData();
     }
 }
-
 
 function displayApproveEmployeeTable(data) {
     console.log("🎨 Displaying approve employee table");
@@ -5533,182 +5239,6 @@ function showApproveNoData() {
 // REJECT SECTION
 let allRejectData = [];
 
-// async function loadRejectData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading reject data for manager:", empCode);
-        
-//         document.getElementById('rejectLoadingDiv').style.display = 'block';
-//         document.getElementById('rejectTableSection').style.display = 'none';
-//         document.getElementById('rejectNoDataDiv').style.display = 'none';
-
-//         const rejectedListResponse = await fetch(
-//             `${API_URL}/api/ope/manager/rejected-list`, 
-//             {
-//                 headers: { 'Authorization': `Bearer ${token}` }
-//             }
-//         );
-
-//         if (!rejectedListResponse.ok) {
-//             console.error("❌ Failed to fetch rejected list:", rejectedListResponse.status);
-//             throw new Error('Failed to fetch rejected list');
-//         }
-
-//         const rejectedListData = await rejectedListResponse.json();
-//         const rejectedEmployeeCodes = rejectedListData.employee_codes || [];
-
-//         console.log("✅ Rejected employees:", rejectedEmployeeCodes);
-
-//         if (rejectedEmployeeCodes.length === 0) {
-//             console.log("📭 No rejected employees found");
-//             showRejectNoData();
-//             return;
-//         }
-
-//         // ✅ Fetch rejected entries for EACH employee
-//         allRejectData = [];
-
-//         for (const empCodeLoop of rejectedEmployeeCodes) {
-//             console.log(`📥 Fetching rejected entries for: ${empCodeLoop}`);
-            
-//             try {
-//                 const response = await fetch(
-//                     `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
-//                     {
-//                         headers: { 'Authorization': `Bearer ${token}` }
-//                     }
-//                 );
-
-//                 if (response.ok) {
-//                     const data = await response.json();
-//                     const rejectedCount = data.rejected ? data.rejected.length : 0;
-//                     console.log(`✅ Got ${rejectedCount} rejected entries for ${empCodeLoop}`);
-                    
-//                     if (data.rejected && data.rejected.length > 0) {
-//                         allRejectData = allRejectData.concat(data.rejected);
-//                     }
-//                 } else {
-//                     console.error(`❌ Failed to fetch for ${empCodeLoop}:`, response.status);
-//                 }
-//             } catch (err) {
-//                 console.error(`❌ Error fetching ${empCodeLoop}:`, err);
-//             }
-//         }
-
-//         console.log("\n✅ Total rejected entries loaded:", allRejectData.length);
-
-//         if (allRejectData.length === 0) {
-//             console.log("📭 No rejected entries found");
-//             showRejectNoData();
-//         } else {
-//             // ✅ Populate month filter first, then display employee table
-//             populateRejectMonthFilter();
-//             displayRejectEmployeeTable(allRejectData);
-//         }
-        
-//     } catch (error) {
-//         console.error('❌ Error in loadRejectData:', error);
-//         document.getElementById('rejectLoadingDiv').style.display = 'none';
-//         showRejectNoData();
-//     }
-// }  
-
-
-// function displayRejectEmployeeTable(data) {
-//     console.log("🎨 Displaying reject employee table");
-    
-//     const tbody = document.getElementById('rejectTableBody');
-//     if (!tbody) {
-//         console.error("❌ rejectTableBody not found!");
-//         return;
-//     }
-
-//     tbody.innerHTML = '';
-
-//     if (!data || data.length === 0) {
-//         showRejectNoData();
-//         return;
-//     }
-
-//     // ✅ GROUP BY EMPLOYEE
-//     const groupedByEmployee = {};
-    
-//     data.forEach((entry) => {
-//         const empId = entry.employee_id || 'Unknown';
-        
-//         if (!groupedByEmployee[empId]) {
-//             groupedByEmployee[empId] = {
-//                 employeeId: empId,
-//                 employeeName: 'Loading...',
-//                 rejectedCount: 0,
-//                 entries: []
-//             };
-//         }
-        
-//         groupedByEmployee[empId].rejectedCount++;
-//         groupedByEmployee[empId].entries.push(entry);
-//     });
-    
-//     console.log("✅ Grouped by employee:", groupedByEmployee);
-    
-//     // ✅ DISPLAY EACH EMPLOYEE AS ONE ROW
-//     Object.values(groupedByEmployee).forEach((employeeData) => {
-//         const row = document.createElement('tr');
-//         row.style.cssText = 'transition: background-color 0.2s ease;';
-        
-//         row.addEventListener('mouseenter', function() {
-//             this.style.backgroundColor = '#fef2f2';
-//         });
-//         row.addEventListener('mouseleave', function() {
-//             this.style.backgroundColor = '';
-//         });
-        
-//         // Get employee name from first entry
-//         const firstName = employeeData.entries[0]?.employee_name || employeeData.employeeId;
-        
-//         row.innerHTML = `
-//             <td style="text-align: center; font-weight: 600; color: #475569; font-size: 15px;">
-//                 ${employeeData.employeeId}
-//             </td>
-//             <td style="text-align: left;">
-//                 <a href="#" onclick="showRejectedEmployeeModal('${employeeData.employeeId}'); return false;" 
-//                    style="color: #ef4444; text-decoration: none; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-//                     <i class="fas fa-user-times" style="font-size: 18px;"></i>
-//                     ${firstName}
-//                 </a>
-//             </td>
-//             <td style="text-align: center;">
-//                 <button onclick="approveRejectedEmployee('${employeeData.employeeId}')" 
-//                         style="
-//                             padding: 10px 20px; 
-//                             background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
-//                             color: white; 
-//                             border: none; 
-//                             border-radius: 8px; 
-//                             cursor: pointer; 
-//                             font-weight: 600; 
-//                             font-size: 14px;
-//                             display: inline-flex; 
-//                             align-items: center; 
-//                             gap: 6px;
-//                             transition: all 0.3s ease;
-//                             box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-//                         "
-//                         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.4)';"
-//                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(16, 185, 129, 0.3)';">
-//                     <i class="fas fa-check-circle"></i> Approve All
-//                 </button>
-//             </td>
-//         `;
-        
-//         tbody.appendChild(row);
-//     });
-
-//     document.getElementById('rejectLoadingDiv').style.display = 'none';
-//     document.getElementById('rejectTableSection').style.display = 'block';
-    
-//     console.log(`✅ Displayed ${Object.keys(groupedByEmployee).length} rejected employees`);
-// }
-
 async function loadRejectData(token, empCode) {
     try {
         console.log("🔍 Loading reject data for:", empCode);
@@ -5717,14 +5247,13 @@ async function loadRejectData(token, empCode) {
         document.getElementById('rejectTableSection').style.display = 'none';
         document.getElementById('rejectNoDataDiv').style.display = 'none';
 
-        // ✅ CHECK IF USER IS HR
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         let rejectedEmployeeCodes = [];
         
         if (isHR) {
-            console.log("👔 USER IS HR - Fetching HR rejected entries");
-            
+            console.log("👔 USER IS HR");
             const response = await fetch(`${API_URL}/api/ope/hr/rejected-employees`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -5733,9 +5262,18 @@ async function loadRejectData(token, empCode) {
                 const data = await response.json();
                 rejectedEmployeeCodes = data.employee_codes || [];
             }
-        } else {
-            console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
+        } else if (isPartner) {
+            console.log("👔 USER IS PARTNER");
+            const response = await fetch(`${API_URL}/api/ope/partner/rejected-list`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             
+            if (response.ok) {
+                const data = await response.json();
+                rejectedEmployeeCodes = data.employee_codes || [];
+            }
+        } else {
+            console.log("👔 USER IS MANAGER");
             const rejectedListResponse = await fetch(
                 `${API_URL}/api/ope/manager/rejected-list`, 
                 {
@@ -5759,8 +5297,6 @@ async function loadRejectData(token, empCode) {
         allRejectData = [];
 
         for (const empCodeLoop of rejectedEmployeeCodes) {
-            console.log(`📥 Fetching rejected entries for: ${empCodeLoop}`);
-            
             try {
                 const response = await fetch(
                     `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
@@ -6487,65 +6023,6 @@ async function rejectApprovedEntry(entryId, employeeId) {
   }
 }
 
-// async function approveRejectedEmployee(employeeId) {
-//     const token = localStorage.getItem('access_token');
-    
-//     try {
-//         console.log("✅ Approving all rejected entries for:", employeeId);
-        
-//         const confirmed = await showConfirmPopup(
-//             'Approve All Rejected Entries',
-//             `Are you sure you want to approve all rejected entries for employee ${employeeId}?`,
-//             'Yes, Approve All',
-//             'Cancel'
-//         );
-        
-//         if (!confirmed) {
-//             return;
-//         }
-        
-//         // Get all rejected entries for this employee
-//         const employeeEntries = allRejectData.filter(e => e.employee_id === employeeId);
-        
-//         if (employeeEntries.length === 0) {
-//             showErrorPopup('No rejected entries found');
-//             return;
-//         }
-        
-//         let approvedCount = 0;
-        
-//         // ✅ Approve each entry one by one
-//         for (const entry of employeeEntries) {
-//             const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
-//                 method: 'POST',
-//                 headers: {
-//                     'Authorization': `Bearer ${token}`,
-//                     'Content-Type': 'application/json'
-//                 },
-//                 body: JSON.stringify({ 
-//                     entry_id: entry._id,
-//                     employee_id: employeeId
-//                 })
-//             });
-            
-//             if (response.ok) {
-//                 approvedCount++;
-//             }
-//         }
-        
-//         if (approvedCount > 0) {
-//             showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
-            
-//             // ✅ Reload reject data
-//             const empCode = localStorage.getItem('employee_code');
-//             await loadRejectData(token, empCode);
-//         }
-        
-//     } catch (error) {
-//         console.error('Approval error:', error);
-//         showErrorPopup('Network error during approval');
-//     }
-// }
 
 async function approveRejectedEmployee(employeeId) {
     const token = localStorage.getItem('access_token');
@@ -6693,45 +6170,77 @@ function showRejectNoData() {
 
 // Check if user is a reporting manager
 
-async function checkUserRole() {
-  try {
-    const token = localStorage.getItem("access_token");
-    const empCode = localStorage.getItem("employee_code");
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
     
-    if (!token || !empCode) {
-      console.log("❌ No token or empCode, skipping role check");
-      return false;
-    }
+//     if (!token || !empCode) {
+//       return false;
+//     }
     
-    console.log("🔍 Checking user role for:", empCode);
+//     console.log("🔍 Checking user role for:", empCode);
     
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+//     // ✅ CHECK IF USER IS HR
+//     const isHR = (empCode.trim().toUpperCase() === "JHS729");
     
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
-    }
+//     if (isHR) {
+//       localStorage.setItem("is_hr", "true");
+//       localStorage.setItem("is_partner", "false");
+//       localStorage.setItem("is_manager", "false");
+//       toggleManagerButtons(true);
+//       return true;
+//     }
     
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
+//     // ✅ CHECK IF USER IS PARTNER
+//     const partnerResponse = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
+//       headers: { Authorization: `Bearer ${token}` }
+//     });
     
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
+//     if (partnerResponse.ok) {
+//       const partnerData = await partnerResponse.json();
+      
+//       if (partnerData.isPartner) {
+//         console.log("👔 User is a PARTNER");
+//         localStorage.setItem("is_partner", "true");
+//         localStorage.setItem("is_hr", "false");
+//         localStorage.setItem("is_manager", "false");
+//         toggleManagerButtons(true);  // Show Pending/Approve/Reject for Partners too
+//         return true;
+//       }
+//     }
     
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
+//     // ✅ CHECK IF USER IS REPORTING MANAGER
+//     const managerResponse = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: { Authorization: `Bearer ${token}` }
+//     });
     
-    return data.isManager;
+//     if (managerResponse.ok) {
+//       const managerData = await managerResponse.json();
+      
+//       if (managerData.isManager) {
+//         console.log("👔 User is a REPORTING MANAGER");
+//         localStorage.setItem("is_manager", "true");
+//         localStorage.setItem("is_partner", "false");
+//         localStorage.setItem("is_hr", "false");
+//         toggleManagerButtons(true);
+//         return true;
+//       }
+//     }
     
-  } catch (error) {
-    console.error("❌ Error checking role:", error);
-    return false;
-  }
-}
+//     // ✅ USER IS EMPLOYEE
+//     console.log("👤 User is an EMPLOYEE");
+//     localStorage.setItem("is_manager", "false");
+//     localStorage.setItem("is_partner", "false");
+//     localStorage.setItem("is_hr", "false");
+//     toggleManagerButtons(false);
+//     return false;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
 
 // Toggle visibility of manager-only sidebar buttons
 // function toggleManagerButtons(isManager) {
@@ -6768,14 +6277,14 @@ async function checkUserRole() {
 // ============================================
 
 function toggleManagerButtons(isManager) {
-  console.log("🔧 toggleManagerButtons called with isManager:", isManager);
+  // console.log("🔧 toggleManagerButtons called with isManager:", isManager);
   
   const navPending = document.getElementById('navPending');
   const navApprove = document.getElementById('navApprove');
   const navReject = document.getElementById('navReject');
   
   if (isManager) {
-    console.log("👔 USER IS MANAGER - Showing manager buttons");
+    // console.log("👔 USER IS MANAGER - Showing manager buttons");
     
     if (navPending) {
       navPending.style.display = 'flex';
@@ -6820,10 +6329,62 @@ function toggleManagerButtons(isManager) {
 // Make it globally accessible
 window.toggleManagerButtons = toggleManagerButtons;
 
-console.log("✅ Manager Buttons Toggle initialized!");
-
 // Update checkUserRole to use isManager
 
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
+    
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
+    
+//     console.log("🔍 Checking user role for:", empCode);
+    
+//     // ✅ CHECK IF USER IS HR
+//     const isHR = (empCode.trim().toUpperCase() === "JHS729");
+    
+//     if (isHR) {
+//       console.log("👔 User is HR - showing manager buttons");
+//       localStorage.setItem("is_manager", "true");
+//       localStorage.setItem("is_hr", "true");
+//       toggleManagerButtons(true);
+//       return true;
+//     }
+    
+//     // ✅ CHECK IF USER IS REPORTING MANAGER
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
+    
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
+    
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
+    
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+//     localStorage.setItem("is_hr", "false");
+    
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
+    
+//     return data.isManager;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
+
+// ✅ REPLACE THIS ENTIRE FUNCTION
 async function checkUserRole() {
   try {
     const token = localStorage.getItem("access_token");
@@ -6843,38 +6404,111 @@ async function checkUserRole() {
       console.log("👔 User is HR - showing manager buttons");
       localStorage.setItem("is_manager", "true");
       localStorage.setItem("is_hr", "true");
+      localStorage.setItem("is_partner", "false");
       toggleManagerButtons(true);
       return true;
     }
     
-    // ✅ CHECK IF USER IS REPORTING MANAGER
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+    // ✅ CHECK IF USER IS PARTNER (NEW!)
+    const partnerResponse = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
     
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
+    if (partnerResponse.ok) {
+      const partnerData = await partnerResponse.json();
+      
+      if (partnerData.isPartner) {
+        console.log("👔 User is a PARTNER");
+        localStorage.setItem("is_partner", "true");
+        localStorage.setItem("is_hr", "false");
+        localStorage.setItem("is_manager", "false");
+        toggleManagerButtons(true);  // ✅ Show Pending/Approve/Reject
+        return true;
+      }
     }
     
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
+    // ✅ CHECK IF USER IS REPORTING MANAGER
+    const managerResponse = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
     
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
+    if (managerResponse.ok) {
+      const managerData = await managerResponse.json();
+      
+      if (managerData.isManager) {
+        console.log("👔 User is a REPORTING MANAGER");
+        localStorage.setItem("is_manager", "true");
+        localStorage.setItem("is_partner", "false");
+        localStorage.setItem("is_hr", "false");
+        toggleManagerButtons(true);
+        return true;
+      }
+    }
+    
+    // ✅ USER IS EMPLOYEE
+    console.log("👤 User is an EMPLOYEE");
+    localStorage.setItem("is_manager", "false");
+    localStorage.setItem("is_partner", "false");
     localStorage.setItem("is_hr", "false");
-    
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
-    
-    return data.isManager;
+    toggleManagerButtons(false);
+    return false;
     
   } catch (error) {
     console.error("❌ Error checking role:", error);
     return false;
   }
+}
+
+// ✅ OPTIONAL: Display user role badge in header
+function displayUserRoleBadge(roleData) {
+  const header = document.querySelector('.header');
+  if (!header) return;
+  
+  // Remove existing badge if any
+  const existingBadge = document.getElementById('userRoleBadge');
+  if (existingBadge) existingBadge.remove();
+  
+  // Create role badge
+  const badge = document.createElement('div');
+  badge.id = 'userRoleBadge';
+  badge.style.cssText = `
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: auto;
+    margin-right: 15px;
+  `;
+  
+  // Set badge color based on role
+  let bgColor, textColor, icon;
+  
+  if (roleData.is_hr) {
+    bgColor = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+    textColor = 'white';
+    icon = '👨‍💼';
+  } else if (roleData.is_partner) {
+    bgColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+    textColor = 'white';
+    icon = '🤝';
+  } else if (roleData.is_manager) {
+    bgColor = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+    textColor = 'white';
+    icon = '👔';
+  } else {
+    bgColor = 'linear-gradient(135deg, #64748b 0%, #475569 100%)';
+    textColor = 'white';
+    icon = '👤';
+  }
+  
+  badge.style.background = bgColor;
+  badge.style.color = textColor;
+  badge.innerHTML = `${icon} ${roleData.role}`;
+  
+  header.appendChild(badge);
 }
 
 
@@ -7274,11 +6908,29 @@ async function approveEmployee(employeeId) {
       return;
     }
     
-    // ✅ DETERMINE ENDPOINT BASED ON USER
+    // ✅ CRITICAL FIX: Determine endpoint based on user role
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
-    const endpoint = isHR 
-      ? `${API_URL}/api/ope/hr/approve/${employeeId}`
-      : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    
+    console.log("🔍 User Role Check:");
+    console.log("   Is HR:", isHR);
+    console.log("   Is Partner:", isPartner);
+    console.log("   Current User:", currentEmpCode);
+    
+    let endpoint = "";
+    
+    if (isHR) {
+      endpoint = `${API_URL}/api/ope/hr/approve/${employeeId}`;
+      console.log("👔 HR ENDPOINT:", endpoint);
+    } else if (isPartner) {
+      endpoint = `${API_URL}/api/ope/partner/approve/${employeeId}`;
+      console.log("🤝 PARTNER ENDPOINT:", endpoint);
+    } else {
+      endpoint = `${API_URL}/api/ope/manager/approve/${employeeId}`;
+      console.log("👨‍💼 MANAGER ENDPOINT:", endpoint);
+    }
+    
+    console.log("📡 Final endpoint:", endpoint);
     
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -7288,25 +6940,33 @@ async function approveEmployee(employeeId) {
       }
     });
     
+    console.log("📥 Response status:", response.status);
+    
     if (response.ok) {
       const result = await response.json();
+      console.log("✅ Approval result:", result);
+      
       showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
       
+      // Close any open modals
       const modals = document.querySelectorAll('.modal-overlay');
       modals.forEach(modal => modal.remove());
       
+      // Reload pending data
       await loadPendingData(token, currentEmpCode);
       
     } else {
       const errorData = await response.json();
+      console.error("❌ Approval failed:", errorData);
       showErrorPopup(errorData.detail || 'Approval failed');
     }
     
   } catch (error) {
-    console.error('Approval error:', error);
+    console.error('❌ Approval error:', error);
     showErrorPopup(`Network error: ${error.message}`);
   }
 }
+
 
 
 // async function rejectEmployee(employeeId) {
@@ -7370,11 +7030,29 @@ async function rejectEmployee(employeeId) {
       return;
     }
     
-    // ✅ DETERMINE ENDPOINT BASED ON USER
+    // ✅ CRITICAL FIX: Determine endpoint based on user role
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
-    const endpoint = isHR 
-      ? `${API_URL}/api/ope/hr/reject/${employeeId}`
-      : `${API_URL}/api/ope/manager/reject/${employeeId}`;
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    
+    console.log("🔍 User Role Check:");
+    console.log("   Is HR:", isHR);
+    console.log("   Is Partner:", isPartner);
+    console.log("   Current User:", currentEmpCode);
+    
+    let endpoint = "";
+    
+    if (isHR) {
+      endpoint = `${API_URL}/api/ope/hr/reject/${employeeId}`;
+      console.log("👔 HR REJECT ENDPOINT:", endpoint);
+    } else if (isPartner) {
+      endpoint = `${API_URL}/api/ope/partner/reject/${employeeId}`;
+      console.log("🤝 PARTNER REJECT ENDPOINT:", endpoint);
+    } else {
+      endpoint = `${API_URL}/api/ope/manager/reject/${employeeId}`;
+      console.log("👨‍💼 MANAGER REJECT ENDPOINT:", endpoint);
+    }
+    
+    console.log("📡 Final endpoint:", endpoint);
     
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -7385,25 +7063,33 @@ async function rejectEmployee(employeeId) {
       body: JSON.stringify({ reason: reason })
     });
     
+    console.log("📥 Response status:", response.status);
+    
     if (response.ok) {
       const result = await response.json();
+      console.log("✅ Rejection result:", result);
+      
       showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
       
+      // Close any open modals
       const modals = document.querySelectorAll('.modal-overlay');
       modals.forEach(modal => modal.remove());
       
+      // Reload pending data
       await loadPendingData(token, currentEmpCode);
       
     } else {
       const errorData = await response.json();
+      console.error("❌ Rejection failed:", errorData);
       showErrorPopup(errorData.detail || 'Rejection failed');
     }
     
   } catch (error) {
-    console.error('Rejection error:', error);
+    console.error('❌ Rejection error:', error);
     showErrorPopup('Network error during rejection');
   }
 }
+
 
 function showRejectReasonPopup() {
   return new Promise((resolve) => {
@@ -7944,3 +7630,856 @@ document.addEventListener('DOMContentLoaded', function() {
 window.toggleMobileMenu = toggleMobileMenu;
 
 console.log("✅ Mobile Menu Toggle initialized successfully!");
+
+// Partner Pending - Load pending employees
+async function loadPartnerPending() {
+    try {   
+        console.log('🔍 Loading Partner Pending List...');
+        
+        const response = await fetch(`${API_URL}/api/ope/partner/pending`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to fetch partner pending data');
+        }
+
+        const data = await response.json();
+        console.log('✅ Partner Pending Data:', data);
+
+        // displayPartnerPending(data.employees || []);
+        displayPartnerPendingEmployeeTable(data.employees || []);
+        
+    } catch (error) {
+        console.error('❌ Error loading partner pending:', error);
+        showNotification('Failed to load pending approvals: ' + error.message, 'error');
+    }
+}
+
+function displayPartnerPending(employees) {
+    const container = document.getElementById('partnerPendingList');
+    
+    if (!container) {
+        console.error('❌ Partner pending container not found');
+        return;
+    }
+
+    if (!employees || employees.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-clipboard-check"></i>
+                <p>No pending approvals</p>
+                <small>All caught up! 🎉</small>
+            </div>
+        `;
+        return;
+    }
+
+    console.log(`📊 Displaying ${employees.length} employees with pending approvals`);
+
+    let html = '';
+
+    employees.forEach((employee, index) => {
+        const submitterType = employee.submitter_type || 'Employee';
+        const badgeClass = submitterType === 'Reporting_Manager' ? 'rm-badge' : 'emp-badge';
+        const badgeText = submitterType === 'Reporting_Manager' ? 'RM' : 'EMP';
+        const badgeIcon = submitterType === 'Reporting_Manager' ? '👔' : '👤';
+
+        // Calculate total amount
+        const totalAmount = employee.entries.reduce((sum, entry) => {
+            return sum + parseFloat(entry.amount || 0);
+        }, 0);
+
+        html += `
+            <div class="employee-card" data-employee="${employee.employee_code}">
+                <div class="employee-card-header" onclick="togglePartnerEmployeeDetails('${employee.employee_code}')">
+                    <div class="employee-info">
+                        <div class="employee-name-row">
+                            <h3>${employee.employee_name}</h3>
+                            <span class="submitter-badge ${badgeClass}" title="${submitterType}">
+                                ${badgeIcon} ${badgeText}
+                            </span>
+                        </div>
+                        <div class="employee-meta">
+                            <span><i class="fas fa-id-badge"></i> ${employee.employee_code}</span>
+                            <span><i class="fas fa-briefcase"></i> ${employee.designation || 'N/A'}</span>
+                            <span><i class="fas fa-building"></i> ${employee.department || 'N/A'}</span>
+                        </div>
+                    </div>
+                    <div class="employee-summary">
+                        <div class="pending-count">
+                            <span class="count-number">${employee.pending_entries}</span>
+                            <span class="count-label">Pending</span>
+                        </div>
+                        <div class="total-amount">
+                            <span class="amount-label">Total:</span>
+                            <span class="amount-value">₹${totalAmount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                        <i class="fas fa-chevron-down toggle-icon"></i>
+                    </div>
+                </div>
+                
+                <div class="employee-card-body" id="partner-employee-${employee.employee_code}" style="display: none;">
+                    ${generatePartnerEntriesTable(employee.entries, employee.employee_code)}
+                    
+                    <div class="bulk-actions">
+                        <button class="btn-approve-all" onclick="partnerApproveAll('${employee.employee_code}')">
+                            <i class="fas fa-check-circle"></i> Approve All
+                        </button>
+                        <button class="btn-reject-all" onclick="partnerRejectAll('${employee.employee_code}')">
+                            <i class="fas fa-times-circle"></i> Reject All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function generatePartnerEntriesTable(entries, employeeCode) {
+    if (!entries || entries.length === 0) {
+        return '<p class="no-entries">No entries found</p>';
+    }
+
+    // Group entries by month
+    const groupedByMonth = {};
+    entries.forEach(entry => {
+        const month = entry.month_range || 'Unknown';
+        if (!groupedByMonth[month]) {
+            groupedByMonth[month] = [];
+        }
+        groupedByMonth[month].push(entry);
+    });
+
+    let html = '';
+
+    Object.keys(groupedByMonth).forEach(month => {
+        const monthEntries = groupedByMonth[month];
+        const monthTotal = monthEntries.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
+        
+        // Get submission info from first entry
+        const firstEntry = monthEntries[0];
+        const totalLevels = firstEntry.total_levels || 2;
+        const currentLevel = firstEntry.current_level || 'L1';
+        const submitterType = firstEntry.submitter_type || 'Employee';
+
+        html += `
+            <div class="month-group">
+                <div class="month-header">
+                    <div class="month-info">
+                        <h4><i class="fas fa-calendar-alt"></i> ${month}</h4>
+                        <div class="approval-flow-info">
+                            <span class="flow-badge">
+                                <i class="fas fa-route"></i> ${totalLevels}-Level Approval
+                            </span>
+                            <span class="current-level-badge">
+                                Current: ${currentLevel}
+                            </span>
+                            ${submitterType === 'Reporting_Manager' ? 
+                                '<span class="rm-flow-badge"><i class="fas fa-user-tie"></i> RM Direct Flow</span>' : 
+                                '<span class="emp-flow-badge"><i class="fas fa-users"></i> Employee Flow</span>'
+                            }
+                        </div>
+                    </div>
+                    <div class="month-total">
+                        <span class="total-label">Month Total:</span>
+                        <span class="total-amount">₹${monthTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                </div>
+
+                <div class="entries-table-wrapper">
+                    <table class="entries-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" class="select-all-month" onchange="toggleMonthSelection('${employeeCode}', '${month}', this.checked)"></th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project</th>
+                                <th>Type</th>
+                                <th>From → To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Ticket</th>
+                                <th>Remarks</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${monthEntries.map(entry => generatePartnerEntryRow(entry, employeeCode)).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    });
+
+    return html;
+}
+function generatePartnerEntryRow(entry, employeeCode) {
+    const entryId = entry._id || '';
+    const date = formatDate(entry.date);
+    const amount = parseFloat(entry.amount || 0);
+    
+    return `
+        <tr class="entry-row" data-entry-id="${entryId}">
+            <td>
+                <input type="checkbox" class="entry-checkbox" 
+                       data-employee="${employeeCode}" 
+                       data-entry="${entryId}"
+                       data-month="${entry.month_range}">
+            </td>
+            <td class="date-cell">${date}</td>
+            <td class="client-cell">${entry.client || 'N/A'}</td>
+            <td class="project-cell">
+                <div class="project-info">
+                    <div class="project-id">${entry.project_id || 'N/A'}</div>
+                    <div class="project-name">${entry.project_name || 'N/A'}</div>
+                </div>
+            </td>
+            <td class="type-cell">
+                <span class="project-type-badge ${entry.project_type === 'Billable' ? 'billable' : 'non-billable'}">
+                    ${entry.project_type || 'N/A'}
+                </span>
+            </td>
+            <td class="location-cell">
+                <div class="route">
+                    <span class="from">${entry.location_from || 'N/A'}</span>
+                    <i class="fas fa-arrow-right"></i>
+                    <span class="to">${entry.location_to || 'N/A'}</span>
+                </div>
+            </td>
+            <td class="mode-cell">
+                <span class="travel-mode-badge">
+                    ${getTravelModeIcon(entry.travel_mode)} ${entry.travel_mode || 'N/A'}
+                </span>
+            </td>
+            <td class="amount-cell">
+                <span class="amount">₹${amount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            </td>
+            <td class="ticket-cell">
+                ${entry.ticket_pdf ? 
+                    `<a href="${entry.ticket_pdf}" target="_blank" class="ticket-link">
+                        <i class="fas fa-file-pdf"></i> View
+                    </a>` : 
+                    '<span class="no-ticket">No ticket</span>'
+                }
+            </td>
+            <td class="remarks-cell">
+                <div class="remarks-text" title="${entry.remarks || 'No remarks'}">${entry.remarks || '-'}</div>
+            </td>
+            <td class="actions-cell">
+                <button class="btn-approve-single" onclick="partnerApproveSingle('${employeeCode}', '${entryId}', '${entry.month_range}')" title="Approve">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button class="btn-reject-single" onclick="partnerRejectSingle('${employeeCode}', '${entryId}', '${entry.month_range}')" title="Reject">
+                    <i class="fas fa-times"></i>
+                </button>
+            </td>
+        </tr>
+    `;
+}
+
+function togglePartnerEmployeeDetails(employeeCode) {
+    const detailsDiv = document.getElementById(`partner-employee-${employeeCode}`);
+    const card = detailsDiv.closest('.employee-card');
+    const icon = card.querySelector('.toggle-icon');
+    
+    if (detailsDiv.style.display === 'none') {
+        detailsDiv.style.display = 'block';
+        icon.classList.add('rotated');
+        card.classList.add('expanded');
+    } else {
+        detailsDiv.style.display = 'none';
+        icon.classList.remove('rotated');
+        card.classList.remove('expanded');
+    }
+}
+
+function toggleMonthSelection(employeeCode, month, checked) {
+    const checkboxes = document.querySelectorAll(
+        `input.entry-checkbox[data-employee="${employeeCode}"][data-month="${month}"]`
+    );
+    checkboxes.forEach(cb => cb.checked = checked);
+}
+
+async function partnerApproveSingle(employeeCode, entryId, monthRange) {
+    if (!confirm('Approve this entry?')) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/ope/partner/approve`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                employee_code: employeeCode,
+                entry_ids: [entryId],
+                month_range: monthRange
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Approval failed');
+        }
+
+        showNotification('Entry approved successfully! ✅', 'success');
+        loadPartnerPending(); // Reload list
+        
+    } catch (error) {
+        console.error('❌ Approval error:', error);
+        showNotification('Failed to approve: ' + error.message, 'error');
+    }
+}
+
+async function partnerRejectSingle(employeeCode, entryId, monthRange) {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason || reason.trim() === '') {
+        showNotification('Rejection cancelled - reason required', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/ope/partner/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                employee_code: employeeCode,
+                entry_ids: [entryId],
+                month_range: monthRange,
+                rejection_reason: reason.trim()
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || 'Rejection failed');
+        }
+
+        showNotification('Entry rejected successfully', 'success');
+        loadPartnerPending();
+        
+    } catch (error) {
+        console.error('❌ Rejection error:', error);
+        showNotification('Failed to reject: ' + error.message, 'error');
+    }
+}
+
+async function partnerApproveAll(employeeCode) {
+    const checkboxes = document.querySelectorAll(`input.entry-checkbox[data-employee="${employeeCode}"]:checked`);
+    
+    if (checkboxes.length === 0) {
+        showNotification('Please select at least one entry', 'warning');
+        return;
+    }
+
+    if (!confirm(`Approve ${checkboxes.length} selected entries?`)) return;
+
+    // Group by month
+    const entriesByMonth = {};
+    checkboxes.forEach(cb => {
+        const month = cb.dataset.month;
+        const entryId = cb.dataset.entry;
+        
+        if (!entriesByMonth[month]) {
+            entriesByMonth[month] = [];
+        }
+        entriesByMonth[month].push(entryId);
+    });
+
+    try {
+        for (const [month, entryIds] of Object.entries(entriesByMonth)) {
+            const response = await fetch(`${API_URL}/api/ope/partner/approve`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    employee_code: employeeCode,
+                    entry_ids: entryIds,
+                    month_range: month
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Approval failed');
+            }
+        }
+
+        showNotification(`${checkboxes.length} entries approved successfully! ✅`, 'success');
+        loadPartnerPending();
+        
+    } catch (error) {
+        console.error('❌ Bulk approval error:', error);
+        showNotification('Failed to approve: ' + error.message, 'error');
+    }
+}
+
+async function partnerRejectAll(employeeCode) {
+    const checkboxes = document.querySelectorAll(`input.entry-checkbox[data-employee="${employeeCode}"]:checked`);
+    
+    if (checkboxes.length === 0) {
+        showNotification('Please select at least one entry', 'warning');
+        return;
+    }
+
+    const reason = prompt('Enter rejection reason for selected entries:');
+    if (!reason || reason.trim() === '') {
+        showNotification('Rejection cancelled - reason required', 'warning');
+        return;
+    }
+
+    // Group by month
+    const entriesByMonth = {};
+    checkboxes.forEach(cb => {
+        const month = cb.dataset.month;
+        const entryId = cb.dataset.entry;
+        
+        if (!entriesByMonth[month]) {
+            entriesByMonth[month] = [];
+        }
+        entriesByMonth[month].push(entryId);
+    });
+
+    try {
+        for (const [month, entryIds] of Object.entries(entriesByMonth)) {
+            const response = await fetch(`${API_URL}/api/ope/partner/reject`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    employee_code: employeeCode,
+                    entry_ids: entryIds,
+                    month_range: month,
+                    rejection_reason: reason.trim()
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Rejection failed');
+            }
+        }
+
+        showNotification(`${checkboxes.length} entries rejected`, 'success');
+        loadPartnerPending();
+        
+    } catch (error) {
+        console.error('❌ Bulk rejection error:', error);
+        showNotification('Failed to reject: ' + error.message, 'error');
+    }
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+function getTravelModeIcon(mode) {
+    const icons = {
+        'Flight': '<i class="fas fa-plane"></i>',
+        'Train': '<i class="fas fa-train"></i>',
+        'Bus': '<i class="fas fa-bus"></i>',
+        'Cab': '<i class="fas fa-taxi"></i>',
+        'Auto': '<i class="fas fa-motorcycle"></i>',
+        'Car': '<i class="fas fa-car"></i>',
+        'Metro': '<i class="fas fa-subway"></i>'
+    };
+    return icons[mode] || '<i class="fas fa-route"></i>';
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+        });
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+// ========================================
+// PARTNER APPROVED LIST
+// ========================================
+
+async function loadPartnerApproved() {
+    try {
+        const response = await fetch(`${API_URL}/api/ope/partner/approved`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        const data = await response.json();
+        
+        // Use your existing display function or create new one
+        displayPartnerApproved(data.employees || []);
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+}
+
+// ========================================
+// PARTNER REJECTED LIST
+// ========================================
+
+async function loadPartnerRejected() {
+    try {
+        const response = await fetch(`${API_URL}/api/ope/partner/rejected`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        const data = await response.json();
+        
+        // Use your existing display function or create new one
+        displayPartnerRejected(data.employees || []);
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+}
+
+// ========================================
+// HR PENDING
+// ========================================
+
+async function loadHRPending() {
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/pending`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        const data = await response.json();
+        
+        // Use your existing display function
+        displayHRPending(data.employees || []);
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+}
+
+// ========================================
+// HR APPROVE SINGLE
+// ========================================
+
+async function hrApproveSingle(employeeCode, entryId, monthRange) {
+    if (!confirm('Approve this entry?')) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/approve`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                employee_code: employeeCode,
+                entry_ids: [entryId],
+                month_range: monthRange
+            })
+        });
+
+        if (!response.ok) throw new Error('Approval failed');
+
+        showNotification('Entry approved! ✅', 'success');
+        loadHRPending();
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        showNotification('Failed: ' + error.message, 'error');
+    }
+}
+
+// ========================================
+// HR REJECT SINGLE
+// ========================================
+
+async function hrRejectSingle(employeeCode, entryId, monthRange) {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason || !reason.trim()) {
+        showNotification('Reason required', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                employee_code: employeeCode,
+                entry_ids: [entryId],
+                month_range: monthRange,
+                rejection_reason: reason.trim()
+            })
+        });
+
+        if (!response.ok) throw new Error('Rejection failed');
+
+        showNotification('Entry rejected', 'success');
+        loadHRPending();
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        showNotification('Failed: ' + error.message, 'error');
+    }
+}
+
+// ========================================
+// HR APPROVED/REJECTED LISTS
+// ========================================
+
+async function loadHRApproved() {
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/approved`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await response.json();
+        displayHRApproved(data.employees || []);
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+}
+
+async function loadHRRejected() {
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/rejected`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await response.json();
+        displayHRRejected(data.employees || []);
+    } catch (error) {
+        console.error('❌ Error:', error);
+    }
+}
+
+// ✅ ADD THIS FUNCTION
+function showNotification(message, type = 'info') {
+    if (type === 'error') {
+        showErrorPopup(message);
+    } else if (type === 'success') {
+        showSuccessPopup(message);
+    } else if (type === 'warning') {
+        // Yellow warning popup
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        `;
+
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: white;
+            padding: 30px 25px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            animation: slideUp 0.3s ease;
+        `;
+
+        popup.innerHTML = `
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 18px;
+            ">
+                <i class="fas fa-exclamation-triangle" style="font-size: 32px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">Warning</h2>
+            <p style="color: #6b7280; margin-bottom: 0; font-size: 14.5px; line-height: 1.5;">${message}</p>
+        `;
+
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+
+        setTimeout(() => {
+            if (document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+            }
+        }, 3000);
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay && document.body.contains(overlay)) {
+                document.body.removeChild(overlay);
+            }
+        });
+    } else {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+}
+// ✅ ADD THIS FUNCTION - Missing in your code
+function displayPendingEmployeeTable(data) {
+    console.log("🎨 displayPendingEmployeeTable called");
+    console.log("📊 Input data:", data);
+    
+    const tbody = document.getElementById('pendingTableBody');
+    if (!tbody) {
+        console.error("❌ pendingTableBody not found!");
+        return;
+    }
+
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+        console.log("📭 No data to display");
+        showPendingNoData();
+        return;
+    }
+
+    // ✅ GROUP BY EMPLOYEE
+    const groupedByEmployee = {};
+    
+    data.forEach((entry) => {
+        const empId = entry.employee_id || 'Unknown';
+        
+        if (!groupedByEmployee[empId]) {
+            groupedByEmployee[empId] = {
+                employeeId: empId,
+                employeeName: entry.employee_name || 'Loading...',
+                designation: entry.designation || '',
+                pendingCount: 0,
+                entries: []
+            };
+        }
+        
+        groupedByEmployee[empId].pendingCount++;
+        groupedByEmployee[empId].entries.push(entry);
+    });
+    
+    console.log("✅ Grouped pending by employee:", Object.keys(groupedByEmployee).length, "employees");
+    
+    // ✅ DISPLAY EACH EMPLOYEE AS ONE ROW
+    Object.values(groupedByEmployee).forEach((employeeData) => {
+        const row = document.createElement('tr');
+        row.style.cssText = 'transition: background-color 0.2s ease;';
+        
+        row.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f8fafc';
+        });
+        row.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+        
+        row.innerHTML = `
+            <td style="text-align: center; font-weight: 600; color: #475569;">
+                ${employeeData.employeeId}
+            </td>
+            <td style="text-align: left;">
+                <a href="#" onclick="showPendingEmployeeModal('${employeeData.employeeId}'); return false;" 
+                   style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-user-circle" style="font-size: 18px;"></i>
+                    ${employeeData.employeeName}
+                </a>
+            </td>
+            <td style="text-align: center;">
+                <span style="
+                    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); 
+                    color: white; 
+                    padding: 8px 16px; 
+                    border-radius: 20px; 
+                    font-size: 13px; 
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+                ">
+                    <i class="fas fa-clock"></i> 
+                    ${employeeData.pendingCount} Pending
+                </span>
+            </td>
+            <td style="text-align: center;">
+                <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+                    <button onclick="approveEmployee('${employeeData.employeeId}')" 
+                            style="
+                                padding: 10px 20px; 
+                                background: linear-gradient(135deg, #10b981 0%, #059669 100%); 
+                                color: white; 
+                                border: none; 
+                                border-radius: 8px; 
+                                cursor: pointer; 
+                                font-weight: 600; 
+                                font-size: 14px;
+                                display: inline-flex; 
+                                align-items: center; 
+                                gap: 6px;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+                            "
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(16, 185, 129, 0.3)';">
+                        <i class="fas fa-check-circle"></i> Approve
+                    </button>
+                    <button onclick="rejectEmployee('${employeeData.employeeId}')" 
+                            style="
+                                padding: 10px 20px; 
+                                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); 
+                                color: white; 
+                                border: none; 
+                                border-radius: 8px; 
+                                cursor: pointer; 
+                                font-weight: 600; 
+                                font-size: 14px;
+                                display: inline-flex; 
+                                align-items: center; 
+                                gap: 6px;
+                                transition: all 0.3s ease;
+                                box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+                            "
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(239, 68, 68, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(239, 68, 68, 0.3)';">
+                        <i class="fas fa-times-circle"></i> Reject
+                    </button>
+                </div>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+
+    document.getElementById('pendingLoadingDiv').style.display = 'none';
+    document.getElementById('pendingTableSection').style.display = 'block';
+}

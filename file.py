@@ -1,6 +1,6 @@
 import pandas as pd
 
-excel_file = "F:\Maaz\employee Data\HRMS DATA-TILL DATE 21-01-2026.xlsx"
+excel_file = "F:\Maaz\JHS Projects\Copy of HRMS DATA-TILL DATE 21-01-2026.xlsx"
 xls = pd.ExcelFile(excel_file)
 
 for sheet in xls.sheet_names:
