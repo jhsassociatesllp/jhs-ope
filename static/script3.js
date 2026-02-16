@@ -2,8 +2,9 @@
     let allHistoryData = [];
     let originalRowData = {};
     let savedEntries = []; 
-    API_URL = "http://127.0.0.1:8000";
-    // API_URL = "";
+    // API_URL = "http://127.0.0.1:8000";
+  
+    API_URL = "";
 
 
     // Add CSS animations for popups
@@ -8483,3 +8484,69 @@
         document.getElementById('pendingLoadingDiv').style.display = 'none';
         document.getElementById('pendingTableSection').style.display = 'block';
     }
+
+    // OPE BANNER Function
+
+    // Hide entry form and show banner
+function showOPECycleBanner() {
+    const entryFormCard = document.querySelector('.entry-form-card');
+    const monthSelectionCard = document.querySelector('.month-selection-card');
+    
+    if (entryFormCard) {
+        entryFormCard.style.display = 'none';
+    }
+    
+    if (monthSelectionCard) {
+        monthSelectionCard.style.display = 'none';
+    }
+    
+    // Check if banner already exists
+    if (!document.querySelector('.ope-cycle-banner')) {
+        const banner = document.createElement('div');
+        banner.className = 'ope-cycle-banner';
+        banner.innerHTML = `
+            <div class="banner-icon">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <h2>New OPE Cycle Release Soon!</h2>
+            <p>
+                We're preparing the next OPE cycle for you.<br>
+                The new entry form will be available shortly.
+            </p>
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i> Coming Soon
+            </div>
+        `;
+        
+        // Insert banner after employee details card
+        const employeeCard = document.querySelector('.employee-details-card');
+        if (employeeCard && employeeCard.parentNode) {
+            employeeCard.parentNode.insertBefore(banner, employeeCard.nextSibling);
+        }
+    }
+}
+
+// Call this function when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    showOPECycleBanner();
+    // ... rest of your existing code
+});
+
+// Function to hide banner and show form again
+function hideOPECycleBanner() {
+    const banner = document.querySelector('.ope-cycle-banner');
+    const entryFormCard = document.querySelector('.entry-form-card');
+    const monthSelectionCard = document.querySelector('.month-selection-card');
+    
+    if (banner) {
+        banner.remove();
+    }
+    
+    if (entryFormCard) {
+        entryFormCard.style.display = 'block';
+    }
+    
+    if (monthSelectionCard) {
+        monthSelectionCard.style.display = 'block';
+    }
+}

@@ -2,9 +2,8 @@
     let allHistoryData = [];
     let originalRowData = {};
     let savedEntries = []; 
-    // API_URL = "http://127.0.0.1:8000";
-  
-    API_URL = "";
+    API_URL = "http://127.0.0.1:8000";
+    // API_URL = "";
 
 
     // Add CSS animations for popups
@@ -4277,6 +4276,9 @@
         document.getElementById('pendingNoDataDiv').style.display = 'block';
     }
 
+    function onUserEditTotalAmount(employeeId, monthRange, currentTotal) {
+  editTotalAmount(employeeId, monthRange, currentTotal);
+}
     // APPROVE SECTION
     let allApproveData = [];
 
@@ -6387,78 +6389,181 @@
 
     // ✅ REPLACE THIS ENTIRE FUNCTION
     async function checkUserRole() {
-      try {
-        const token = localStorage.getItem("access_token");
-        const empCode = localStorage.getItem("employee_code");
-        
-        if (!token || !empCode) {
-          console.log("❌ No token or empCode, skipping role check");
-          return false;
-        }
-        
-        console.log("🔍 Checking user role for:", empCode);
-        
-        // ✅ CHECK IF USER IS HR
-        const isHR = (empCode.trim().toUpperCase() === "JHS729");
-        
-        if (isHR) {
-          console.log("👔 User is HR - showing manager buttons");
-          localStorage.setItem("is_manager", "true");
-          localStorage.setItem("is_hr", "true");
-          localStorage.setItem("is_partner", "false");
-          toggleManagerButtons(true);
-          return true;
-        }
-        
-        // ✅ CHECK IF USER IS PARTNER (NEW!)
-        const partnerResponse = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (partnerResponse.ok) {
-          const partnerData = await partnerResponse.json();
-          
-          if (partnerData.isPartner) {
-            console.log("👔 User is a PARTNER");
-            localStorage.setItem("is_partner", "true");
-            localStorage.setItem("is_hr", "false");
-            localStorage.setItem("is_manager", "false");
-            toggleManagerButtons(true);  // ✅ Show Pending/Approve/Reject
-            return true;
-          }
-        }
-        
-        // ✅ CHECK IF USER IS REPORTING MANAGER
-        const managerResponse = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (managerResponse.ok) {
-          const managerData = await managerResponse.json();
-          
-          if (managerData.isManager) {
-            console.log("👔 User is a REPORTING MANAGER");
-            localStorage.setItem("is_manager", "true");
-            localStorage.setItem("is_partner", "false");
-            localStorage.setItem("is_hr", "false");
-            toggleManagerButtons(true);
-            return true;
-          }
-        }
-        
-        // ✅ USER IS EMPLOYEE
-        console.log("👤 User is an EMPLOYEE");
-        localStorage.setItem("is_manager", "false");
-        localStorage.setItem("is_partner", "false");
+  try {
+    const token = localStorage.getItem("access_token");
+    const empCode = localStorage.getItem("employee_code");
+    
+    if (!token || !empCode) {
+      console.log("❌ No token or empCode, skipping role check");
+      return false;
+    }
+    
+    console.log("🔍 Checking user role for:", empCode);
+    
+    // ✅ CHECK IF USER IS HR
+    const isHR = (empCode.trim().toUpperCase() === "JHS729");
+    
+    if (isHR) {
+      console.log("👔 User is HR - showing edit & approval buttons");
+      localStorage.setItem("is_manager", "false");      // ✅ CHANGED: HR nahi manager
+      localStorage.setItem("is_hr", "true");            // ✅ CHANGED: HR ko mark karo
+      localStorage.setItem("is_partner", "false");
+      toggleManagerButtons(true);  // ✅ Show all buttons including Edit Total
+      
+      // ✅ NEW: Store HR flag for edit permission
+      localStorage.setItem("can_edit_amount", "true");  // ✅ NEW
+      
+      return true;
+    }
+    
+    // ✅ CHECK IF USER IS PARTNER (EXISTING)
+    const partnerResponse = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (partnerResponse.ok) {
+      const partnerData = await partnerResponse.json();
+      
+      if (partnerData.isPartner) {
+        console.log("👔 User is a PARTNER");
+        localStorage.setItem("is_partner", "true");
         localStorage.setItem("is_hr", "false");
-        toggleManagerButtons(false);
-        return false;
+        localStorage.setItem("is_manager", "false");
+        toggleManagerButtons(true);
         
-      } catch (error) {
-        console.error("❌ Error checking role:", error);
-        return false;
+        // ✅ NEW: Partners can edit too!
+        localStorage.setItem("can_edit_amount", "true");  // ✅ NEW
+        
+        return true;
       }
     }
+    
+    // ✅ CHECK IF USER IS REPORTING MANAGER (EXISTING)
+    const managerResponse = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (managerResponse.ok) {
+      const managerData = await managerResponse.json();
+      
+      if (managerData.isManager) {
+        console.log("👔 User is a REPORTING MANAGER");
+        localStorage.setItem("is_manager", "true");
+        localStorage.setItem("is_partner", "false");
+        localStorage.setItem("is_hr", "false");
+        toggleManagerButtons(true);
+        
+        // ✅ NEW: Managers can edit
+        localStorage.setItem("can_edit_amount", "true");  // ✅ NEW
+        
+        return true;
+      }
+    }
+    
+    // ✅ USER IS EMPLOYEE (EXISTING)
+    console.log("👤 User is an EMPLOYEE");
+    localStorage.setItem("is_manager", "false");
+    localStorage.setItem("is_partner", "false");
+    localStorage.setItem("is_hr", "false");
+    localStorage.setItem("can_edit_amount", "false");  // ✅ NEW: Employees cannot edit
+    toggleManagerButtons(false);
+    
+    return false;
+    
+  } catch (error) {
+    console.error("❌ Error checking role:", error);
+    return false;
+  }
+}
+
+function canUserEditAmount() {
+  /**
+   * Check if current user can edit amounts
+   * Returns: true if Manager, Partner, or HR
+   */
+  const isManager = localStorage.getItem("is_manager") === "true";
+  const isPartner = localStorage.getItem("is_partner") === "true";
+  const isHR = localStorage.getItem("is_hr") === "true";
+  
+  const canEdit = isManager || isPartner || isHR;
+  
+  console.log(`📝 Edit permission - Manager: ${isManager}, Partner: ${isPartner}, HR: ${isHR}, Can Edit: ${canEdit}`);
+  
+  return canEdit;
+}
+
+// Make it globally accessible
+window.canUserEditAmount = canUserEditAmount;
+
+function showLoading(show) {
+  /**
+   * Show/hide loading spinner
+   * show: true = show, false = hide
+   */
+  
+  let loadingOverlay = document.getElementById('globalLoadingOverlay');
+  
+  if (show) {
+    // Create loading overlay if it doesn't exist
+    if (!loadingOverlay) {
+      loadingOverlay = document.createElement('div');
+      loadingOverlay.id = 'globalLoadingOverlay';
+      loadingOverlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 50000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      `;
+      
+      loadingOverlay.innerHTML = `
+        <div style="
+          text-align: center;
+        ">
+          <div style="
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+          "></div>
+          <p style="
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+          ">Loading...</p>
+        </div>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      `;
+      
+      document.body.appendChild(loadingOverlay);
+    } else {
+      loadingOverlay.style.display = 'flex';
+    }
+  } else {
+    // Hide loading overlay
+    if (loadingOverlay) {
+      loadingOverlay.style.display = 'none';
+    }
+  }
+}
+
+// Make it globally accessible
+window.showLoading = showLoading;
 
     // ✅ OPTIONAL: Display user role badge in header
     function displayUserRoleBadge(roleData) {
@@ -6512,6 +6617,58 @@
       header.appendChild(badge);
     }
 
+function showAlert(message, type = "info") {
+  /**
+   * Show alert message to user
+   * type: "success", "error", "info", "warning"
+   */
+  
+  const alertClass = {
+    "success": "alert-success",
+    "error": "alert-danger",
+    "info": "alert-info",
+    "warning": "alert-warning"
+  };
+  
+  const className = alertClass[type] || "alert-info";
+  const bgColor = {
+    "success": "#d4edda",
+    "error": "#f8d7da",
+    "info": "#d1ecf1",
+    "warning": "#fff3cd"
+  };
+  
+  // Create alert element
+  const alertDiv = document.createElement("div");
+  alertDiv.className = `alert ${className}`;
+  alertDiv.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 4px;
+    background-color: ${bgColor[type]};
+    color: #333;
+    z-index: 9999;
+    max-width: 400px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    animation: slideIn 0.3s ease-in-out;
+  `;
+  
+  alertDiv.innerHTML = `
+    <div style="white-space: pre-wrap; word-break: break-word;">
+      ${message}
+    </div>
+  `;
+  
+  document.body.appendChild(alertDiv);
+  
+  // Auto remove after 5 seconds
+  setTimeout(() => {
+    alertDiv.style.animation = "slideOut 0.3s ease-in-out";
+    setTimeout(() => alertDiv.remove(), 300);
+  }, 5000);
+}
 
     function showEmployeeModal(employeeId) {
         const employee = allPendingEmployees.find(e => e.employeeId === employeeId);
@@ -6830,63 +6987,77 @@
     window.editEntryAmount = editEntryAmount;
 
     // ✅ NEW: Edit Total Amount for entire month
-    async function editTotalAmount(employeeId, monthRange, currentTotal) {
-        const newTotal = await showAmountEditPopup(currentTotal);
-        
-        if (newTotal === null || newTotal === currentTotal) {
-            return;
-        }
-        
-        if (newTotal <= 0) {
-            showErrorPopup('Total amount must be greater than 0');
-            return;
-        }
-        
-        const token = localStorage.getItem('access_token');
-        
-        try {
-            console.log(`💰 Updating total amount for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
-            
-            const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    employee_id: employeeId,
-                    month_range: monthRange,
-                    new_total: newTotal
-                })
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                showSuccessPopup(`Total amount updated successfully!\n\nOld Total: ₹${currentTotal}\nNew Total: ₹${newTotal}\nEntries adjusted: ${result.entries_updated}`);
-                
-                // Reload the current section
-                const empCode = localStorage.getItem('employee_code');
-                const navPending = document.getElementById('navPending');
-                const navApprove = document.getElementById('navApprove');
-                const navReject = document.getElementById('navReject');
-                
-                if (navPending && navPending.classList.contains('active')) {
-                    await loadPendingData(token, empCode);
-                } else if (navApprove && navApprove.classList.contains('active')) {
-                    await loadApproveData(token, empCode);
-                } else if (navReject && navReject.classList.contains('active')) {
-                    await loadRejectData(token, empCode);
-                }
-            } else {
-                const errorData = await response.json();
-                showErrorPopup(errorData.detail || 'Failed to update total amount');
-            }
-            
-        } catch (error) {
-            console.error('Error updating total amount:', error);
-            showErrorPopup('Network error');
-        }
+   async function editTotalAmount(employeeId, monthRange, currentTotal) {
+  // ✅ Check permission
+  if (!canUserEditAmount()) {
+    showAlert("Only managers, partners, and HR can edit amounts", "error");
+    return;
+  }
+  
+  console.log(`📝 Editing total for: ${employeeId}`);
+  
+  // Get new amount
+  const newTotal = prompt(
+    `Edit Total Amount for ${monthRange}\n\nCurrent Total: ₹${currentTotal}`,
+    currentTotal
+  );
+  
+  if (newTotal === null || newTotal === '' || isNaN(newTotal)) {
+    return;
+  }
+  
+  const amount = parseFloat(newTotal);
+  
+  if (amount <= 0) {
+    showAlert("Amount must be greater than 0", "error");
+    return;
+  }
+  
+  try {
+    showLoading(true);
+    
+    console.log(`💰 API call: /api/ope/manager/edit-total-amount`);
+    
+    const response = await fetch("/api/ope/manager/edit-total-amount", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+      },
+      body: JSON.stringify({
+        employee_id: employeeId,
+        month_range: monthRange,
+        new_total: amount
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      console.error("❌ API Error:", error);
+      throw new Error(error.detail || "Failed to update total amount");
     }
+    
+    const result = await response.json();
+    console.log("✅ Success:", result);
+    
+    // ✅ Show success
+    const roleName = result.updated_by_role || "User";
+    showAlert(
+      `✅ Total amount updated by ${roleName}!\n\nOld: ₹${result.old_total}\nNew: ₹${result.new_total}\nEntries Updated: ${result.entries_updated}`,
+      "success"
+    );
+    
+    // ✅ REFRESH DATA
+    loadHRPendingEmployees();  // ← YEH SAHI HAI
+    
+  } catch (error) {
+    console.error("❌ Error:", error);
+    showAlert(`❌ ${error.message}`, "error");
+  } finally {
+    showLoading(false);
+  }
+}
+
 
     // Make it global
     window.editTotalAmount = editTotalAmount;
@@ -8485,68 +8656,107 @@
         document.getElementById('pendingTableSection').style.display = 'block';
     }
 
-    // OPE BANNER Function
+async function loadHRPendingEmployees() {
+  /**
+   * Load pending employees for HR approval section
+   * Same as loadPendingData but with different name for compatibility
+   */
+  const token = localStorage.getItem('access_token');
+  const empCode = localStorage.getItem('employee_code');
+  
+  if (!token || !empCode) {
+    console.error('❌ No token or empCode');
+    return;
+  }
+  
+  try {
+    console.log("🔍 Loading HR pending employees...");
+    
+    document.getElementById('pendingLoadingDiv').style.display = 'block';
+    document.getElementById('pendingTableSection').style.display = 'none';
+    document.getElementById('pendingNoDataDiv').style.display = 'none';
 
-    // Hide entry form and show banner
-function showOPECycleBanner() {
-    const entryFormCard = document.querySelector('.entry-form-card');
-    const monthSelectionCard = document.querySelector('.month-selection-card');
+    // ✅ Check user role
+    const isHR = (empCode.trim().toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    const isManager = localStorage.getItem("is_manager") === "true";
     
-    if (entryFormCard) {
-        entryFormCard.style.display = 'none';
+    let endpoint = "";
+    
+    if (isHR) {
+      endpoint = `${API_URL}/api/ope/manager/pending`;
+    } else if (isPartner) {
+      endpoint = `${API_URL}/api/ope/partner/pending`;
+    } else if (isManager) {
+      endpoint = `${API_URL}/api/ope/manager/pending`;
+    } else {
+      console.error("❌ User has no approval permissions");
+      showPendingNoData();
+      return;
     }
     
-    if (monthSelectionCard) {
-        monthSelectionCard.style.display = 'none';
+    console.log("📡 Fetching from:", endpoint);
+    
+    const response = await fetch(endpoint, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch pending entries');
+    }
+
+    const data = await response.json();
+    console.log("✅ API Response:", data);
+    
+    const pendingEmployees = data.employees || [];
+    
+    console.log("✅ Pending employees:", pendingEmployees.length);
+    
+    // Flatten all entries
+    allPendingData = [];
+    
+    pendingEmployees.forEach(emp => {
+      console.log(`📦 Processing employee: ${emp.employeeId} - ${emp.employeeName}`);
+      console.log(`   Entries: ${emp.entries ? emp.entries.length : 0}`);
+      
+      if (emp.entries && Array.isArray(emp.entries)) {
+        emp.entries.forEach(entry => {
+          allPendingData.push({
+            ...entry,
+            employee_id: emp.employeeId,
+            employee_name: emp.employeeName,
+            designation: emp.designation,
+            department: emp.department,
+            reportingManager: emp.reportingManager,
+            payroll_month: emp.payroll_month,
+            total_amount: emp.total_amount,
+            limit: emp.limit,
+            total_levels: emp.total_levels,
+            current_level: emp.current_level,
+            L1_approver: emp.L1_approver,
+            L1_approved_date: emp.L1_approved_date,
+            submission_date: emp.submission_date
+          });
+        });
+      }
+    });
+    
+    console.log(`📊 Total pending entries: ${allPendingData.length}`);
+    
+    if (allPendingData.length === 0) {
+      showPendingNoData();
+    } else {
+      populatePendingMonthFilter();
+      displayPendingEmployeeTable(allPendingData);
     }
     
-    // Check if banner already exists
-    if (!document.querySelector('.ope-cycle-banner')) {
-        const banner = document.createElement('div');
-        banner.className = 'ope-cycle-banner';
-        banner.innerHTML = `
-            <div class="banner-icon">
-                <i class="fas fa-rocket"></i>
-            </div>
-            <h2>New OPE Cycle Release Soon!</h2>
-            <p>
-                We're preparing the next OPE cycle for you.<br>
-                The new entry form will be available shortly.
-            </p>
-            <div class="coming-soon-badge">
-                <i class="fas fa-clock"></i> Coming Soon
-            </div>
-        `;
-        
-        // Insert banner after employee details card
-        const employeeCard = document.querySelector('.employee-details-card');
-        if (employeeCard && employeeCard.parentNode) {
-            employeeCard.parentNode.insertBefore(banner, employeeCard.nextSibling);
-        }
-    }
+  } catch (error) {
+    console.error('❌ Error:', error);
+    document.getElementById('pendingLoadingDiv').style.display = 'none';
+    showPendingNoData();
+  }
 }
 
-// Call this function when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    showOPECycleBanner();
-    // ... rest of your existing code
-});
+// Make it globally accessible
+window.loadHRPendingEmployees = loadHRPendingEmployees;
 
-// Function to hide banner and show form again
-function hideOPECycleBanner() {
-    const banner = document.querySelector('.ope-cycle-banner');
-    const entryFormCard = document.querySelector('.entry-form-card');
-    const monthSelectionCard = document.querySelector('.month-selection-card');
-    
-    if (banner) {
-        banner.remove();
-    }
-    
-    if (entryFormCard) {
-        entryFormCard.style.display = 'block';
-    }
-    
-    if (monthSelectionCard) {
-        monthSelectionCard.style.display = 'block';
-    }
-}
