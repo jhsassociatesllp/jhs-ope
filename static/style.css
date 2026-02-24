@@ -449,6 +449,8 @@ body {
     padding: 20px 25px;
     border-bottom: 1px solid var(--border-color);
     background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    display: flex;
+    justify-content: space-between;
 }
 
 .card-header h2 {
@@ -1609,5 +1611,38 @@ body {
     
     .status-info {
         font-size: 9px;
+    }
+}
+
+/* Admin Button and Dashboard */
+
+.nav-item.admin-panel-btn {
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    background: rgba(251, 191, 36, 0.06);
+}
+.admin-panel-btn{
+    width: 28%;
+}
+
+.nav-item.admin-panel-btn:hover {
+    background: rgba(251, 191, 36, 0.15);
+    color: #f59e0b;
+    transform: translateX(5px);
+    border-color: rgba(251, 191, 36, 0.4);
+}
+
+#adminSwitchModal .modal-content {
+    animation: popIn 0.3s ease;
+}
+
+@keyframes popIn {
+    from {
+        transform: scale(0.88);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
     }
 }

@@ -15,7 +15,7 @@ from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Request
 from starlette.requests import Request
 
-# Load env vars
+# Load env vars  
 load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
@@ -171,7 +171,328 @@ async def read_current_user(current_user=Depends(get_current_user)):
         "created_at": current_user.get("created_at"),
     }
 
+# ── CHECK ADMIN ──────────────────────────────────────────────
+@app.get("/api/check-admin/{employee_code}")
+async def check_if_admin(employee_code: str, current_user=Depends(get_current_user)):
+    """
+    Check if the logged-in employee exists in the Admin collection's employee_codes array.
+    """
+    try:
+        emp_code = employee_code.strip().upper()
 
+        # Only allow users to check their own role
+        if current_user["employee_code"].strip().upper() != emp_code:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        admin_doc = await db["Admin"].find_one(
+            {"employee_codes": {"$in": [emp_code]}}
+        )
+
+        is_admin = admin_doc is not None
+        print(f"{'✅' if is_admin else '❌'} Admin check for {emp_code}: {is_admin}")
+
+        return {
+            "employee_code": emp_code,
+            "is_admin": is_admin
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"❌ Error checking admin: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── ADMIN DASHBOARD DATA ─────────────────────────────────────
+@app.get("/api/admin/dashboard")
+async def admin_dashboard(
+    payroll_month: Optional[str] = None,
+    emp_name: Optional[str] = None,
+    emp_id: Optional[str] = None,
+    current_user=Depends(get_current_user)
+):
+    try:
+        admin_code = current_user["employee_code"].strip().upper()
+
+        # Verify admin
+        admin_doc = await db["Admin"].find_one({"employee_codes": {"$in": [admin_code]}})
+        if not admin_doc:
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # ── BUILD MATCH STAGE (Status collection) ────────────
+        match_stage: dict = {}
+        if emp_name:
+            match_stage["employeeName"] = {"$regex": emp_name, "$options": "i"}
+        if emp_id:
+            match_stage["employeeId"] = {"$regex": emp_id, "$options": "i"}
+
+        # ── BASE PIPELINE (unwind approval_status) ───────────
+        base_pipeline = [
+            {"$match": match_stage} if match_stage else {"$match": {}},
+            {"$unwind": "$approval_status"},
+        ]
+        if payroll_month:
+            base_pipeline.append(
+                {"$match": {"approval_status.payroll_month": payroll_month}}
+            )
+
+        # ── KPI PIPELINE ─────────────────────────────────────
+        kpi_pipeline = [
+            *base_pipeline,
+            {
+                "$group": {
+                    "_id": None,
+                    "unique_employees": {"$addToSet": "$employeeId"},
+                    "total_amount":     {"$sum": "$approval_status.total_amount"},
+                    "count_3_level": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$approval_status.total_levels", 3]}, 1, 0
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "total_employees":      {"$size": "$unique_employees"},
+                    "total_amount":         {"$round": ["$total_amount", 2]},
+                    "total_amount_greater": "$count_3_level"
+                }
+            }
+        ]
+
+        kpi_raw = await db["Status"].aggregate(kpi_pipeline).to_list(length=1)
+        kpis = {"total_employees": 0, "total_amount": 0.0, "total_amount_greater": 0}
+        if kpi_raw:
+            kpis = kpi_raw[0]
+
+        # ── PAYROLL DIFFERENCE KPI ────────────────────────────
+        # Compare current month vs previous month total claims
+        all_months_diff_pipeline = [
+            {"$unwind": "$approval_status"},
+            {
+                "$group": {
+                    "_id":   "$approval_status.payroll_month",
+                    "total": {"$sum": "$approval_status.total_amount"}
+                }
+            },
+            {"$sort": {"_id": -1}}   # latest month first
+        ]
+        months_diff_raw = await db["Status"].aggregate(all_months_diff_pipeline).to_list(length=None)
+
+        payroll_diff_kpi = {
+            "current_month":   None,
+            "current_amount":  0.0,
+            "previous_month":  None,
+            "previous_amount": 0.0,
+            "difference":      0.0,
+            "direction":       "same"   # "up", "down", "same"
+        }
+
+        if payroll_month:
+            # Filter selected: compare selected month vs previous month in DB
+            all_sorted_months = [m["_id"] for m in months_diff_raw if m.get("_id")]
+            if payroll_month in all_sorted_months:
+                idx           = all_sorted_months.index(payroll_month)
+                selected_amt  = next(
+                    (m["total"] for m in months_diff_raw if m["_id"] == payroll_month), 0.0
+                )
+                prev_month    = all_sorted_months[idx + 1] if idx + 1 < len(all_sorted_months) else None
+                prev_amt      = next(
+                    (m["total"] for m in months_diff_raw if m["_id"] == prev_month), 0.0
+                ) if prev_month else 0.0
+
+                diff = round(selected_amt - prev_amt, 2)
+                payroll_diff_kpi = {
+                    "current_month":   payroll_month,
+                    "current_amount":  round(selected_amt, 2),
+                    "previous_month":  prev_month,
+                    "previous_amount": round(prev_amt, 2),
+                    "difference":      round(abs(diff), 2),
+                    "direction":       "up" if diff > 0 else ("down" if diff < 0 else "same")
+                }
+        else:
+            # No filter: compare latest 2 months in DB
+            if len(months_diff_raw) >= 2:
+                curr = months_diff_raw[0]
+                prev = months_diff_raw[1]
+                diff = round(curr["total"] - prev["total"], 2)
+                payroll_diff_kpi = {
+                    "current_month":   curr["_id"],
+                    "current_amount":  round(curr["total"], 2),
+                    "previous_month":  prev["_id"],
+                    "previous_amount": round(prev["total"], 2),
+                    "difference":      round(abs(diff), 2),
+                    "direction":       "up" if diff > 0 else ("down" if diff < 0 else "same")
+                }
+            elif len(months_diff_raw) == 1:
+                curr = months_diff_raw[0]
+                payroll_diff_kpi["current_month"]  = curr["_id"]
+                payroll_diff_kpi["current_amount"] = round(curr["total"], 2)
+
+        # ── PARTNER-WISE CHART (from OPE_data.partner directly) ──
+        # OPE_data has `partner` field with actual name e.g. "Huzefa Kaka"
+        ope_match: dict = {}
+        if emp_name:
+            ope_match["employeeName"] = {"$regex": emp_name, "$options": "i"}
+        if emp_id:
+            ope_match["employeeId"] = {"$regex": emp_id, "$options": "i"}
+
+        partner_pipeline = []
+        if ope_match:
+            partner_pipeline.append({"$match": ope_match})
+
+        partner_pipeline += [
+            {"$unwind": "$Data"},
+            {"$addFields": {"dataKV": {"$objectToArray": "$Data"}}},
+            {"$unwind": "$dataKV"},
+        ]
+        if payroll_month:
+            partner_pipeline.append({"$match": {"dataKV.k": payroll_month}})
+
+        partner_pipeline += [
+            {"$unwind": "$dataKV.v"},
+            # First group: per employee per partner (avoid double counting)
+            {
+                "$group": {
+                    "_id": {
+                        "partner":    "$partner",
+                        "employeeId": "$employeeId"
+                    },
+                    "total": {"$sum": "$dataKV.v.amount"}
+                }
+            },
+            # Then group by partner only
+            {
+                "$group": {
+                    "_id":   "$_id.partner",
+                    "total": {"$sum": "$total"}
+                }
+            },
+            {"$match": {"_id": {"$nin": [None, "", "null"]}}},
+            {"$sort":  {"total": -1}}
+            # No $limit — show ALL partners
+        ]
+
+        partner_raw  = await db["OPE_data"].aggregate(partner_pipeline).to_list(length=None)
+        partner_data = [
+            {"_id": d.get("_id") or "Unknown", "total": round(d.get("total", 0), 2)}
+            for d in partner_raw
+        ]
+
+        # ── PAYROLL-WISE CHART (from Status) ─────────────────
+        payroll_pipeline = [
+            *base_pipeline,
+            {
+                "$group": {
+                    "_id":   "$approval_status.payroll_month",
+                    "total": {"$sum": "$approval_status.total_amount"}
+                }
+            },
+            {"$sort": {"_id": 1}}
+        ]
+        payroll_data = await db["Status"].aggregate(payroll_pipeline).to_list(length=None)
+        payroll_data = [
+            {"_id": d.get("_id") or "Unknown", "total": round(d.get("total", 0), 2)}
+            for d in payroll_data
+        ]
+
+        # ── TOP 10 CLIENT-WISE CHART (from OPE_data) ─────────
+        client_pipeline_stages = []
+        if ope_match:
+            client_pipeline_stages.append({"$match": ope_match})
+
+        client_pipeline_stages += [
+            {"$unwind": "$Data"},
+            {"$addFields": {"dataKV": {"$objectToArray": "$Data"}}},
+            {"$unwind": "$dataKV"},
+        ]
+        if payroll_month:
+            client_pipeline_stages.append({"$match": {"dataKV.k": payroll_month}})
+
+        client_pipeline_stages += [
+            {"$unwind": "$dataKV.v"},
+            {
+                "$group": {
+                    "_id":   "$dataKV.v.client",
+                    "total": {"$sum": "$dataKV.v.amount"}
+                }
+            },
+            {"$match": {"_id": {"$nin": [None, "", "null", "N/A"]}}},
+            {"$sort":  {"total": -1}},
+            {"$limit": 10}
+        ]
+
+        client_raw  = await db["OPE_data"].aggregate(client_pipeline_stages).to_list(length=None)
+        client_data = [
+            {"_id": d.get("_id") or "Unknown", "total": round(d.get("total", 0), 2)}
+            for d in client_raw
+        ]
+
+        # ── TABLE (from Status) ───────────────────────────────
+        table_pipeline = [
+            *base_pipeline,
+            {
+                "$project": {
+                    "_id": 0,
+                    "employee_id":    "$employeeId",
+                    "employee_name":  "$employeeName",
+                    "payroll_month":  "$approval_status.payroll_month",
+                    "total_amount":   "$approval_status.total_amount",
+                    "limit":          "$approval_status.limit",
+                    "overall_status": "$approval_status.overall_status",
+                    "current_level":  "$approval_status.current_level",
+                    "total_levels":   "$approval_status.total_levels",
+                    "ope_label":      "$approval_status.ope_label"
+                }
+            },
+            {"$sort": {"payroll_month": 1, "employee_name": 1}}
+        ]
+        table_data = await db["Status"].aggregate(table_pipeline).to_list(length=None)
+        for row in table_data:
+            if "total_amount" in row:
+                row["total_amount"] = round(row["total_amount"], 2)
+
+        # ── ALL PAYROLL MONTHS (for dropdown) ─────────────────
+        months_pipeline = [
+            {"$unwind": "$approval_status"},
+            {"$group":  {"_id": "$approval_status.payroll_month"}},
+            {"$sort":   {"_id": 1}}
+        ]
+        months_raw = await db["Status"].aggregate(months_pipeline).to_list(length=None)
+        all_months = [m["_id"] for m in months_raw if m.get("_id")]
+
+        print(f"✅ Admin dashboard: {kpis['total_employees']} employees, "
+              f"₹{kpis['total_amount']} total, "
+              f"{kpis['total_amount_greater']} entries > limit, "
+              f"{len(client_data)} clients, "
+              f"{len(partner_data)} partners, {len(payroll_data)} months, "
+              f"diff: {payroll_diff_kpi['direction']} ₹{payroll_diff_kpi['difference']}")
+
+        return {
+            "kpis": {
+                **kpis,
+                "payroll_diff": payroll_diff_kpi    # current vs previous month difference
+            },
+            "charts": {
+                "partner_wise": partner_data,
+                "payroll_wise": payroll_data,
+                "client_wise":  client_data,
+            },
+            "table":              table_data,
+            "all_payroll_months": all_months
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"❌ Admin dashboard error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # Employee Details Fetch from Backend
 @app.get("/api/employee/{employee_code}")
 async def get_employee_details(employee_code: str, current_user=Depends(get_current_user)):
@@ -3460,5 +3781,415 @@ async def get_hr_rejected_employees(current_user=Depends(get_current_user)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
         
+
+@app.get("/api/admin/export/client-wise")
+async def export_client_wise_excel(
+    payroll_month: Optional[str] = None,
+    current_user=Depends(get_current_user)
+):
+    try:
+        admin_code = current_user["employee_code"].strip().upper()
+        admin_doc = await db["Admin"].find_one({"employee_codes": {"$in": [admin_code]}})
+        if not admin_doc:
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # ── AGGREGATE: client → employees → amounts ──────────
+        pipeline = [
+            {"$unwind": "$Data"},
+            {"$addFields": {"dataKV": {"$objectToArray": "$Data"}}},
+            {"$unwind": "$dataKV"},
+        ]
+        if payroll_month:
+            pipeline.append({"$match": {"dataKV.k": payroll_month}})
+
+        pipeline += [
+            {"$unwind": "$dataKV.v"},
+            {"$match": {"dataKV.v.client": {"$nin": [None, "", "null", "N/A"]}}},
+            {
+                "$group": {
+                    "_id": {
+                        "client":     "$dataKV.v.client",
+                        "employeeId": "$employeeId",
+                        "empName":    "$employeeName"
+                    },
+                    "total_amount": {"$sum": "$dataKV.v.amount"}
+                }
+            },
+            {
+                "$group": {
+                    "_id":   "$_id.client",
+                    "total_claim": {"$sum": "$total_amount"},
+                    "employees": {
+                        "$push": {
+                            "employee_id":   "$_id.employeeId",
+                            "employee_name": "$_id.empName",
+                            "amount":        "$total_amount"
+                        }
+                    }
+                }
+            },
+            {"$sort": {"total_claim": -1}}
+        ]
+
+        raw = await db["OPE_data"].aggregate(pipeline).to_list(length=None)
+
+        if not raw:
+            raise HTTPException(status_code=404, detail="No data found")
+
+        # ── BUILD EXCEL WITH openpyxl ─────────────────────────
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import (
+            Font, PatternFill, Alignment, Border, Side
+        )
+        from openpyxl.utils import get_column_letter
+
+        wb = Workbook()
+
+        # ── SHEET 1: Summary ──────────────────────────────────
+        ws_summary = wb.active
+        ws_summary.title = "Client Summary"
+
+        # Header fill colors
+        header_fill   = PatternFill("solid", start_color="F59E0B", end_color="F59E0B")
+        subhead_fill  = PatternFill("solid", start_color="1E293B", end_color="1E293B")
+        alt_fill      = PatternFill("solid", start_color="FFFBEB", end_color="FFFBEB")
+        total_fill    = PatternFill("solid", start_color="D1FAE5", end_color="D1FAE5")
+        thin_border   = Border(
+            left=Side(style="thin", color="E2E8F0"),
+            right=Side(style="thin", color="E2E8F0"),
+            top=Side(style="thin", color="E2E8F0"),
+            bottom=Side(style="thin", color="E2E8F0")
+        )
+
+        # Title row
+        ws_summary.merge_cells("A1:E1")
+        title_cell = ws_summary["A1"]
+        title_cell.value = f"Client-wise OPE Claims Report" + (f" — {payroll_month}" if payroll_month else " — All Months")
+        title_cell.font      = Font(bold=True, size=14, color="FFFFFF", name="Arial")
+        title_cell.fill      = subhead_fill
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws_summary.row_dimensions[1].height = 30
+
+        # Column headers
+        summary_headers = ["#", "Client Name", "Total Employees", "Total Claim (₹)", "Employee IDs"]
+        for col, h in enumerate(summary_headers, 1):
+            cell = ws_summary.cell(row=2, column=col, value=h)
+            cell.font      = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+            cell.fill      = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border    = thin_border
+        ws_summary.row_dimensions[2].height = 22
+
+        # Data rows
+        for idx, client_doc in enumerate(raw, 1):
+            row   = idx + 2
+            emps  = client_doc.get("employees", [])
+            emp_ids = ", ".join(sorted(set(e["employee_id"] for e in emps)))
+
+            fill = alt_fill if idx % 2 == 0 else PatternFill("solid", start_color="FFFFFF", end_color="FFFFFF")
+
+            values = [
+                idx,
+                client_doc["_id"],
+                len(emps),
+                round(client_doc["total_claim"], 2),
+                emp_ids
+            ]
+            for col, val in enumerate(values, 1):
+                cell = ws_summary.cell(row=row, column=col, value=val)
+                cell.font      = Font(name="Arial", size=10)
+                cell.fill      = fill
+                cell.border    = thin_border
+                cell.alignment = Alignment(
+                    horizontal="center" if col in [1, 3] else "left",
+                    vertical="center",
+                    wrap_text=(col == 5)
+                )
+
+        # Total row
+        total_row = len(raw) + 3
+        ws_summary.cell(total_row, 1, "TOTAL").font = Font(bold=True, name="Arial")
+        ws_summary.cell(total_row, 1).fill = total_fill
+        ws_summary.cell(total_row, 2, "All Clients").font = Font(bold=True, name="Arial")
+        ws_summary.cell(total_row, 2).fill = total_fill
+        total_emp = sum(len(d["employees"]) for d in raw)
+        ws_summary.cell(total_row, 3, total_emp).font = Font(bold=True, name="Arial")
+        ws_summary.cell(total_row, 3).fill = total_fill
+        ws_summary.cell(total_row, 3).alignment = Alignment(horizontal="center")
+        ws_summary.cell(total_row, 4, f'=SUM(D3:D{total_row-1})').font = Font(bold=True, name="Arial")
+        ws_summary.cell(total_row, 4).fill = total_fill
+        for c in range(1, 6):
+            ws_summary.cell(total_row, c).border = thin_border
+
+        # Column widths
+        ws_summary.column_dimensions["A"].width = 6
+        ws_summary.column_dimensions["B"].width = 30
+        ws_summary.column_dimensions["C"].width = 18
+        ws_summary.column_dimensions["D"].width = 20
+        ws_summary.column_dimensions["E"].width = 60
+
+        # ── SHEET 2: Employee Detail ──────────────────────────
+        ws_detail = wb.create_sheet("Employee Detail")
+
+        ws_detail.merge_cells("A1:E1")
+        t2 = ws_detail["A1"]
+        t2.value = f"Employee-wise Detail per Client" + (f" — {payroll_month}" if payroll_month else " — All Months")
+        t2.font      = Font(bold=True, size=14, color="FFFFFF", name="Arial")
+        t2.fill      = subhead_fill
+        t2.alignment = Alignment(horizontal="center", vertical="center")
+        ws_detail.row_dimensions[1].height = 30
+
+        detail_headers = ["#", "Client Name", "Employee ID", "Employee Name", "Amount Claimed (₹)"]
+        for col, h in enumerate(detail_headers, 1):
+            cell = ws_detail.cell(row=2, column=col, value=h)
+            cell.font      = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+            cell.fill      = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border    = thin_border
+        ws_detail.row_dimensions[2].height = 22
+
+        detail_row = 3
+        sr_no = 1
+        for client_doc in raw:
+            client_name = client_doc["_id"]
+            employees   = sorted(client_doc["employees"], key=lambda x: x["employee_id"])
+            for emp in employees:
+                fill = alt_fill if sr_no % 2 == 0 else PatternFill("solid", start_color="FFFFFF", end_color="FFFFFF")
+                vals = [sr_no, client_name, emp["employee_id"], emp["employee_name"], round(emp["amount"], 2)]
+                for col, val in enumerate(vals, 1):
+                    cell = ws_detail.cell(row=detail_row, column=col, value=val)
+                    cell.font      = Font(name="Arial", size=10)
+                    cell.fill      = fill
+                    cell.border    = thin_border
+                    cell.alignment = Alignment(horizontal="center" if col in [1, 3] else "left", vertical="center")
+                detail_row += 1
+                sr_no      += 1
+
+        ws_detail.column_dimensions["A"].width = 6
+        ws_detail.column_dimensions["B"].width = 30
+        ws_detail.column_dimensions["C"].width = 14
+        ws_detail.column_dimensions["D"].width = 28
+        ws_detail.column_dimensions["E"].width = 22
+
+        # ── STREAM RESPONSE ──────────────────────────────────
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        from fastapi.responses import StreamingResponse
+        filename = f"client_wise_claims{'_' + payroll_month.replace(' ', '_').replace('/', '-') if payroll_month else ''}.xlsx"
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"❌ Export error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/admin/export/partner-wise")
+async def export_partner_wise_excel(
+    payroll_month: Optional[str] = None,
+    current_user=Depends(get_current_user)
+):
+    try:
+        admin_code = current_user["employee_code"].strip().upper()
+        admin_doc = await db["Admin"].find_one({"employee_codes": {"$in": [admin_code]}})
+        if not admin_doc:
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        # ── AGGREGATE: partner → employees → amounts ──────────
+        pipeline = [
+            {"$unwind": "$Data"},
+            {"$addFields": {"dataKV": {"$objectToArray": "$Data"}}},
+            {"$unwind": "$dataKV"},
+        ]
+        if payroll_month:
+            pipeline.append({"$match": {"dataKV.k": payroll_month}})
+
+        pipeline += [
+            {"$unwind": "$dataKV.v"},
+            {"$match": {"partner": {"$nin": [None, "", "null"]}}},
+            {
+                "$group": {
+                    "_id": {
+                        "partner":    "$partner",
+                        "employeeId": "$employeeId",
+                        "empName":    "$employeeName"
+                    },
+                    "total_amount": {"$sum": "$dataKV.v.amount"}
+                }
+            },
+            {
+                "$group": {
+                    "_id":         "$_id.partner",
+                    "total_claim": {"$sum": "$total_amount"},
+                    "employees": {
+                        "$push": {
+                            "employee_id":   "$_id.employeeId",
+                            "employee_name": "$_id.empName",
+                            "amount":        "$total_amount"
+                        }
+                    }
+                }
+            },
+            {"$sort": {"total_claim": -1}}
+        ]
+
+        raw = await db["OPE_data"].aggregate(pipeline).to_list(length=None)
+
+        if not raw:
+            raise HTTPException(status_code=404, detail="No data found")
+
+        # ── BUILD EXCEL ───────────────────────────────────────
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = Workbook()
+
+        header_fill  = PatternFill("solid", start_color="F59E0B", end_color="F59E0B")
+        subhead_fill = PatternFill("solid", start_color="1E293B", end_color="1E293B")
+        alt_fill     = PatternFill("solid", start_color="FFFBEB", end_color="FFFBEB")
+        white_fill   = PatternFill("solid", start_color="FFFFFF", end_color="FFFFFF")
+        total_fill   = PatternFill("solid", start_color="D1FAE5", end_color="D1FAE5")
+        thin_border  = Border(
+            left=Side(style="thin", color="E2E8F0"),
+            right=Side(style="thin", color="E2E8F0"),
+            top=Side(style="thin", color="E2E8F0"),
+            bottom=Side(style="thin", color="E2E8F0")
+        )
+
+        # ── SHEET 1: Partner Summary ──────────────────────────
+        ws1 = wb.active
+        ws1.title = "Partner Summary"
+
+        ws1.merge_cells("A1:E1")
+        t = ws1["A1"]
+        t.value      = "Partner-wise OPE Claims Report" + (f" — {payroll_month}" if payroll_month else " — All Months")
+        t.font       = Font(bold=True, size=14, color="FFFFFF", name="Arial")
+        t.fill       = subhead_fill
+        t.alignment  = Alignment(horizontal="center", vertical="center")
+        ws1.row_dimensions[1].height = 30
+
+        headers = ["#", "Partner Name", "Total Employees", "Total Claim (₹)", "Employee IDs"]
+        for col, h in enumerate(headers, 1):
+            cell = ws1.cell(row=2, column=col, value=h)
+            cell.font      = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+            cell.fill      = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border    = thin_border
+        ws1.row_dimensions[2].height = 22
+
+        for idx, doc in enumerate(raw, 1):
+            row     = idx + 2
+            emps    = doc.get("employees", [])
+            emp_ids = ", ".join(sorted(set(e["employee_id"] for e in emps)))
+            fill    = alt_fill if idx % 2 == 0 else white_fill
+
+            vals = [idx, doc["_id"], len(emps), round(doc["total_claim"], 2), emp_ids]
+            for col, val in enumerate(vals, 1):
+                cell = ws1.cell(row=row, column=col, value=val)
+                cell.font      = Font(name="Arial", size=10)
+                cell.fill      = fill
+                cell.border    = thin_border
+                cell.alignment = Alignment(
+                    horizontal="center" if col in [1, 3] else "left",
+                    vertical="center",
+                    wrap_text=(col == 5)
+                )
+
+        # Total row
+        tr = len(raw) + 3
+        for c in range(1, 6):
+            ws1.cell(tr, c).fill   = total_fill
+            ws1.cell(tr, c).border = thin_border
+            ws1.cell(tr, c).font   = Font(bold=True, name="Arial")
+        ws1.cell(tr, 1, "TOTAL")
+        ws1.cell(tr, 2, "All Partners")
+        ws1.cell(tr, 3, sum(len(d["employees"]) for d in raw)).alignment = Alignment(horizontal="center")
+        ws1.cell(tr, 4, f"=SUM(D3:D{tr-1})")
+
+        ws1.column_dimensions["A"].width = 6
+        ws1.column_dimensions["B"].width = 30
+        ws1.column_dimensions["C"].width = 18
+        ws1.column_dimensions["D"].width = 20
+        ws1.column_dimensions["E"].width = 60
+
+        # ── SHEET 2: Employee Detail ──────────────────────────
+        ws2 = wb.create_sheet("Employee Detail")
+
+        ws2.merge_cells("A1:E1")
+        t2 = ws2["A1"]
+        t2.value     = "Employee-wise Detail per Partner" + (f" — {payroll_month}" if payroll_month else " — All Months")
+        t2.font      = Font(bold=True, size=14, color="FFFFFF", name="Arial")
+        t2.fill      = subhead_fill
+        t2.alignment = Alignment(horizontal="center", vertical="center")
+        ws2.row_dimensions[1].height = 30
+
+        det_headers = ["#", "Partner Name", "Employee ID", "Employee Name", "Amount Claimed (₹)"]
+        for col, h in enumerate(det_headers, 1):
+            cell = ws2.cell(row=2, column=col, value=h)
+            cell.font      = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+            cell.fill      = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border    = thin_border
+        ws2.row_dimensions[2].height = 22
+
+        det_row = 3
+        sr      = 1
+        for doc in raw:
+            for emp in sorted(doc["employees"], key=lambda x: x["employee_id"]):
+                fill = alt_fill if sr % 2 == 0 else white_fill
+                vals = [sr, doc["_id"], emp["employee_id"], emp["employee_name"], round(emp["amount"], 2)]
+                for col, val in enumerate(vals, 1):
+                    cell = ws2.cell(row=det_row, column=col, value=val)
+                    cell.font      = Font(name="Arial", size=10)
+                    cell.fill      = fill
+                    cell.border    = thin_border
+                    cell.alignment = Alignment(
+                        horizontal="center" if col in [1, 3] else "left",
+                        vertical="center"
+                    )
+                det_row += 1
+                sr      += 1
+
+        ws2.column_dimensions["A"].width = 6
+        ws2.column_dimensions["B"].width = 30
+        ws2.column_dimensions["C"].width = 14
+        ws2.column_dimensions["D"].width = 28
+        ws2.column_dimensions["E"].width = 22
+
+        # ── STREAM ────────────────────────────────────────────
+        import io
+        from fastapi.responses import StreamingResponse
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        fname = f"partner_wise_claims{'_' + payroll_month.replace(' ', '_').replace('/', '-') if payroll_month else ''}.xlsx"
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+        )
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"❌ Partner export error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ---------- Serve static HTML ----------
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

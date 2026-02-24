@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JHS OPE - Admin Control Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --sidebar-bg: #1e293b;
+            --sidebar-text: #e2e8f0;
+            --main-bg: #f1f5f9;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --purple: #8b5cf6;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--main-bg);
+            min-height: 100vh;
+            display: flex;
+            color: var(--text-primary);
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 10px rgba(0,0,0,.1);
+            z-index: 1000;
+        }
+        .sidebar-header {
+            padding: 28px 24px;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+        }
+        .sidebar .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        .sidebar .logo i { font-size: 30px; color: #fbbf24; }
+        .sidebar .logo h2 { font-size: 22px; font-weight: 800; color: white; }
+        .sidebar .subtitle { font-size: 12px; opacity: .65; margin-left: 42px; color: #fbbf24; }
+        .sidebar-nav { flex: 1; padding: 20px 0; overflow-y: auto; }
+        .sidebar-nav ul { list-style: none; }
+        .nav-item {
+            display: flex; align-items: center; gap: 14px;
+            padding: 13px 24px;
+            color: var(--sidebar-text);
+            cursor: pointer;
+            transition: all .3s;
+            font-size: 14px; font-weight: 500;
+            margin: 3px 12px; border-radius: 10px;
+        }
+        .nav-item i { font-size: 17px; width: 20px; text-align: center; }
+        .nav-item:hover { background: rgba(255,255,255,.1); transform: translateX(4px); }
+        .nav-item.active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            box-shadow: 0 4px 14px rgba(245,158,11,.35);
+        }
+        .nav-item.switch-btn {
+            color: #86efac;
+            margin-top: 6px;
+        }
+        .nav-item.switch-btn:hover { background: rgba(16,185,129,.12); color: #10b981; }
+        .nav-item.logout { color: #fca5a5; margin-top: 10px; }
+        .nav-item.logout:hover { background: rgba(239,68,68,.1); color: #ef4444; }
+        .sidebar-footer {
+            padding: 18px 20px;
+            border-top: 1px solid rgba(255,255,255,.1);
+        }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info i { font-size: 34px; color: #fbbf24; }
+        .user-name { font-size: 13px; font-weight: 600; color: white; }
+        .user-role { font-size: 11px; color: #fbbf24; opacity: .85; }
+
+        /* ── MAIN ── */
+        .main-content {
+            margin-left: 280px;
+            flex: 1;
+            padding: 28px 30px;
+            min-height: 100vh;
+        }
+        .page-header { 
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: space-between;
+         }
+        .page-header h1 {
+            font-size: 30px; font-weight: 700;
+            display: flex; align-items: center; gap: 12px;
+        }
+        .page-header h1 i { color: #f59e0b; }
+        .page-header p { font-size: 15px; color: var(--text-secondary); margin-top: 5px; }
+
+        /* ── FILTERS ── */
+        .filters-card {
+            background: white;
+            border-radius: 14px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            border: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
+        .filter-group label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; }
+        .filter-group select,
+        .filter-group input {
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 9px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: all .25s;
+            background: white;
+            color: var(--text-primary);
+        }
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245,158,11,.12);
+        }
+        .filter-btn {
+            padding: 10px 22px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            border: none;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .25s;
+            display: flex; align-items: center; gap: 7px;
+            height: 42px; align-self: flex-end;
+        }
+        .filter-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(245,158,11,.35); }
+        .reset-btn {
+            padding: 10px 18px;
+            background: var(--main-bg);
+            color: var(--text-secondary);
+            border: 2px solid var(--border);
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .25s;
+            height: 42px; align-self: flex-end;
+        }
+        .reset-btn:hover { background: #e2e8f0; color: var(--text-primary); }
+
+        /* ── KPI CARDS ── */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            transition: all .3s;
+        }
+        .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.1); }
+        .kpi-icon {
+            width: 58px; height: 58px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        .kpi-icon.blue { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+        .kpi-icon.green { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+        .kpi-icon.orange { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+        .kpi-info {}
+        .kpi-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+        .kpi-value { font-size: 28px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+        .kpi-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* ── CHARTS ── */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+            gap: 22px;
+            margin-bottom: 28px;
+        }
+        .chart-card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            border: 1px solid var(--border);
+        }
+        .chart-title {
+            font-size: 16px; font-weight: 600;
+            display: flex; align-items: center; gap: 9px;
+            margin-bottom: 18px;
+            color: var(--text-primary);
+        }
+        .chart-title i { color: #f59e0b; }
+        .chart-container { position: relative; height: 280px; }
+
+        /* ── TABLE ── */
+        .table-card {
+            background: white;
+            border-radius: 16px;
+            padding: 22px 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+        .table-title {
+            font-size: 16px; font-weight: 600;
+            display: flex; align-items: center; gap: 9px;
+            margin-bottom: 18px;
+        }
+        .table-title i { color: #f59e0b; }
+        .table-wrapper { overflow-x: auto; }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .data-table thead {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+        .data-table th {
+            padding: 13px 14px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        .data-table tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+        .data-table tbody tr:hover { background: #fffbeb; }
+        .data-table td { padding: 12px 14px; vertical-align: middle; }
+        .badge {
+            padding: 4px 11px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-orange { background: #fef3c7; color: #92400e; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+
+        /* ── LOADING ── */
+        .loading-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.35);
+            z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        .loading-overlay.active { display: flex; }
+        .spinner {
+            background: white;
+            border-radius: 16px;
+            padding: 32px 40px;
+            text-align: center;
+        }
+        .spinner i { font-size: 42px; color: #f59e0b; display: block; margin-bottom: 12px; }
+        .spinner p { font-size: 15px; color: var(--text-secondary); font-weight: 500; }
+
+        /* ── CONFIRM MODAL ── */
+        .confirm-modal {
+            display: none;
+            position: fixed; inset: 0;
+            z-index: 99999;
+            align-items: center; justify-content: center;
+        }
+        .confirm-modal.active { display: flex; }
+        .confirm-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.55);
+        }
+        .confirm-box {
+            position: relative;
+            background: white;
+            border-radius: 18px;
+            padding: 36px 40px;
+            max-width: 420px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,.25);
+            animation: popIn .3s ease;
+        }
+        @keyframes popIn {
+            from { transform: scale(.88); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .confirm-icon {
+            width: 64px; height: 64px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 18px;
+            font-size: 28px; color: white;
+        }
+        .confirm-box h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+        .confirm-box p { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.6; }
+        .confirm-btns { display: flex; gap: 12px; justify-content: center; }
+        .btn-cancel {
+            padding: 11px 26px;
+            background: var(--main-bg);
+            color: var(--text-secondary);
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all .25s;
+        }
+        .btn-cancel:hover { background: #e2e8f0; color: var(--text-primary); }
+        .btn-confirm {
+            padding: 11px 26px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all .25s;
+        }
+        .btn-confirm:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(245,158,11,.4); }
+        .kpi-icon.purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; }
+        /* ── NO DATA ── */
+        .no-data {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-secondary);
+        }
+        .no-data i { font-size: 52px; opacity: .35; display: block; margin-bottom: 12px; }
+        .no-data p { font-size: 16px; }
+
+        @media (max-width: 768px) {
+            .main-content { margin-left: 0; padding: 20px 14px; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: 1fr; }
+        }
+        .excel-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all .25s;
+    white-space: nowrap;
+    align-self: center;
+}
+.excel-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(22,163,74,.4);
+}
+.excel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+.partner-excel-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+}
+.partner-excel-btn:hover {
+    box-shadow: 0 4px 14px rgba(59,130,246,.4) !important;
+}
+.report-buttons{
+    display: flex;
+    gap: 5px;
+    padding-bottom: 10px;
+}
+    </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">
+            <i class="fas fa-shield-halved"></i>
+            <h2>Admin Panel</h2>
+        </div>
+        <div class="subtitle">Control Dashboard</div>
+    </div>
+    <nav class="sidebar-nav">
+        <ul>
+            <li class="nav-item active" id="navDashboard">
+                <i class="fas fa-chart-bar"></i>
+                <span>Analysis Dashboard</span>
+            </li>
+            
+            <li class="nav-item logout" id="btnAdminLogout">
+                <i class="fas fa-right-from-bracket"></i>
+                <span>Logout</span>
+            </li>
+        </ul>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <i class="fas fa-user-shield"></i>
+            <div>
+                <div class="user-name" id="adminUserName">Admin</div>
+                <div class="user-role">Administrator</div>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+    <div class="page-header">
+        <h1><i class="fas fa-chart-line"></i> OPE Analysis Dashboard</h1>
+        <li class="nav-item switch-btn" id="btnSwitchToPortal">
+                <i class="fas fa-arrow-left"></i>
+                <span>Switch to Onboarding Panel</span>
+            </li>
+    </div>
+    <!-- Report Buttons -->
+      <div class="report-buttons">
+        <button class="excel-btn" id="btnDownloadExcel" onclick="downloadClientExcel()">
+        <i class="fas fa-file-excel"></i> Download Client Report
+    </button>
+    <button class="excel-btn partner-excel-btn" id="btnDownloadPartnerExcel" onclick="downloadPartnerExcel()">
+            <i class="fas fa-file-excel"></i> Partner Report
+        </button>
+      </div>
+    <!-- FILTERS -->
+    <div class="filters-card">
+        <div class="filter-group">
+            <label><i class="fas fa-calendar"></i> Payroll Month</label>
+            <select id="filterPayrollMonth">
+                <option value="">All Months</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label><i class="fas fa-user"></i> Employee Name</label>
+            <input type="text" id="filterEmpName" placeholder="Search by name...">
+        </div>
+        <div class="filter-group">
+            <label><i class="fas fa-id-badge"></i> Employee ID</label>
+            <input type="text" id="filterEmpId" placeholder="Search by ID...">
+        </div>
+        <button class="filter-btn" onclick="applyFilters()">
+            <i class="fas fa-filter"></i> Apply Filters
+        </button>
+        <button class="reset-btn" onclick="resetFilters()">
+            <i class="fas fa-rotate-left"></i> Reset
+        </button>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fas fa-users"></i></div>
+            <div class="kpi-info">
+                <div class="kpi-label">Total Employees Filled</div>
+                <div class="kpi-value" id="kpiTotalEmployees">—</div>
+                <!-- <div class="kpi-sub">Distinct employees with claims</div> -->
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon green"><i class="fas fa-indian-rupee-sign"></i></div>
+            <div class="kpi-info">
+                <div class="kpi-label">Total Amount Claimed</div>
+                <div class="kpi-value" id="kpiTotalAmount">—</div>
+                <!-- <div class="kpi-sub">Sum of all approved claims</div> -->
+            </div>
+        </div>
+        <div class="kpi-card">
+        <div class="kpi-icon purple"><i class="fas fa-arrow-trend-up"></i></div>
+        <div class="kpi-info">
+            <div class="kpi-label">Amount &gt; Limit</div>
+            <div class="kpi-value" id="kpiAmountGreater">—</div>
+        </div>
+    </div>
+        
+    <div class="kpi-card" id="kpiDiffCard">
+        <div class="kpi-icon" id="kpiDiffIcon" style="background: linear-gradient(135deg,#10b981,#059669); color:white;">
+            <i class="fas fa-arrows-up-down" id="kpiDiffIconSymbol"></i>
+        </div>
+        <div class="kpi-info">
+            <div class="kpi-label">Payroll Difference</div>
+            <div class="kpi-value" id="kpiPayrollDiff">—</div>
+            <div class="kpi-sub" id="kpiPayrollDiffSub" style="font-size:11px; color:var(--text-secondary); margin-top:4px;">vs previous month</div>
+        </div>
+    </div>
+    </div>
+
+    <!-- CHARTS -->
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-handshake"></i> Partner-wise Total Claims</div>
+            <div class="chart-container">
+                <canvas id="chartPartner"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-calendar-days"></i> Payroll Month-wise Total Claims</div>
+            <div class="chart-container">
+                <canvas id="chartPayroll"></canvas>
+            </div>
+        </div>
+    </div>
+       <!-- TOP 10 CLIENT-WISE CHART -->
+<div style="margin-bottom: 28px;">
+    <div class="chart-card">
+        <div class="chart-title">
+            <i class="fas fa-building"></i> Top 10 Client-wise Total Claims
+            <span style="margin-left:auto; font-size:12px; color:var(--text-secondary); font-weight:400;">From OPE_data</span>
+        </div>
+        <div class="chart-container" style="height:340px;">
+            <canvas id="chartClient"></canvas>
+        </div>
+    </div>
+</div>
+    <!-- EMPLOYEE TABLE -->
+    <div class="table-card">
+        <div class="table-title"><i class="fas fa-table"></i> Employee-wise Claim Summary</div>
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Employee ID</th>
+                        <th>Employee Name</th>
+                        <th>Payroll Month</th>
+                        <th>Total Amount</th>
+                        <th>OPE Limit</th>
+                        <th>Status</th>
+                        <th>Approval Level</th>
+                    </tr>
+                </thead>
+                <tbody id="employeeTableBody">
+                    <tr>
+                        <td colspan="8">
+                            <div class="no-data">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p>Loading data...</p>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="paginationControls" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; flex-wrap:wrap; gap:10px;">
+        <span id="paginationInfo" style="font-size:13px; color:var(--text-secondary);"></span>
+        <div style="display:flex; gap:6px;">
+            <button onclick="changePage(-1)" id="btnPrevPage"
+                style="padding:7px 14px; border:2px solid var(--border); border-radius:8px; background:white; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-secondary);">
+                ← Prev
+            </button>
+            <span id="pageNumbers" style="display:flex; gap:4px;"></span>
+            <button onclick="changePage(1)" id="btnNextPage"
+                style="padding:7px 14px; border:2px solid var(--border); border-radius:8px; background:white; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-secondary);">
+                Next →
+            </button>
+        </div>
+    </div>
+    </div>
+</main>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner">
+        <i class="fas fa-circle-notch fa-spin"></i>
+        <p>Loading dashboard data...</p>
+    </div>
+</div>
+
+<!-- CONFIRM MODAL (Switch to Portal) -->
+<div class="confirm-modal" id="confirmModal">
+    <div class="confirm-overlay" onclick="closeConfirmModal()"></div>
+    <div class="confirm-box">
+        <div class="confirm-icon"><i class="fas fa-arrow-left"></i></div>
+        <h3>Switch to Onboarding Panel?</h3>
+        <p>Are you sure? Do you want to switch back to the Employee Portal?</p>
+        <div class="confirm-btns">
+            <button class="btn-cancel" onclick="closeConfirmModal()">Cancel</button>
+            <button class="btn-confirm" onclick="confirmSwitchToPortal()">Yes, Switch</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// const API_URL = 'http://127.0.0.1:8000';
+const API_URL = ' ';
+let chartPartner = null;
+let chartPayroll = null;
+let allTableData = [];
+let allPayrollMonths = [];
+let chartClient = null;   
+let currentPage = 1;
+const PAGE_SIZE  = 15;
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+    const token = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    const empName = localStorage.getItem('employee_name') || empCode;
+
+    if (!token) {
+        window.location.href = '/';
+        return;
+    }
+
+    document.getElementById('adminUserName').textContent = empName;
+    loadDashboard();
+
+    // Sidebar events
+    document.getElementById('btnSwitchToPortal').addEventListener('click', () => {
+        document.getElementById('confirmModal').classList.add('active');
+    });
+    document.getElementById('btnAdminLogout').addEventListener('click', () => {
+        localStorage.clear();
+        window.location.href = '/';
+    });
+
+    // Live search
+    document.getElementById('filterEmpName').addEventListener('input', debounce(applyFilters, 400));
+    document.getElementById('filterEmpId').addEventListener('input', debounce(applyFilters, 400));
+    document.getElementById('filterPayrollMonth').addEventListener('change', applyFilters);
+});
+
+function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// ── LOAD DASHBOARD ──
+async function loadDashboard(filters = {}) {
+    showLoading(true);
+    try {
+        const token = localStorage.getItem('access_token');
+        const params = new URLSearchParams();
+        if (filters.payroll_month) params.append('payroll_month', filters.payroll_month);
+        if (filters.emp_name) params.append('emp_name', filters.emp_name);
+        if (filters.emp_id) params.append('emp_id', filters.emp_id);
+
+        const res = await fetch(`${API_URL}/api/admin/dashboard?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            if (res.status === 401) { window.location.href = '/'; return; }
+            throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        renderKPIs(data.kpis);
+        renderCharts(data.charts);
+        renderTable(data.table);
+
+        // Populate month dropdown only once
+        if (allPayrollMonths.length === 0 && data.all_payroll_months) {
+            allPayrollMonths = data.all_payroll_months;
+            populateMonthDropdown(allPayrollMonths);
+        }
+
+    } catch (err) {
+        console.error('Dashboard load error:', err);
+        showError('Failed to load dashboard data. Please try again.');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ── KPIs ──
+function renderKPIs(kpis) {
+    // 1. Total employees
+    document.getElementById('kpiTotalEmployees').textContent =
+        (kpis.total_employees ?? 0).toLocaleString('en-IN');
+
+    // 2. Total amount
+    document.getElementById('kpiTotalAmount').textContent =
+        formatCurrency(kpis.total_amount ?? 0);
+
+    // 3. Amount > limit — COUNT (not currency)
+    document.getElementById('kpiAmountGreater').textContent =
+        (kpis.total_amount_greater ?? 0).toLocaleString('en-IN');
+
+    // 4. Payroll difference KPI
+    const diff = kpis.payroll_diff;
+    if (diff && (diff.current_month || diff.difference)) {
+        const icon    = document.getElementById('kpiDiffIcon');
+        const iconSym = document.getElementById('kpiDiffIconSymbol');
+        const val     = document.getElementById('kpiPayrollDiff');
+        const sub     = document.getElementById('kpiPayrollDiffSub');
+
+        val.textContent = formatCurrency(diff.difference ?? 0);
+
+        if (diff.direction === 'up') {
+            icon.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+            iconSym.className = 'fas fa-arrow-trend-up';
+            sub.textContent = `↑ More than ${diff.previous_month || 'prev month'}`;
+            sub.style.color = '#ef4444';
+        } else if (diff.direction === 'down') {
+            icon.style.background = 'linear-gradient(135deg,#10b981,#059669)';
+            iconSym.className = 'fas fa-arrow-trend-down';
+            sub.textContent = `↓ Less than ${diff.previous_month || 'prev month'}`;
+            sub.style.color = '#10b981';
+        } else {
+            icon.style.background = 'linear-gradient(135deg,#64748b,#475569)';
+            iconSym.className = 'fas fa-minus';
+            sub.textContent = `No change vs ${diff.previous_month || 'prev month'}`;
+            sub.style.color = 'var(--text-secondary)';
+        }
+    }
+}
+
+// ── CHARTS ──
+function renderCharts(charts) {
+    // Partner chart
+    if (chartPartner) chartPartner.destroy();
+    const ctxP = document.getElementById('chartPartner').getContext('2d');
+    const partnerLabels = charts.partner_wise.map(d => d._id || 'Unknown');
+    const partnerData = charts.partner_wise.map(d => d.total);
+    chartPartner = new Chart(ctxP, {
+        type: 'bar',
+        data: {
+            labels: partnerLabels,
+            datasets: [{
+                label: 'Total Claims (₹)',
+                data: partnerData,
+                backgroundColor: generateColors(partnerLabels.length, 0.8),
+                borderColor: generateColors(partnerLabels.length, 1),
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ' ₹' + ctx.parsed.y.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(1) + 'K' : v)
+                    },
+                    grid: { color: '#f1f5f9' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        maxRotation: 35,
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+
+    // Payroll chart
+    if (chartPayroll) chartPayroll.destroy();
+    const ctxM = document.getElementById('chartPayroll').getContext('2d');
+    const payrollLabels = charts.payroll_wise.map(d => d._id || 'Unknown');
+    const payrollData = charts.payroll_wise.map(d => d.total);
+    chartPayroll = new Chart(ctxM, {
+        type: 'bar',
+        data: {
+            labels: payrollLabels,
+            datasets: [{
+                label: 'Total Claims (₹)',
+                data: payrollData,
+                backgroundColor: generateColors(payrollLabels.length, 0.8, true),
+                borderColor: generateColors(payrollLabels.length, 1, true),
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ' ₹' + ctx.parsed.y.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(1) + 'K' : v)
+                    },
+                    grid: { color: '#f1f5f9' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        maxRotation: 35,
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+
+    // ── TOP 10 CLIENT CHART (horizontal bar) ──────────────
+    if (chartClient) chartClient.destroy();
+    const clientLabels = (charts.client_wise || []).map(d => d._id || 'Unknown');
+    const clientData   = (charts.client_wise || []).map(d => d.total);
+    chartClient = new Chart(
+        document.getElementById('chartClient').getContext('2d'),
+        {
+            type: 'bar',
+            data: {
+                labels: clientLabels,
+                datasets: [{
+                    label: 'Total Claims (₹)',
+                    data: clientData,
+                    backgroundColor: [
+                        'rgba(20,184,166,0.85)', 'rgba(16,185,129,0.85)',
+                        'rgba(5,150,105,0.85)',  'rgba(6,182,212,0.85)',
+                        'rgba(14,165,233,0.85)', 'rgba(99,102,241,0.85)',
+                        'rgba(139,92,246,0.85)', 'rgba(168,85,247,0.85)',
+                        'rgba(217,70,239,0.85)', 'rgba(244,63,94,0.85)'
+                    ],
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                indexAxis: 'y',   // horizontal bars (client names lamba hota hai)
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ' ₹' + ctx.parsed.x.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: v => '₹' + (v >= 1000 ? (v/1000).toFixed(1) + 'K' : v)
+                        },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { font: { size: 12 }, autoSkip: false }
+                    }
+                }
+            }
+        }
+    );
+}
+
+// ── TABLE ──
+function renderTable(rows) {
+    allTableData = rows;
+    currentPage = 1;
+    renderPage();
+}
+
+function renderPage() {
+    const tbody  = document.getElementById('employeeTableBody');
+    const rows   = allTableData;
+    const total  = rows.length;
+    const pages  = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const start  = (currentPage - 1) * PAGE_SIZE;
+    const end    = Math.min(start + PAGE_SIZE, total);
+    const slice  = rows.slice(start, end);
+
+    // Info
+    document.getElementById('paginationInfo').textContent =
+        total === 0 ? '' : `Showing ${start + 1}–${end} of ${total} records`;
+
+    if (!rows || total === 0) {
+        tbody.innerHTML = `<tr><td colspan="8"><div class="no-data"><i class="fas fa-inbox"></i><p>No data found for the selected filters.</p></div></td></tr>`;
+        updatePaginationButtons(pages);
+        return;
+    }
+
+    tbody.innerHTML = slice.map((r, i) => `
+        <tr>
+            <td>${start + i + 1}</td>
+            <td><strong>${r.employee_id}</strong></td>
+            <td>${r.employee_name}</td>
+            <td>${r.payroll_month}</td>
+            <td><strong>₹${parseFloat(r.total_amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</strong></td>
+            <td>₹${parseFloat(r.limit || 0).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+            <td>${getStatusBadge(r.overall_status)}</td>
+            <td>${r.current_level || '—'}</td>
+        </tr>
+    `).join('');
+
+    updatePaginationButtons(pages);
+}
+
+function getStatusBadge(status) {
+    if (!status) return '<span class="badge badge-orange">Unknown</span>';
+    const s = status.toLowerCase();
+    if (s === 'approved') return `<span class="badge badge-green"><i class="fas fa-check-circle"></i> Approved</span>`;
+    if (s === 'rejected') return `<span class="badge badge-red"><i class="fas fa-times-circle"></i> Rejected</span>`;
+    return `<span class="badge badge-orange"><i class="fas fa-clock"></i> Pending</span>`;
+}
+
+function updatePaginationButtons(pages) {
+    const prev = document.getElementById('btnPrevPage');
+    const next = document.getElementById('btnNextPage');
+    prev.disabled = currentPage <= 1;
+    prev.style.opacity = currentPage <= 1 ? '0.4' : '1';
+    next.disabled = currentPage >= pages;
+    next.style.opacity = currentPage >= pages ? '0.4' : '1';
+
+    // Page number pills
+    const container = document.getElementById('pageNumbers');
+    container.innerHTML = '';
+    const maxShow = 5;
+    let startP = Math.max(1, currentPage - 2);
+    let endP   = Math.min(pages, startP + maxShow - 1);
+    if (endP - startP < maxShow - 1) startP = Math.max(1, endP - maxShow + 1);
+
+    for (let p = startP; p <= endP; p++) {
+        const btn = document.createElement('button');
+        btn.textContent = p;
+        btn.onclick = () => { currentPage = p; renderPage(); };
+        btn.style.cssText = `padding:7px 12px; border-radius:8px; border:2px solid ${p === currentPage ? '#f59e0b' : 'var(--border)'}; background:${p === currentPage ? '#f59e0b' : 'white'}; color:${p === currentPage ? 'white' : 'var(--text-secondary)'}; cursor:pointer; font-size:13px; font-weight:700;`;
+        container.appendChild(btn);
+    }
+}
+
+function changePage(dir) {
+    const pages = Math.max(1, Math.ceil(allTableData.length / PAGE_SIZE));
+    currentPage = Math.min(Math.max(1, currentPage + dir), pages);
+    renderPage();
+}
+// ── POPULATE MONTH DROPDOWN ──
+function populateMonthDropdown(months) {
+    const sel = document.getElementById('filterPayrollMonth');
+    months.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        sel.appendChild(opt);
+    });
+}
+
+// ── FILTERS ──
+function applyFilters() {
+    const payroll_month = document.getElementById('filterPayrollMonth').value.trim();
+    const emp_name = document.getElementById('filterEmpName').value.trim();
+    const emp_id = document.getElementById('filterEmpId').value.trim();
+    loadDashboard({ payroll_month, emp_name, emp_id });
+}
+
+function resetFilters() {
+    document.getElementById('filterPayrollMonth').value = '';
+    document.getElementById('filterEmpName').value = '';
+    document.getElementById('filterEmpId').value = '';
+    loadDashboard();
+}
+
+// ── MODAL ──
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('active');
+}
+
+function confirmSwitchToPortal() {
+    closeConfirmModal();
+    window.location.href = '/';
+}
+
+// ── HELPERS ──
+function formatCurrency(val) {
+    const num = parseFloat(val || 0);
+    if (num >= 100000) return '₹' + (num / 100000).toFixed(2) + ' L';
+    if (num >= 1000) return '₹' + (num / 1000).toFixed(2) + ' K';
+    return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+}
+
+function generateColors(n, alpha, warm = false) {
+    const base = warm
+        ? ['245,158,11', '251,191,36', '217,119,6', '180,83,9', '253,230,138', '249,115,22']
+        : ['59,130,246', '99,102,241', '16,185,129', '139,92,246', '20,184,166', '244,63,94'];
+    return Array.from({ length: n }, (_, i) => `rgba(${base[i % base.length]},${alpha})`);
+}
+
+function showLoading(state) {
+    document.getElementById('loadingOverlay').classList.toggle('active', state);
+}
+
+function showError(msg) {
+    const tbody = document.getElementById('employeeTableBody');
+    tbody.innerHTML = `<tr><td colspan="8"><div class="no-data"><i class="fas fa-exclamation-triangle"></i><p>${msg}</p></div></td></tr>`;
+}
+
+async function downloadClientExcel() {
+    const btn   = document.getElementById('btnDownloadExcel');
+    const token = localStorage.getItem('access_token');
+
+    // Show loading state
+    btn.disabled   = true;
+    btn.innerHTML  = '<i class="fas fa-circle-notch fa-spin"></i> Generating...';
+
+    try {
+        const payroll_month = document.getElementById('filterPayrollMonth').value.trim();
+        const params        = new URLSearchParams();
+        if (payroll_month) params.append('payroll_month', payroll_month);
+
+        const res = await fetch(`${API_URL}/api/admin/export/client-wise?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        // Get filename from response header
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match       = disposition.match(/filename="?([^"]+)"?/);
+        const filename    = match ? match[1] : 'client_wise_claims.xlsx';
+
+        // Trigger download
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+    } catch (err) {
+        console.error('Excel download error:', err);
+        alert('Download failed: ' + err.message);
+    } finally {
+        // Restore button
+        btn.disabled  = false;
+        btn.innerHTML = '<i class="fas fa-file-excel"></i> Download Client Report';
+    }
+}
+
+async function downloadPartnerExcel() {
+    const btn   = document.getElementById('btnDownloadPartnerExcel');
+    const token = localStorage.getItem('access_token');
+
+    btn.disabled  = true;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generating...';
+
+    try {
+        const payroll_month = document.getElementById('filterPayrollMonth').value.trim();
+        const params        = new URLSearchParams();
+        if (payroll_month) params.append('payroll_month', payroll_month);
+
+        const res = await fetch(`${API_URL}/api/admin/export/partner-wise?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match       = disposition.match(/filename="?([^"]+)"?/);
+        const filename    = match ? match[1] : 'partner_wise_claims.xlsx';
+
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+    } catch (err) {
+        console.error('Partner Excel download error:', err);
+        alert('Download failed: ' + err.message);
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = '<i class="fas fa-file-excel"></i> Partner Report';
+    }
+}
+</script>
+</body>
+</html>

@@ -1705,7 +1705,16 @@ function showNoData() {
 
 function setupNavigation() {
   console.log("🔧 Setting up navigation...");
-  
+
+  // ✅ ADMIN BUTTON - attached once on setup
+  const adminBtn = document.getElementById('btnSwitchToAdmin');
+  if (adminBtn) {
+    adminBtn.addEventListener('click', () => {
+      const modal = document.getElementById('adminSwitchModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
   const navOPE = document.getElementById('navOPE');
   const navHistory = document.getElementById('navHistory');
   const navStatus = document.getElementById('navStatus');
@@ -1728,7 +1737,7 @@ function setupNavigation() {
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');
     });
-    
+  
     if (activeNav) {
       activeNav.classList.add('active');
     }
@@ -6693,6 +6702,47 @@ function showRejectNoData() {
 
 // Check if user is a reporting manager
 
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
+    
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
+    
+//     console.log("🔍 Checking user role for:", empCode);
+    
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
+    
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
+    
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
+    
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+    
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
+    
+//     return data.isManager;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
+
+
 async function checkUserRole() {
   try {
     const token = localStorage.getItem("access_token");
@@ -6724,6 +6774,22 @@ async function checkUserRole() {
     
     // Show/hide manager-only buttons
     toggleManagerButtons(data.isManager);
+
+    // ✅ ADMIN CHECK
+    try {
+      const adminRes = await fetch(`${API_URL}/api/check-admin/${empCode}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (adminRes.ok) {
+        const adminData = await adminRes.json();
+        if (adminData.is_admin) {
+          const adminBtn = document.getElementById('btnSwitchToAdmin');
+          if (adminBtn) adminBtn.style.display = 'flex';
+        }
+      }
+    } catch (err) {
+      console.warn('Admin check failed:', err);
+    }
     
     return data.isManager;
     
@@ -6732,7 +6798,6 @@ async function checkUserRole() {
     return false;
   }
 }
-
 // Toggle visibility of manager-only sidebar buttons
 // function toggleManagerButtons(isManager) {
 //   const navPending = document.getElementById('navPending');
@@ -6824,58 +6889,58 @@ console.log("✅ Manager Buttons Toggle initialized!");
 
 // Update checkUserRole to use isManager
 
-async function checkUserRole() {
-  try {
-    const token = localStorage.getItem("access_token");
-    const empCode = localStorage.getItem("employee_code");
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
     
-    if (!token || !empCode) {
-      console.log("❌ No token or empCode, skipping role check");
-      return false;
-    }
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
     
-    console.log("🔍 Checking user role for:", empCode);
+//     console.log("🔍 Checking user role for:", empCode);
     
-    // ✅ CHECK IF USER IS HR
-    const isHR = (empCode.trim().toUpperCase() === "JHS729");
+//     // ✅ CHECK IF USER IS HR
+//     const isHR = (empCode.trim().toUpperCase() === "JHS729");
     
-    if (isHR) {
-      console.log("👔 User is HR - showing manager buttons");
-      localStorage.setItem("is_manager", "true");
-      localStorage.setItem("is_hr", "true");
-      toggleManagerButtons(true);
-      return true;
-    }
+//     if (isHR) {
+//       console.log("👔 User is HR - showing manager buttons");
+//       localStorage.setItem("is_manager", "true");
+//       localStorage.setItem("is_hr", "true");
+//       toggleManagerButtons(true);
+//       return true;
+//     }
     
-    // ✅ CHECK IF USER IS REPORTING MANAGER
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+//     // ✅ CHECK IF USER IS REPORTING MANAGER
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
     
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
-    }
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
     
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
     
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
-    localStorage.setItem("is_hr", "false");
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+//     localStorage.setItem("is_hr", "false");
     
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
     
-    return data.isManager;
+//     return data.isManager;
     
-  } catch (error) {
-    console.error("❌ Error checking role:", error);
-    return false;
-  }
-}
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
 
 
 function showEmployeeModal(employeeId) {
@@ -7944,3 +8009,14 @@ document.addEventListener('DOMContentLoaded', function() {
 window.toggleMobileMenu = toggleMobileMenu;
 
 console.log("✅ Mobile Menu Toggle initialized successfully!");
+
+// ✅ ADMIN MODAL FUNCTIONS
+function closeAdminSwitchModal() {
+    const modal = document.getElementById('adminSwitchModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function confirmSwitchToAdmin() {
+    closeAdminSwitchModal();
+    window.location.href = '/admin.html';
+}
