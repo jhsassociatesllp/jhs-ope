@@ -609,6 +609,7 @@ async def check_if_manager(employee_code: str, current_user=Depends(get_current_
         
         # Check in Reporting_managers collection
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": emp_code})
+        partner = await db["Partner"].find_one({"PartnerEmpCode": emp_code})
         
         is_manager = manager is not None
         
@@ -623,7 +624,7 @@ async def check_if_manager(employee_code: str, current_user=Depends(get_current_
             "manager_name": manager.get("ReportingEmpName") if manager else None,
             "email": manager.get("Email ID") if manager else None
         }
-        
+    
     except Exception as e:
         print(f"❌ Error checking manager role: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
