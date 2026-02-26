@@ -42,11 +42,6 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'sep-oct-2025': { 
-    start: '2025-09-21', 
-    end: '2025-10-20', 
-    display: 'Sep 2025 - Oct 2025' 
-  },
   'oct-nov-2025': { 
     start: '2025-10-21', 
     end: '2025-11-20', 
@@ -61,6 +56,11 @@ const monthRanges = {
     start: '2025-12-21', 
     end: '2026-01-20', 
     display: 'Dec 2025 - Jan 2026' 
+  },
+  'jan-feb-2026': {
+    start: '2026-01-21', 
+    end: '2026-02-20', 
+    display: 'Jan 2026 - Feb 2026' 
   }
 };
 
@@ -4604,20 +4604,39 @@ async function loadApproveData(token, empCode) {
                 approvedEmployeeCodes = data.employee_codes || [];
             }
         } else {
-            console.log("👔 USER IS MANAGER - Fetching manager approved entries");
-            
-            const approvedListResponse = await fetch(
-                `${API_URL}/api/ope/manager/approved-list`, 
-                {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }
-            );
+    const isPartner = localStorage.getItem("is_partner") === "true";
 
-            if (approvedListResponse.ok) {
-                const approvedListData = await approvedListResponse.json();
-                approvedEmployeeCodes = approvedListData.employee_codes || [];
+    if (isPartner) {
+        console.log("🤝 USER IS PARTNER - Fetching partner approved entries");
+
+        const approvedListResponse = await fetch(
+            `${API_URL}/api/ope/partner/approved-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
             }
+        );
+
+        if (approvedListResponse.ok) {
+            const approvedListData = await approvedListResponse.json();
+            approvedEmployeeCodes = approvedListData.employee_codes || [];
         }
+
+    } else {
+        console.log("👔 USER IS MANAGER - Fetching manager approved entries");
+
+        const approvedListResponse = await fetch(
+            `${API_URL}/api/ope/manager/approved-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }
+        );
+
+        if (approvedListResponse.ok) {
+            const approvedListData = await approvedListResponse.json();
+            approvedEmployeeCodes = approvedListData.employee_codes || [];
+        }
+    }
+}
 
         console.log("✅ Approved employees:", approvedEmployeeCodes);
 
@@ -5302,7 +5321,6 @@ async function rejectApprovedEmployee(employeeId) {
             return;
         }
         
-        // Get all approved entries for this employee
         const employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
         
         if (employeeEntries.length === 0) {
@@ -5312,11 +5330,10 @@ async function rejectApprovedEmployee(employeeId) {
         
         let rejectedCount = 0;
         
-        // ✅ CHECK IF USER IS HR
         const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         if (isHR) {
-            // ✅ HR BULK REJECT
             const response = await fetch(`${API_URL}/api/ope/hr/reject/${employeeId}`, {
                 method: 'POST',
                 headers: {
@@ -5329,16 +5346,34 @@ async function rejectApprovedEmployee(employeeId) {
             if (response.ok) {
                 const result = await response.json();
                 showSuccessPopup(`HR rejected ${result.rejected_count} entries for employee ${employeeId}`);
-                
-                // Reload approve and reject data
                 await loadApproveData(token, currentEmpCode);
                 await loadRejectData(token, currentEmpCode);
             } else {
                 const errorData = await response.json();
                 showErrorPopup(errorData.detail || 'Rejection failed');
             }
+
+        } else if (isPartner) {
+            const response = await fetch(`${API_URL}/api/ope/partner/reject/${employeeId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ reason: reason })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
+                await loadApproveData(token, currentEmpCode);
+                await loadRejectData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Rejection failed');
+            }
+
         } else {
-            // ✅ MANAGER SINGLE-ENTRY REJECT
             for (const entry of employeeEntries) {
                 const response = await fetch(`${API_URL}/api/ope/manager/reject-single`, {
                     method: 'POST',
@@ -5360,8 +5395,6 @@ async function rejectApprovedEmployee(employeeId) {
             
             if (rejectedCount > 0) {
                 showSuccessPopup(`Rejected ${rejectedCount} entries for employee ${employeeId}`);
-                
-                // Reload approve and reject data
                 await loadApproveData(token, currentEmpCode);
                 await loadRejectData(token, currentEmpCode);
             }
@@ -5743,20 +5776,39 @@ async function loadRejectData(token, empCode) {
                 rejectedEmployeeCodes = data.employee_codes || [];
             }
         } else {
-            console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
-            
-            const rejectedListResponse = await fetch(
-                `${API_URL}/api/ope/manager/rejected-list`, 
-                {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }
-            );
+    const isPartner = localStorage.getItem("is_partner") === "true";
 
-            if (rejectedListResponse.ok) {
-                const rejectedListData = await rejectedListResponse.json();
-                rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+    if (isPartner) {
+        console.log("🤝 USER IS PARTNER - Fetching partner rejected entries");
+
+        const rejectedListResponse = await fetch(
+            `${API_URL}/api/ope/partner/rejected-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
             }
+        );
+
+        if (rejectedListResponse.ok) {
+            const rejectedListData = await rejectedListResponse.json();
+            rejectedEmployeeCodes = rejectedListData.employee_codes || [];
         }
+
+    } else {
+        console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
+
+        const rejectedListResponse = await fetch(
+            `${API_URL}/api/ope/manager/rejected-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }
+        );
+
+        if (rejectedListResponse.ok) {
+            const rejectedListData = await rejectedListResponse.json();
+            rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+        }
+    }
+}
 
         console.log("✅ Rejected employees:", rejectedEmployeeCodes);
 
@@ -6574,7 +6626,6 @@ async function approveRejectedEmployee(employeeId) {
             return;
         }
         
-        // Get all rejected entries for this employee
         const employeeEntries = allRejectData.filter(e => e.employee_id === employeeId);
         
         if (employeeEntries.length === 0) {
@@ -6584,11 +6635,10 @@ async function approveRejectedEmployee(employeeId) {
         
         let approvedCount = 0;
         
-        // ✅ CHECK IF USER IS HR
         const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         if (isHR) {
-            // ✅ HR BULK APPROVE
             const response = await fetch(`${API_URL}/api/ope/hr/approve/${employeeId}`, {
                 method: 'POST',
                 headers: {
@@ -6600,16 +6650,33 @@ async function approveRejectedEmployee(employeeId) {
             if (response.ok) {
                 const result = await response.json();
                 showSuccessPopup(`HR approved ${result.approved_count} entries for employee ${employeeId}`);
-                
-                // Reload reject and approve data
                 await loadRejectData(token, currentEmpCode);
                 await loadApproveData(token, currentEmpCode);
             } else {
                 const errorData = await response.json();
                 showErrorPopup(errorData.detail || 'Approval failed');
             }
+
+        } else if (isPartner) {
+            const response = await fetch(`${API_URL}/api/ope/partner/approve/${employeeId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
+                await loadRejectData(token, currentEmpCode);
+                await loadApproveData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Approval failed');
+            }
+
         } else {
-            // ✅ MANAGER SINGLE-ENTRY APPROVE
             for (const entry of employeeEntries) {
                 const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
                     method: 'POST',
@@ -6630,8 +6697,6 @@ async function approveRejectedEmployee(employeeId) {
             
             if (approvedCount > 0) {
                 showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
-                
-                // Reload reject and approve data
                 await loadRejectData(token, currentEmpCode);
                 await loadApproveData(token, currentEmpCode);
             }
@@ -6642,7 +6707,6 @@ async function approveRejectedEmployee(employeeId) {
         showErrorPopup('Network error during approval');
     }
 }
-
 // Make it global
 window.approveRejectedEmployee = approveRejectedEmployee;
 
@@ -7374,9 +7438,13 @@ async function approveEmployee(employeeId) {
     
     // ✅ DETERMINE ENDPOINT BASED ON USER
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
     const endpoint = isHR 
-      ? `${API_URL}/api/ope/hr/approve/${employeeId}`
-      : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+  ? `${API_URL}/api/ope/hr/approve/${employeeId}`
+  : isPartner
+    ? `${API_URL}/api/ope/partner/approve/${employeeId}`
+    : `${API_URL}/api/ope/manager/approve/${employeeId}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -7470,9 +7538,13 @@ async function rejectEmployee(employeeId) {
     
     // ✅ DETERMINE ENDPOINT BASED ON USER
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
-    const endpoint = isHR 
-      ? `${API_URL}/api/ope/hr/reject/${employeeId}`
-      : `${API_URL}/api/ope/manager/reject/${employeeId}`;
+const isPartner = localStorage.getItem("is_partner") === "true";
+
+const endpoint = isHR 
+  ? `${API_URL}/api/ope/hr/reject/${employeeId}`
+  : isPartner
+    ? `${API_URL}/api/ope/partner/reject/${employeeId}`
+    : `${API_URL}/api/ope/manager/reject/${employeeId}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',

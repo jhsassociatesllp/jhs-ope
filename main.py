@@ -975,13 +975,229 @@ async def get_employees_by_status(
     # ============================================
 # EMPLOYEE-SPECIFIC STATUS ENDPOINTS
 # ============================================    
+# @app.get("/api/ope/manager/pending")
+# async def get_manager_pending_employees(current_user=Depends(get_current_user)):
+#     """
+#     Get all employees with pending entries
+#     - For Reporting Managers: Show entries where status = "pending"
+#     - For HR (JHS729): Show entries where L1 is approved (or L1 + L2 for 3-level)
+#     """
+#     try:
+#         current_emp_code = current_user["employee_code"].strip().upper()
+        
+#         print(f"\n{'='*60}")
+#         print(f"🔍 PENDING REQUEST FROM: {current_emp_code}")
+#         print(f"{'='*60}\n")
+        
+#         # ✅ CHECK IF USER IS HR
+#         is_hr = (current_emp_code == "JHS729")
+        
+#         if is_hr:
+#             print(f"👔 USER IS HR - Fetching L1/L2 approved entries")
+            
+#             # ✅ STEP 1: Get ALL Status documents
+#             all_status_docs = await db["Status"].find({}).to_list(length=None)
+#             print(f"📊 Total Status documents in DB: {len(all_status_docs)}")
+            
+#             pending_employees = []
+            
+#             # ✅ STEP 2: Process each employee
+#             for status_doc in all_status_docs:
+#                 employee_id = status_doc.get("employeeId")
+#                 employee_name = status_doc.get("employeeName", "Unknown")
+#                 approval_status = status_doc.get("approval_status", [])
+                
+#                 print(f"\n📋 Checking Employee: {employee_id} ({employee_name})")
+#                 print(f"   Total payroll months: {len(approval_status)}")
+                
+#                 # Get OPE data for this employee
+#                 ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
+                
+#                 if not ope_doc:
+#                     print(f"   ⚠️ No OPE_data found - skipping")
+#                     continue
+                
+#                 pending_entries = []
+                
+#                 # ✅ STEP 3: Check each payroll month
+#                 for ps_index, ps in enumerate(approval_status):
+#                     payroll_month = ps.get("payroll_month")
+#                     total_levels = ps.get("total_levels", 2)
+#                     current_level = ps.get("current_level", "L1")
+#                     overall_status = ps.get("overall_status", "pending")
+                    
+#                     L1 = ps.get("L1", {})
+#                     L2 = ps.get("L2", {})
+                    
+#                     print(f"\n   📅 Payroll: {payroll_month}")
+#                     print(f"      Total Levels: {total_levels}")
+#                     print(f"      Current Level: {current_level}")
+#                     print(f"      Overall Status: {overall_status}")
+#                     print(f"      L1 Status: {L1.get('status')}")
+#                     print(f"      L2 Status: {L2.get('status')}")
+                    
+#                     # ✅ HR LOGIC: Determine if this month should show for HR
+#                     should_show_to_hr = False
+                    
+#                     # Case 1: 2-level approval (Amount ≤ Limit)
+#                     if total_levels == 2:
+#                         # HR should see if: L1 approved AND current_level is L2
+#                         if L1.get("status") == True and current_level == "L2" and overall_status == "pending":
+#                             should_show_to_hr = True
+#                             print(f"      ✅ MATCH: 2-level pending at HR (L1 approved)")
+                    
+#                     # Case 2: 3-level approval (Amount > Limit)
+#                     elif total_levels == 3:
+#                         L3 = ps.get("L3", {})
+#                         print(f"      L3 Status: {L3.get('status')}")
+                        
+#                         # HR should see if: L1 approved AND L2 approved AND current_level is L3
+#                         if (L1.get("status") == True and 
+#                             L2.get("status") == True and 
+#                             current_level == "L3" and 
+#                             overall_status == "pending"):
+#                             should_show_to_hr = True
+#                             print(f"      ✅ MATCH: 3-level pending at HR (L1+L2 approved)")
+                    
+#                     if not should_show_to_hr:
+#                         print(f"      ❌ NOT for HR - skipping")
+#                         continue
+                    
+#                     # ✅ STEP 4: Get entries for this payroll month
+#                     data_array = ope_doc.get("Data", [])
+                    
+#                     for data_item in data_array:
+#                         if payroll_month in data_item:
+#                             entries = data_item[payroll_month]
+#                             print(f"      📦 Found {len(entries)} entries in OPE_data")
+                            
+#                             for entry in entries:
+#                                 entry_status = entry.get("status", "").lower()
+                                
+#                                 # ✅ Only show entries with status "approved" by manager
+#                                 if entry_status == "approved":
+#                                     pending_entries.append({
+#                                         "_id": str(entry.get("_id", "")),
+#                                         "month_range": payroll_month,
+#                                         "date": entry.get("date"),
+#                                         "client": entry.get("client"),
+#                                         "project_id": entry.get("project_id"),
+#                                         "project_name": entry.get("project_name"),
+#                                         "project_type": entry.get("project_type", "N/A"),
+#                                         "location_from": entry.get("location_from"),
+#                                         "location_to": entry.get("location_to"),
+#                                         "travel_mode": entry.get("travel_mode"),
+#                                         "amount": entry.get("amount"),
+#                                         "remarks": entry.get("remarks"),
+#                                         "ticket_pdf": entry.get("ticket_pdf"),
+#                                         "total_levels": total_levels,
+#                                         "current_level": current_level
+#                                     })
+#                                     print(f"         ✅ Entry added: {entry.get('date')} - ₹{entry.get('amount')}")
+#                                 else:
+#                                     print(f"         ⚠️ Entry skipped - status: {entry_status}")
+                            
+#                             break  # Found the month, exit loop
+                
+#                 # ✅ STEP 5: Add employee to result if has pending entries
+#                 if pending_entries:
+#                     pending_employees.append({
+#                         "employeeId": employee_id,
+#                         "employeeName": employee_name,
+#                         "designation": ope_doc.get("designation", ""),
+#                         "pendingCount": len(pending_entries),
+#                         "entries": pending_entries
+#                     })
+#                     print(f"\n   ✅ ADDED: {employee_name} with {len(pending_entries)} pending entries")
+#                 else:
+#                     print(f"   ❌ No pending entries for HR")
+            
+#             print(f"\n{'='*60}")
+#             print(f"✅ FINAL RESULT: {len(pending_employees)} employees pending for HR")
+#             print(f"{'='*60}\n")
+            
+#             return {
+#                 "reporting_manager": current_emp_code,
+#                 "is_hr": True,
+#                 "total_employees": len(pending_employees),
+#                 "employees": pending_employees
+#             }
+        
+#         else:
+#             # ✅ REPORTING MANAGER LOGIC (unchanged)
+#             print(f"👔 USER IS REPORTING MANAGER")
+            
+#             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
+#             if not manager:
+#                 raise HTTPException(status_code=403, detail="You are not a reporting manager")
+            
+#             employees = await db["Employee_details"].find(
+#                 {"ReportingEmpCode": current_emp_code}
+#             ).to_list(length=None)
+            
+#             print(f"👥 Found {len(employees)} employees under manager")
+            
+#             pending_employees = []
+            
+#             for emp in employees:
+#                 emp_code = emp.get("EmpID")
+#                 emp_name = emp.get("Emp Name")
+                
+#                 ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
+                
+#                 if ope_doc:
+#                     pending_entries = []
+#                     data_array = ope_doc.get("Data", [])
+                    
+#                     for data_item in data_array:
+#                         for month_range, entries in data_item.items():
+#                             for entry in entries:
+#                                 entry_status = entry.get("status", "pending").lower()
+#                                 if entry_status == "pending":
+#                                     pending_entries.append({
+#                                         "_id": str(entry.get("_id", "")),
+#                                         "month_range": month_range,
+#                                         "date": entry.get("date"),
+#                                         "client": entry.get("client"),
+#                                         "project_id": entry.get("project_id"),
+#                                         "project_name": entry.get("project_name"),
+#                                         "project_type": entry.get("project_type", "N/A"),
+#                                         "location_from": entry.get("location_from"),
+#                                         "location_to": entry.get("location_to"),
+#                                         "travel_mode": entry.get("travel_mode"),
+#                                         "amount": entry.get("amount"),
+#                                         "remarks": entry.get("remarks"),
+#                                         "ticket_pdf": entry.get("ticket_pdf")
+#                                     })
+                    
+#                     if pending_entries:
+#                         pending_employees.append({
+#                             "employeeId": emp_code,
+#                             "employeeName": emp_name,
+#                             "designation": emp.get("Designation Name", ""),
+#                             "pendingCount": len(pending_entries),
+#                             "entries": pending_entries
+#                         })
+            
+#             print(f"✅ Returning {len(pending_employees)} employees for manager")
+            
+#             return {
+#                 "reporting_manager": current_emp_code,
+#                 "is_hr": False,
+#                 "total_employees": len(pending_employees),
+#                 "employees": pending_employees
+#             }
+        
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         print(f"❌ Error: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/ope/manager/pending")
 async def get_manager_pending_employees(current_user=Depends(get_current_user)):
-    """
-    Get all employees with pending entries
-    - For Reporting Managers: Show entries where status = "pending"
-    - For HR (JHS729): Show entries where L1 is approved (or L1 + L2 for 3-level)
-    """
     try:
         current_emp_code = current_user["employee_code"].strip().upper()
         
@@ -989,19 +1205,16 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
         print(f"🔍 PENDING REQUEST FROM: {current_emp_code}")
         print(f"{'='*60}\n")
         
-        # ✅ CHECK IF USER IS HR
         is_hr = (current_emp_code == "JHS729")
         
         if is_hr:
             print(f"👔 USER IS HR - Fetching L1/L2 approved entries")
             
-            # ✅ STEP 1: Get ALL Status documents
             all_status_docs = await db["Status"].find({}).to_list(length=None)
             print(f"📊 Total Status documents in DB: {len(all_status_docs)}")
             
             pending_employees = []
             
-            # ✅ STEP 2: Process each employee
             for status_doc in all_status_docs:
                 employee_id = status_doc.get("employeeId")
                 employee_name = status_doc.get("employeeName", "Unknown")
@@ -1010,22 +1223,18 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                 print(f"\n📋 Checking Employee: {employee_id} ({employee_name})")
                 print(f"   Total payroll months: {len(approval_status)}")
                 
-                # Get OPE data for this employee
                 ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
-                
                 if not ope_doc:
                     print(f"   ⚠️ No OPE_data found - skipping")
                     continue
                 
                 pending_entries = []
                 
-                # ✅ STEP 3: Check each payroll month
                 for ps_index, ps in enumerate(approval_status):
                     payroll_month = ps.get("payroll_month")
                     total_levels = ps.get("total_levels", 2)
                     current_level = ps.get("current_level", "L1")
                     overall_status = ps.get("overall_status", "pending")
-                    
                     L1 = ps.get("L1", {})
                     L2 = ps.get("L2", {})
                     
@@ -1036,22 +1245,16 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                     print(f"      L1 Status: {L1.get('status')}")
                     print(f"      L2 Status: {L2.get('status')}")
                     
-                    # ✅ HR LOGIC: Determine if this month should show for HR
                     should_show_to_hr = False
                     
-                    # Case 1: 2-level approval (Amount ≤ Limit)
                     if total_levels == 2:
-                        # HR should see if: L1 approved AND current_level is L2
                         if L1.get("status") == True and current_level == "L2" and overall_status == "pending":
                             should_show_to_hr = True
                             print(f"      ✅ MATCH: 2-level pending at HR (L1 approved)")
                     
-                    # Case 2: 3-level approval (Amount > Limit)
                     elif total_levels == 3:
                         L3 = ps.get("L3", {})
                         print(f"      L3 Status: {L3.get('status')}")
-                        
-                        # HR should see if: L1 approved AND L2 approved AND current_level is L3
                         if (L1.get("status") == True and 
                             L2.get("status") == True and 
                             current_level == "L3" and 
@@ -1063,18 +1266,13 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                         print(f"      ❌ NOT for HR - skipping")
                         continue
                     
-                    # ✅ STEP 4: Get entries for this payroll month
                     data_array = ope_doc.get("Data", [])
-                    
                     for data_item in data_array:
                         if payroll_month in data_item:
                             entries = data_item[payroll_month]
                             print(f"      📦 Found {len(entries)} entries in OPE_data")
-                            
                             for entry in entries:
                                 entry_status = entry.get("status", "").lower()
-                                
-                                # ✅ Only show entries with status "approved" by manager
                                 if entry_status == "approved":
                                     pending_entries.append({
                                         "_id": str(entry.get("_id", "")),
@@ -1096,10 +1294,8 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                                     print(f"         ✅ Entry added: {entry.get('date')} - ₹{entry.get('amount')}")
                                 else:
                                     print(f"         ⚠️ Entry skipped - status: {entry_status}")
-                            
-                            break  # Found the month, exit loop
+                            break
                 
-                # ✅ STEP 5: Add employee to result if has pending entries
                 if pending_entries:
                     pending_employees.append({
                         "employeeId": employee_id,
@@ -1122,33 +1318,136 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                 "total_employees": len(pending_employees),
                 "employees": pending_employees
             }
-        
+
         else:
-            # ✅ REPORTING MANAGER LOGIC (unchanged)
+            # ✅ CHECK PARTNER FIRST
+            is_partner = await db["Partner"].find_one({"PartnerEmpCode": current_emp_code})
+
+            if is_partner:
+                print(f"🤝 USER IS PARTNER")
+
+                partner_pending = await db["Pending"].find_one({"ReportingEmpCode": current_emp_code})
+                if not partner_pending or not partner_pending.get("EmployeesCodes"):
+                    print(f"✅ No pending employees found for partner")
+                    return {"reporting_manager": current_emp_code, "is_hr": False, "is_partner": True, "total_employees": 0, "employees": []}
+
+                pending_emp_codes = partner_pending.get("EmployeesCodes", [])
+                print(f"👥 Found {len(pending_emp_codes)} employees under partner")
+                pending_employees = []
+
+                for emp_code in pending_emp_codes:
+                    status_docs = await db["Status"].find({"employeeId": emp_code}).to_list(length=None)
+                    if not status_docs:
+                        continue
+
+                    ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
+                    if not ope_doc:
+                        continue
+
+                    pending_entries = []
+
+                    for status_doc in status_docs:
+                        approval_status_raw = status_doc.get("approval_status")
+                        if isinstance(approval_status_raw, list):
+                            approval_status_array = approval_status_raw
+                        elif isinstance(approval_status_raw, dict):
+                            approval_status_array = [approval_status_raw]
+                        else:
+                            continue
+
+                        for approval_status in approval_status_array:
+                            month_range = approval_status.get("payroll_month") or approval_status.get("month_range")
+                            total_levels = approval_status.get("total_levels", 2)
+                            current_level = approval_status.get("current_level", "L1")
+                            overall_status = approval_status.get("overall_status", "pending")
+                            submitter_type = approval_status.get("submitter_type", "Employee")
+
+                            if overall_status != "pending" or not month_range:
+                                continue
+
+                            partner_is_approver = False
+                            if current_level == "L1":
+                                L1 = approval_status.get("L1", {})
+                                if L1.get("approver_code") == current_emp_code:
+                                    partner_is_approver = True
+                            elif current_level == "L2":
+                                L2 = approval_status.get("L2", {})
+                                if L2.get("approver_code") == current_emp_code:
+                                    partner_is_approver = True
+
+                            if not partner_is_approver:
+                                continue
+
+                            print(f"   ✅ Partner is approver for {emp_code} - {month_range} (Level: {current_level})")
+
+                            for data_item in ope_doc.get("Data", []):
+                                if month_range in data_item:
+                                    target_status = "pending" if submitter_type == "Reporting_Manager" else "approved"
+                                    for entry in data_item[month_range]:
+                                        e_status = entry.get("status", "").lower()
+                                        if e_status in [target_status, "approved", "pending"]:
+                                            pending_entries.append({
+                                                "_id": str(entry.get("_id", "")),
+                                                "month_range": month_range,
+                                                "date": entry.get("date"),
+                                                "client": entry.get("client"),
+                                                "project_id": entry.get("project_id"),
+                                                "project_name": entry.get("project_name"),
+                                                "project_type": entry.get("project_type", "N/A"),
+                                                "location_from": entry.get("location_from"),
+                                                "location_to": entry.get("location_to"),
+                                                "travel_mode": entry.get("travel_mode"),
+                                                "amount": entry.get("amount"),
+                                                "remarks": entry.get("remarks"),
+                                                "ticket_pdf": entry.get("ticket_pdf"),
+                                                "total_levels": total_levels,
+                                                "current_level": current_level
+                                            })
+                                    break
+
+                    if pending_entries:
+                        emp_info = await db["Employee_details"].find_one({"EmpID": emp_code}) or {}
+                        pending_employees.append({
+                            "employeeId": emp_code,
+                            "employeeName": emp_info.get("Emp Name", ope_doc.get("employeeName", emp_code)),
+                            "designation": emp_info.get("Designation Name", ope_doc.get("designation", "")),
+                            "pendingCount": len(pending_entries),
+                            "entries": pending_entries
+                        })
+
+                print(f"✅ Returning {len(pending_employees)} employees for partner")
+                return {
+                    "reporting_manager": current_emp_code,
+                    "is_hr": False,
+                    "is_partner": True,
+                    "total_employees": len(pending_employees),
+                    "employees": pending_employees
+                }
+
+            # ✅ REPORTING MANAGER LOGIC
             print(f"👔 USER IS REPORTING MANAGER")
-            
+
             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
             if not manager:
                 raise HTTPException(status_code=403, detail="You are not a reporting manager")
-            
+
             employees = await db["Employee_details"].find(
                 {"ReportingEmpCode": current_emp_code}
             ).to_list(length=None)
-            
+
             print(f"👥 Found {len(employees)} employees under manager")
-            
+
             pending_employees = []
-            
+
             for emp in employees:
                 emp_code = emp.get("EmpID")
                 emp_name = emp.get("Emp Name")
-                
+
                 ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
-                
                 if ope_doc:
                     pending_entries = []
                     data_array = ope_doc.get("Data", [])
-                    
+
                     for data_item in data_array:
                         for month_range, entries in data_item.items():
                             for entry in entries:
@@ -1169,7 +1468,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                                         "remarks": entry.get("remarks"),
                                         "ticket_pdf": entry.get("ticket_pdf")
                                     })
-                    
+
                     if pending_entries:
                         pending_employees.append({
                             "employeeId": emp_code,
@@ -1178,16 +1477,16 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                             "pendingCount": len(pending_entries),
                             "entries": pending_entries
                         })
-            
+
             print(f"✅ Returning {len(pending_employees)} employees for manager")
-            
+
             return {
                 "reporting_manager": current_emp_code,
                 "is_hr": False,
                 "total_employees": len(pending_employees),
                 "employees": pending_employees
             }
-        
+
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -1195,6 +1494,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
 # ============================================
 # FIXED: GET APPROVED ENTRIES ENDPOINT
 # ============================================
@@ -4363,6 +4663,39 @@ async def partner_approve_employee(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# Ek temporary debug endpoint add karo main.py mein
+@app.get("/api/debug/partner-pending/{partner_code}")
+async def debug_partner_pending(partner_code: str):
+    partner_code = partner_code.strip().upper()
+    
+    # Step 1: Pending collection check
+    pending = await db["Pending"].find_one({"ReportingEmpCode": partner_code})
+    emp_codes = pending.get("EmployeesCodes", []) if pending else []
+    
+    result = {"pending_employees": emp_codes, "status_details": []}
+    
+    for emp_code in emp_codes:
+        status_docs = await db["Status"].find({"employeeId": emp_code}).to_list(length=None)
+        
+        for sdoc in status_docs:
+            approval_arr = sdoc.get("approval_status", [])
+            if isinstance(approval_arr, dict):
+                approval_arr = [approval_arr]
+            
+            for ps in approval_arr:
+                result["status_details"].append({
+                    "employeeId": emp_code,
+                    "payroll_month": ps.get("payroll_month"),
+                    "current_level": ps.get("current_level"),
+                    "overall_status": ps.get("overall_status"),
+                    "submitter_type": ps.get("submitter_type"),
+                    "L1_approver_code": ps.get("L1", {}).get("approver_code"),
+                    "L2_approver_code": ps.get("L2", {}).get("approver_code"),
+                    "partner_code_being_checked": partner_code
+                })
+    
+    return result
 
 
 @app.post("/api/ope/partner/reject/{employee_code}")
