@@ -138,7 +138,6 @@
               <label for="monthRange">Month Range:</label>
               <select id="monthRange" name="monthRange" required>
                 <option value="" disabled selected>Select Your Month</option>
-                <option value="oct-nov-2025">Oct 2025 - Nov 2025</option>
                 <option value="nov-dec-2025">Nov 2025 - Dec 2025</option>
                 <option value="dec-jan-2026">Dec 2025 - Jan 2026</option>
                 <option value="jan-feb-2026">Jan 2026 - Feb 2026</option>
@@ -219,14 +218,14 @@
           <!-- <div class="card-header">
               <h2><i class="fas fa-filter"></i> Filter Entries</h2>
             </div> -->
-          <div class="card-body">
+          <!-- <div class="card-body">
             <div class="month-filter">
               <label for="monthRangeFilter">Filter by Month Range:</label>
               <select id="monthRangeFilter">
                 <option value="">All Months</option>
               </select>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <div id="loadingDiv" class="loading-container">
@@ -236,39 +235,23 @@
           </div>
         </div>
 
-        <div class="card" id="historyTableSection" style="display: none">
-          <div class="card-body">
-            <div class="table-wrapper">
-              <table class="history-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th>Client</th>
-                    <th>Project ID</th>
-                    <th>Project Name</th>
-                    <th>Project Type</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Travel Mode</th>
-                    <th>Amount (₹)</th>
-                    <th>Remarks</th>
-                    <th>PDF</th>
-                  </tr>
-                </thead>
-                <tbody id="historyTableBody">
-                  <!-- Data will be rendered here -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <!-- ✅ NEW: Cards Container -->
+        <!-- <div id="historyCardsContainer" style="display: none;"></div> -->
+        
+        <div id="historyCardsContainer"></div>
 
         <div id="noDataDiv" class="no-data-container" style="display: none">
           <i class="fas fa-inbox"></i>
           <p>No data found</p>
         </div>
       </section>
+
+      <!-- History Month Detail Modal -->
+<div id="historyMonthModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:99999; align-items:center; justify-content:center; padding:20px;">
+  <div style="background:white; border-radius:18px; max-width:1300px; width:98%; max-height:90vh; overflow-y:auto; box-shadow:0 25px 80px rgba(0,0,0,0.35); animation: slideUp 0.3s ease;">
+    <div id="historyModalContent"></div>
+  </div>
+</div>
 
       <!-- Status Section (Placeholder) -->
       <!-- Status Section -->

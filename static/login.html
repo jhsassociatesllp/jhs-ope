@@ -426,8 +426,8 @@
                     return data;
                 })
                 .then((data) => {
-    // Save JWT + employee code
-    const empCode = document.getElementById("employeeCode").value.trim();
+    // Save JWT + employee code (normalized to uppercase)
+    const empCode = document.getElementById("employeeCode").value.trim().toUpperCase();
 
     localStorage.setItem("access_token", data.access_token);
     localStorage.setItem("employee_code", empCode);

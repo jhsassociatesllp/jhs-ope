@@ -42,11 +42,6 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'oct-nov-2025': { 
-    start: '2025-10-21', 
-    end: '2025-11-20', 
-    display: 'Oct 2025 - Nov 2025' 
-  },
   'nov-dec-2025': { 
     start: '2025-11-21', 
     end: '2025-12-20', 
@@ -944,55 +939,113 @@ const travelModes = [
 
 // UPDATED: Load history from Temp_OPE_data (editable) and OPE_data (non-editable)
 
-async function loadHistoryData(token, empCode) {
-    try {
-        console.log("📡 Fetching history for:", empCode);
+// async function loadHistoryData(token, empCode) {
+//     try {
+//         console.log("📡 Fetching history for:", empCode);
         
-        document.getElementById('loadingDiv').style.display = 'block';
-        document.getElementById('historyTableSection').style.display = 'none';
-        document.getElementById('noDataDiv').style.display = 'none';
+//         document.getElementById('loadingDiv').style.display = 'block';
+//         document.getElementById('historyTableSection').style.display = 'none';
+//         document.getElementById('noDataDiv').style.display = 'none';
 
-        // ✅ Fetch from Temp_OPE_data (editable)
-        console.log("🔍 Fetching temp data...");
-        const tempResponse = await fetch(`${API_URL}/api/ope/temp-history/${empCode}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+//         // ✅ Fetch from Temp_OPE_data (editable)
+//         console.log("🔍 Fetching temp data...");
+//         const tempResponse = await fetch(`${API_URL}/api/ope/temp-history/${empCode}`, {
+//             headers: { 'Authorization': `Bearer ${token}` }
+//         });
 
-        // Fetch from OPE_data (submitted, non-editable)
-        console.log("🔍 Fetching submitted data...");
+//         // Fetch from OPE_data (submitted, non-editable)
+//         console.log("🔍 Fetching submitted data...");
+//         const response = await fetch(`${API_URL}/api/ope/history/${empCode}`, {
+//             headers: { 'Authorization': `Bearer ${token}` }
+//         });
+
+//         if (!tempResponse.ok && !response.ok) {
+//             throw new Error('Failed to fetch history');
+//         }
+
+//         const tempData = tempResponse.ok ? await tempResponse.json() : { history: [] };
+//         const data = response.ok ? await response.json() : { history: [] };
+        
+//         console.log("✅ Temp API Response:", tempData);
+//         console.log("✅ Submitted API Response:", data);
+        
+//         allHistoryData = {
+//             temp: tempData.history || [],
+//             submitted: data.history || []
+//         };
+        
+//         console.log("✅ allHistoryData set:", allHistoryData);
+//         console.log("📊 Temp entries:", allHistoryData.temp.length);
+//         console.log("📊 Submitted entries:", allHistoryData.submitted.length);
+
+//         populateMonthFilter();
+        
+//         // ✅ REMOVED: Don't call displayHistoryTable here - let the caller handle it
+        
+//         hideLoading();
+
+//     } catch (error) {
+//         console.error('❌ Error loading history:', error);
+//         document.getElementById('loadingDiv').style.display = 'none';
+//         showNoData();
+//     }
+// }
+async function loadHistoryData() {
+    const token = localStorage.getItem('access_token');    // ✅ FIXED
+    const empCode = localStorage.getItem('employee_code'); // ✅ FIXED
+
+    if (!token || !empCode) {
+        showErrorPopup('Session expired. Please login again.');
+        window.location.href = 'login.html';
+        return;
+    }
+
+    // ✅ Show loading, hide others
+    const loadingDiv = document.getElementById('loadingDiv');
+    const container = document.getElementById('historyCardsContainer');
+    const noDataDiv = document.getElementById('noDataDiv');
+    if (loadingDiv) loadingDiv.style.display = 'block';
+    if (container) { container.style.display = 'none'; container.innerHTML = ''; }
+    if (noDataDiv) noDataDiv.style.display = 'none';
+
+    try {
+        console.log("📡 Fetching submitted history for:", empCode);
+
+        // Show loading state in container
+        const container = document.getElementById('historyCardsContainer');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; padding:40px; color:#6b7280;">
+                <i class="fas fa-spinner fa-spin" style="font-size:32px; margin-bottom:12px; display:block;"></i>
+                Loading history...
+            </div>`;
+        }
+
         const response = await fetch(`${API_URL}/api/ope/history/${empCode}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!tempResponse.ok && !response.ok) {
-            throw new Error('Failed to fetch history');
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
         }
 
-        const tempData = tempResponse.ok ? await tempResponse.json() : { history: [] };
-        const data = response.ok ? await response.json() : { history: [] };
-        
-        console.log("✅ Temp API Response:", tempData);
-        console.log("✅ Submitted API Response:", data);
-        
-        allHistoryData = {
-            temp: tempData.history || [],
-            submitted: data.history || []
-        };
-        
-        console.log("✅ allHistoryData set:", allHistoryData);
-        console.log("📊 Temp entries:", allHistoryData.temp.length);
-        console.log("📊 Submitted entries:", allHistoryData.submitted.length);
+        const data = await response.json();
+        const history = data.history || [];
 
-        populateMonthFilter();
-        
-        // ✅ REMOVED: Don't call displayHistoryTable here - let the caller handle it
-        
-        hideLoading();
+        console.log("✅ History loaded:", history.length, "entries");
+
+        // Group by month_range
+        const grouped = {};
+        history.forEach(entry => {
+            const month = entry.month_range || 'Unknown';
+            if (!grouped[month]) grouped[month] = [];
+            grouped[month].push(entry);
+        });
+
+        displayHistoryCards(grouped);
 
     } catch (error) {
         console.error('❌ Error loading history:', error);
-        document.getElementById('loadingDiv').style.display = 'none';
-        showNoData();
+        showErrorPopup('Failed to load history data');
     }
 }
 
@@ -1344,6 +1397,182 @@ window.viewPdf = function(entryId, isTemp = false) {
         showErrorPopup('PDF not available for this entry');
     }
 };
+
+function displayHistoryCards(grouped) {
+    const container = document.getElementById('historyCardsContainer');
+    if (!container) return;
+
+    // ✅ Hide loadingDiv, show container
+    const loadingDiv = document.getElementById('loadingDiv');
+    const noDataDiv = document.getElementById('noDataDiv');
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (noDataDiv) noDataDiv.style.display = 'none';
+    container.style.display = 'block';
+
+    container.innerHTML = '';
+
+    const months = Object.keys(grouped);
+
+    if (months.length === 0) {
+        container.innerHTML = `
+            <div class="no-data-message">
+                <i class="fas fa-folder-open"></i>
+                <p>No history found</p>
+            </div>`;
+        return;
+    }
+
+    months.forEach(month => {
+        const entries = grouped[month];
+        const totalAmount = entries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
+        const card = document.createElement('div');
+        card.className = 'payroll-card';
+        card.innerHTML = `
+            <div class="payroll-card-header" onclick="togglePayrollTable('${month.replace(/[^a-zA-Z0-9]/g, '_')}')">
+                <div class="payroll-card-info">
+                    <div class="payroll-card-title">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span>${month}</span>
+                    </div>
+                    <div class="payroll-card-meta">
+                        <span class="badge-entries">${entries.length} ${entries.length === 1 ? 'Entry' : 'Entries'}</span>
+                        ${(() => {
+    const originalTotal = entries.reduce((s, e) => s + parseFloat(e.original_amount ?? e.amount ?? 0), 0);
+    const hasEdits = entries.some(e => e.original_amount !== undefined && parseFloat(e.original_amount) !== parseFloat(e.amount));
+    return hasEdits
+        ? `<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+               <span class="badge-amount" style="background:#fef3c7; color:#92400e;">
+                   ✏️ ₹${totalAmount.toFixed(2)}
+               </span>
+               <span style="font-size:10px; color:#9ca3af; text-decoration:line-through;">
+                   ₹${originalTotal.toFixed(2)}
+               </span>
+           </div>`
+        : `<span class="badge-amount">₹${totalAmount.toFixed(2)}</span>`;
+})()}
+                    </div>
+                </div>
+                <i class="fas fa-chevron-down toggle-icon" id="icon_${month.replace(/[^a-zA-Z0-9]/g, '_')}"></i>
+            </div>
+            <div class="payroll-table-wrapper" id="table_${month.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Project ID</th>
+                            <th>Project Name</th>
+                            <th>Project Type</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Travel Mode</th>
+                            <th>Amount</th>
+                            <th>Remarks</th>
+                            <th>PDF</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${entries.map(entry => `
+                            <tr>
+                                <td>${entry.date || '-'}</td>
+                                <td>${entry.client || '-'}</td>
+                                <td>${entry.project_id || '-'}</td>
+                                <td>${entry.project_name || '-'}</td>
+                                <td>${entry.project_type || '-'}</td>
+                                <td>${entry.location_from || '-'}</td>
+                                <td>${entry.location_to || '-'}</td>
+                                <td>${entry.travel_mode || '-'}</td>
+                                <td>
+    ${entry.original_amount !== undefined && entry.original_amount !== entry.amount
+        ? `<div style="font-weight:700; color:#2563eb; font-size:14px;">
+               ₹${parseFloat(entry.amount || 0).toFixed(2)}
+           </div>
+           <div style="font-size:11px; color:#9ca3af; margin-top:2px;">
+               <span style="text-decoration:line-through;">₹${parseFloat(entry.original_amount).toFixed(2)}</span>
+               <span style="color:#ef4444; margin-left:4px;">original</span>
+           </div>
+           <div style="font-size:10px; color:#f59e0b; font-weight:600; margin-top:2px;">
+               ✏️ ${entry.amount_edited_by_name || entry.amount_edited_by || 'Manager'}
+           </div>`
+        : `<div style="font-weight:700; color:#2563eb; font-size:14px;">
+               ₹${parseFloat(entry.amount || 0).toFixed(2)}
+           </div>`
+    }
+</td>
+                                <td>${entry.remarks || '-'}</td>
+                                <td>${entry.ticket_pdf
+                                    ? `<button class="btn-view-pdf" onclick="viewHistoryPdf('${entry._id}')">
+                                            <i class="fas fa-file-pdf"></i> View
+                                       </button>`
+                                    : '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="8" style="text-align:right; font-weight:600;">Total</td>
+                            <td style="font-weight:600;">
+    ₹${totalAmount.toFixed(2)}
+    ${entries.some(e => e.original_amount !== undefined && parseFloat(e.original_amount) !== parseFloat(e.amount))
+        ? `<div style="font-size:11px; color:#9ca3af; font-weight:400; margin-top:2px;">
+               Original: <span style="text-decoration:line-through;">
+                   ₹${entries.reduce((s,e) => s + parseFloat(e.original_amount ?? e.amount ?? 0), 0).toFixed(2)}
+               </span>
+           </div>`
+        : ''
+    }
+</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+// ✅ History section ke liye PDF viewer
+window.viewHistoryPdf = function(entryId) {
+    console.log("📄 Viewing PDF for history entry:", entryId);
+    
+    // API se PDF fetch karo directly
+    const token = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    
+    fetch(`${API_URL}/api/ope/history/${empCode}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => {
+        const history = data.history || [];
+        const entry = history.find(e => e._id === entryId);
+        
+        if (entry && entry.ticket_pdf) {
+            openPdfModal(entry.ticket_pdf);
+        } else {
+            showErrorPopup('PDF not available for this entry');
+        }
+    })
+    .catch(err => {
+        console.error('Error fetching PDF:', err);
+        showErrorPopup('Failed to load PDF');
+    });
+};
+
+function togglePayrollTable(monthKey) {
+    const table = document.getElementById(`table_${monthKey}`);
+    const icon = document.getElementById(`icon_${monthKey}`);
+    if (!table) return;
+
+    const isOpen = table.style.display !== 'none';
+    table.style.display = isOpen ? 'none' : 'block';
+    if (icon) {
+        icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+}
 
 // 6. PDF Modal Open karne ka function
 // NEW CODE:
@@ -1706,7 +1935,7 @@ function showNoData() {
 function setupNavigation() {
   console.log("🔧 Setting up navigation...");
 
-  // ✅ ADMIN BUTTON - attached once on setup
+  // ✅ ADMIN BUTTON
   const adminBtn = document.getElementById('btnSwitchToAdmin');
   if (adminBtn) {
     adminBtn.addEventListener('click', () => {
@@ -1715,13 +1944,14 @@ function setupNavigation() {
     });
   }
 
-  const navOPE = document.getElementById('navOPE');
-  const navHistory = document.getElementById('navHistory');
-  const navStatus = document.getElementById('navStatus');
-  const navPending = document.getElementById('navPending');
-  const navApprove = document.getElementById('navApprove');
-  const navReject = document.getElementById('navReject');
-  
+  // ✅ Get nav items (will be replaced by clones below)
+  let navOPE = document.getElementById('navOPE');
+  let navHistory = document.getElementById('navHistory');
+  let navStatus = document.getElementById('navStatus');
+  let navPending = document.getElementById('navPending');
+  let navApprove = document.getElementById('navApprove');
+  let navReject = document.getElementById('navReject');
+
   const opeSection = document.getElementById('opeSection');
   const historySection = document.getElementById('historySection');
   const statusSection = document.getElementById('statusSection');
@@ -1729,47 +1959,59 @@ function setupNavigation() {
   const approveSection = document.getElementById('approveSection');
   const rejectSection = document.getElementById('rejectSection');
 
-  // Helper function to switch sections
+  // ✅ Clone all nav items to remove any duplicate listeners
+  function cloneNav(el) {
+    if (!el) return null;
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    return clone;
+  }
+
+  navOPE     = cloneNav(navOPE);
+  navHistory = cloneNav(navHistory);
+  navStatus  = cloneNav(navStatus);
+  navPending = cloneNav(navPending);
+  navApprove = cloneNav(navApprove);
+  navReject  = cloneNav(navReject);
+
+  // ✅ Helper: switch section
   function switchSection(activeNav, activeSection, loadDataCallback) {
     console.log("📌 Switching to section:", activeSection?.id || 'unknown');
-    
+
     // Remove active from all nav items
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');
     });
-  
-    if (activeNav) {
-      activeNav.classList.add('active');
-    }
-    
+
+    if (activeNav) activeNav.classList.add('active');
+
     // Hide ALL sections
     document.querySelectorAll('.content-section').forEach(section => {
       section.classList.remove('active');
       section.style.display = 'none';
     });
-    
+
     // Show selected section
     if (activeSection) {
       activeSection.classList.add('active');
       activeSection.style.display = 'block';
       console.log("✅ Section displayed:", activeSection.id);
     }
-    
-    // Close mobile menu on navigation
+
+    // Close mobile menu
     const sidebar = document.querySelector('.sidebar');
     if (sidebar && sidebar.classList.contains('mobile-active')) {
       sidebar.classList.remove('mobile-active');
-      console.log("✅ Mobile menu closed");
     }
-    
-    // Load data if callback provided
+
+    // Load data
     if (loadDataCallback && typeof loadDataCallback === 'function') {
       console.log("📥 Loading data for section...");
       loadDataCallback();
     }
   }
 
-  // OPE Navigation
+  // ✅ OPE
   if (navOPE) {
     navOPE.addEventListener('click', function(e) {
       e.preventDefault();
@@ -1778,91 +2020,95 @@ function setupNavigation() {
     });
   }
 
-  // History Navigation
+  // ✅ HISTORY — fixed, no params, shows cards
   if (navHistory) {
     navHistory.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("📜 History clicked");
-      
-      switchSection(navHistory, historySection, async () => {
-        const token = localStorage.getItem('access_token');
-        const empCode = localStorage.getItem('employee_code');
-        
-        if (token && empCode) {
-          console.log("📥 Loading history data...");
-          await loadHistoryData(token, empCode);
-          displayHistoryTable(allHistoryData);
-        }
+
+      // Manually switch section
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      navHistory.classList.add('active');
+
+      document.querySelectorAll('.content-section').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
       });
+
+      if (historySection) {
+        historySection.classList.add('active');
+        historySection.style.display = 'block';
+      }
+
+      // Close mobile menu
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar && sidebar.classList.contains('mobile-active')) {
+        sidebar.classList.remove('mobile-active');
+      }
+
+      // ✅ Load history — single call
+      await loadHistoryData();
     });
   }
 
-  // Status Navigation
+  // ✅ STATUS
   if (navStatus) {
     navStatus.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("📊 Status clicked");
-      
+
       switchSection(navStatus, statusSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
         if (token && empCode) {
-          console.log("📥 Loading status data...");
           await loadStatusData(token, empCode);
         }
       });
     });
   }
 
-  // Pending Navigation
+  // ✅ PENDING
   if (navPending) {
     navPending.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("⏳ Pending clicked");
-      
+
       switchSection(navPending, pendingSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
         if (token && empCode) {
-          console.log("📥 Loading pending data...");
           await loadPendingData(token, empCode);
         }
       });
     });
   }
 
-  // Approve Navigation
+  // ✅ APPROVE
   if (navApprove) {
     navApprove.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("✅ Approve clicked");
-      
+
       switchSection(navApprove, approveSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
         if (token && empCode) {
-          console.log("📥 Loading approve data...");
           await loadApproveData(token, empCode);
         }
       });
     });
   }
 
-  // Reject Navigation
+  // ✅ REJECT
   if (navReject) {
     navReject.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("❌ Reject clicked");
-      
+
       switchSection(navReject, rejectSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
         if (token && empCode) {
-          console.log("📥 Loading reject data...");
           await loadRejectData(token, empCode);
         }
       });

@@ -45,14 +45,26 @@ user_collection = db["user"]
 
 
 # ---------- Models ----------
+from pydantic import field_validator
+
 class UserCreate(BaseModel):
     employee_code: str
     password: str
+
+    @field_validator("employee_code")
+    @classmethod
+    def normalize_code(cls, v):
+        return v.strip().upper()  # ✅ Auto-normalize on input
 
 
 class UserLogin(BaseModel):
     employee_code: str
     password: str
+
+    @field_validator("employee_code")
+    @classmethod
+    def normalize_code(cls, v):
+        return v.strip().upper()  # ✅ Auto-normalize on input
 
 
 class Token(BaseModel):
@@ -120,6 +132,7 @@ async def is_valid_employee(employee_code: str) -> bool:
 
 @app.post("/api/register")
 async def register(user: UserCreate):
+    user.employee_code = user.employee_code.strip().upper()  # ✅ Normalize
     print("📌 Incoming register data:", user.employee_code)
 
     # Check if exists
@@ -148,6 +161,7 @@ async def register(user: UserCreate):
 
 @app.post("/api/login", response_model=Token)
 async def login(user: UserLogin):
+    user.employee_code = user.employee_code.strip().upper()  # ✅ Normalize
     db_user = await get_user_by_employee_code(user.employee_code)
     if not db_user:
         raise HTTPException(status_code=401, detail="Incorrect employee code or password")
@@ -2011,11 +2025,11 @@ async def edit_entry_amount(
 ):
     """
     Edit the amount of a pending, approved, or rejected entry
-    
-    ✅ UPDATED: HR (JHS729) bhi edit kar sakta hai!
+    ✅ UPDATED: original_amount first edit pe save hota hai, dobara overwrite nahi
     """
     try:
         user_emp_code = current_user["employee_code"].strip().upper()
+        user_name = current_user.get("employee_name", user_emp_code)
         
         body = await request.json()
         entry_id = body.get("entry_id")
@@ -2024,28 +2038,32 @@ async def edit_entry_amount(
         
         print(f"\n{'='*60}")
         print(f"💰 EDIT SINGLE AMOUNT REQUEST")
-        print(f"   User: {user_emp_code}")
+        print(f"   User: {user_emp_code} ({user_name})")
         print(f"   Employee: {employee_id}")
         print(f"   Entry ID: {entry_id}")
         print(f"   New Amount: {new_amount}")
         print(f"{'='*60}\n")
         
         # ============================================
-        # ✅ UPDATED AUTHORIZATION CHECK
+        # AUTHORIZATION CHECK
         # ============================================
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
+        is_partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
         is_hr = (user_emp_code == "JHS729")
         
-        # ✅ Manager YA HR hona chahiye
-        if not is_manager and not is_hr:
-            error_msg = "Only managers and HR can edit amounts"
-            print(f"❌ Authorization failed: {error_msg}")
+        if not is_manager and not is_partner and not is_hr:
             raise HTTPException(
                 status_code=403,
-                detail=error_msg
+                detail="Only managers, partners and HR can edit amounts"
             )
         
-        user_role = "HR" if is_hr else "Manager"
+        if is_hr:
+            user_role = "HR"
+        elif is_partner:
+            user_role = "Partner"
+        else:
+            user_role = "Manager"
+            
         print(f"✅ User role: {user_role}")
         
         # Validate inputs
@@ -2060,15 +2078,15 @@ async def edit_entry_amount(
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
-        # Find and update the entry in OPE_data
+        # Find entry in OPE_data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
-        
         if not ope_doc:
-            raise HTTPException(status_code=404, detail="Employee data not found")
+            raise HTTPException(status_code=404, detail="Employee OPE data not found")
         
         data_array = ope_doc.get("Data", [])
         updated = False
         old_amount = 0
+        original_amount = None
         payroll_month = None
         current_time = datetime.utcnow().isoformat()
         
@@ -2079,52 +2097,78 @@ async def edit_entry_amount(
                         old_amount = entry.get("amount", 0)
                         payroll_month = month_range
                         
-                        # ✅ UPDATE ENTRY AMOUNT WITH WHO EDITED
+                        # ✅ original_amount sirf PEHLI baar save karo
+                        # Agar pehle se hai to preserve karo — overwrite mat karo
+                        if "original_amount" in entry:
+                            original_amount = entry["original_amount"]
+                            print(f"📌 original_amount already exists: ₹{original_amount} — preserving")
+                        else:
+                            original_amount = old_amount
+                            print(f"📌 First edit — saving original_amount: ₹{original_amount}")
+                        
+                        # ✅ Update karo — original_amount bhi set karo
+                        update_fields = {
+                            f"Data.{i}.{month_range}.{j}.amount": new_amount,
+                            f"Data.{i}.{month_range}.{j}.original_amount": original_amount,
+                            f"Data.{i}.{month_range}.{j}.updated_time": current_time,
+                            f"Data.{i}.{month_range}.{j}.amount_edited_by": user_emp_code,
+                            f"Data.{i}.{month_range}.{j}.amount_edited_by_name": user_name,
+                            f"Data.{i}.{month_range}.{j}.amount_edited_by_role": user_role,
+                            f"Data.{i}.{month_range}.{j}.amount_edited_date": current_time
+                        }
+                        
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
-                            {"$set": {
-                                f"Data.{i}.{month_range}.{j}.amount": new_amount,
-                                f"Data.{i}.{month_range}.{j}.updated_time": current_time,
-                                f"Data.{i}.{month_range}.{j}.amount_edited_by": user_emp_code,
-                                f"Data.{i}.{month_range}.{j}.amount_edited_by_role": user_role,  # ✅ NEW
-                                f"Data.{i}.{month_range}.{j}.amount_edited_date": current_time
-                            }}
+                            {"$set": update_fields}
                         )
                         
                         updated = True
                         print(f"✅ Amount updated: ₹{old_amount} → ₹{new_amount}")
+                        print(f"✅ Original amount preserved: ₹{original_amount}")
                         break
+                        
+                if updated:
+                    break
             if updated:
                 break
         
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found")
         
-        # ✅ UPDATE STATUS COLLECTION - RECALCULATE TOTAL AMOUNT
+        # ✅ STATUS COLLECTION UPDATE — recalculate total
         if payroll_month:
-            status_doc = await db["Status"].find_one({"employeeId": employee_id})
+            # Fresh doc fetch karo updated amounts ke liye
+            updated_ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
+            updated_data_array = updated_ope_doc.get("Data", []) if updated_ope_doc else []
             
+            new_total = 0
+            original_total = 0
+            
+            for data_item in updated_data_array:
+                if payroll_month in data_item:
+                    entries = data_item[payroll_month]
+                    new_total = sum(float(e.get("amount", 0)) for e in entries)
+                    # ✅ original_total bhi calculate karo
+                    original_total = sum(
+                        float(e.get("original_amount", e.get("amount", 0))) 
+                        for e in entries
+                    )
+                    break
+            
+            status_doc = await db["Status"].find_one({"employeeId": employee_id})
             if status_doc:
                 approval_status = status_doc.get("approval_status", [])
-                
-                # Recalculate total for this payroll month
-                new_total = 0
-                for i, data_item in enumerate(data_array):
-                    if payroll_month in data_item:
-                        entries = data_item[payroll_month]
-                        new_total = sum(float(e.get("amount", 0)) for e in entries)
-                        break
-                
-                # Update Status collection
-                for i, ps in enumerate(approval_status):
+                for idx, ps in enumerate(approval_status):
                     if ps.get("payroll_month") == payroll_month:
                         await db["Status"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
-                                f"approval_status.{i}.total_amount": new_total
+                                f"approval_status.{idx}.total_amount": new_total,
+                                f"approval_status.{idx}.original_total_amount": original_total
                             }}
                         )
-                        print(f"✅ Updated Status total_amount to: ₹{new_total}")
+                        print(f"✅ Status total_amount updated: ₹{new_total}")
+                        print(f"✅ Status original_total_amount: ₹{original_total}")
                         break
         
         print(f"{'='*60}\n")
@@ -2132,9 +2176,11 @@ async def edit_entry_amount(
         return {
             "success": True,
             "message": "Amount updated successfully",
-            "updated_by_role": user_role,  # ✅ NEW
+            "updated_by": user_name,
+            "updated_by_role": user_role,
             "old_amount": old_amount,
             "new_amount": new_amount,
+            "original_amount": original_amount,
             "entry_id": entry_id
         }
         
@@ -2145,6 +2191,7 @@ async def edit_entry_amount(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
 # ==================================================
 # TEMPORARY SAVE ENDPOINT (Store in Temp_OPE_data)
 # ==================================================
@@ -4704,12 +4751,6 @@ async def partner_reject_employee(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Partner rejection for employee OPE
-    - Updates nested OPE_data structure
-    - Updates Status collection (Array format)
-    - Moves to Partner_Rejected collection
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
@@ -6163,10 +6204,6 @@ async def partner_approve_single_entry(
 
 @app.get("/api/check-admin/{employee_code}")
 async def check_admin(employee_code: str, token: str = Depends(get_current_user)):
-    """
-    Check if an employee is admin
-    Returns: { "isAdmin": true/false }
-    """
     try:
         # Verify token
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])

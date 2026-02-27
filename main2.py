@@ -594,9 +594,7 @@ async def delete_ope_entry(
 
 @app.get("/api/check-manager/{employee_code}")
 async def check_if_manager(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Check if the logged-in employee is a reporting manager
-    """
+    
     try:
         # Clean and uppercase the employee code
         emp_code = employee_code.strip().upper()

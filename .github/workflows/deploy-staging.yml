@@ -41,4 +41,3 @@ jobs:
             ghcr.io/jhsassociatesllp/jhs-ope:staging
 
             docker image prune -f
-
