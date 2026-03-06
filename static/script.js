@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-API_URL = "http://127.0.0.1:8000";
-// API_URL = "";
+// API_URL = "http://127.0.0.1:8000";
+API_URL = "";
 
 
 // Add CSS animations for popups
