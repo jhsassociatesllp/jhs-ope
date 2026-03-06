@@ -4796,22 +4796,34 @@ function displayApproveEmployeeTable(data) {
     document.getElementById('approveTableSection').style.display = 'block';
 }
 
-// ✅ UPDATED: Show approved employee modal with MONTH-FILTERED data
+
+// ✅ UPDATED: Show approved employee modal with REMARK
 window.showApprovedEmployeeModal = function(employeeId) {
     console.log("📋 Opening modal for employee:", employeeId);
+    console.log("All Approve Data:", allApproveData);
     
-    // ✅ Get current selected month from filter
+    // Get current selected month from filter
     const monthFilter = document.getElementById('approveMonthFilter');
     const selectedMonth = monthFilter ? monthFilter.value : '';
     
     console.log("📅 Selected month filter:", selectedMonth || 'All Months');
     
-    // Find employee's approved entries (filtered by month if selected)
+    // Find employee's approved entries
     let employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
     
-    // ✅ Apply month filter
+    console.log(`📊 Found ${employeeEntries.length} entries for employee`);
+    
+    // Check if remark exists in first entry
+    if (employeeEntries.length > 0) {
+        console.log("First entry full data:", employeeEntries[0]);
+        console.log("Remark value:", employeeEntries[0].approval_remark);
+        console.log("Remark type:", typeof employeeEntries[0].approval_remark);
+    }
+    
+    // Apply month filter
     if (selectedMonth) {
         employeeEntries = employeeEntries.filter(e => e.month_range === selectedMonth);
+        console.log(`📊 After month filter: ${employeeEntries.length} entries`);
     }
     
     if (employeeEntries.length === 0) {
@@ -4901,41 +4913,61 @@ window.showApprovedEmployeeModal = function(employeeId) {
                     </span>
                 </div>
                 <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead style="background: #f8fafc;">
+                    <table class="history-detail-table">
+                        <thead>
                             <tr>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Date</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Client</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Project ID</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Project Name</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Type</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">From</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">To</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Mode</th>
-                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Amount</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Approved By</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Approved By</th>
+                                <th>Approval Remark</th>
                             </tr>
                         </thead>
                         <tbody>
         `;
         
         entries.forEach(entry => {
+            // Get remark value - handle different possible field names
+            const remark = entry.approval_remark || entry.remark || '';
+            const hasRemark = remark && remark.toString().trim() !== '' && remark !== 'Approved without remark';
+            
+            console.log(`Entry date: ${entry.date}, Remark: "${remark}", HasRemark: ${hasRemark}`);
+            
+            // Escape special characters for safe HTML
+            const escapedRemark = remark.replace(/[&<>"]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                if (m === '"') return '&quot;';
+                return m;
+            });
+            
             modalContent += `
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; font-size: 13px;">${entry.date || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.client || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px; color: #3b82f6; font-weight: 600;">${entry.project_id || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.project_name || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">
-                        <span style="background: #e0e7ff; color: #4338ca; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">
-                            ${entry.project_type || '-'}
-                        </span>
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-submitted">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td>${entry.approver_name || entry.approved_by || '-'}</td>
+                    <td>
+                        ${hasRemark 
+                            ? `<div class="remark-cell" onclick='showFullRemark(${JSON.stringify(remark).replace(/'/g, "\\'")})'>
+                                <i class="fas fa-comment"></i>
+                                <span class="remark-text">${remark.substring(0, 30)}${remark.length > 30 ? '...' : ''}</span>
+                               </div>` 
+                            : '<span class="no-remark">-</span>'}
                     </td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.location_from || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.location_to || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${getTravelModeLabel(entry.travel_mode)}</td>
-                    <td style="padding: 12px; text-align: right; font-weight: 700; color: #059669; font-size: 14px;">₹${entry.amount || 0}</td>
-                    <td style="padding: 12px; font-size: 13px; color: #059669; font-weight: 600;">${entry.approver_name || entry.approved_by || '-'}</td>
                 </tr>
             `;
         });
@@ -4961,6 +4993,116 @@ window.showApprovedEmployeeModal = function(employeeId) {
         }
     });
 }
+// ✅ Show Full Remark Popup
+function showFullRemark(remark) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 600px;
+        width: 90%;
+        max-height: 70vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-comment" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Approval Remark</h2>
+        </div>
+        
+        <div style="
+            background: #f0fdf4;
+            border: 2px solid #86efac;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #166534;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        ">
+            ${remark === 'Approved without remark' ? '<span style="color: #9ca3af; font-style: italic;">No remark provided</span>' : remark}
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRemarkBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRemarkBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showFullRemark = showFullRemark;
 
 function populateApproveMonthFilter() {
     const monthSet = new Set();
@@ -7418,12 +7560,20 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
 // Make it global
 window.editTotalAmount = editTotalAmount;
 
+// ✅ UPDATED: Approve Employee with Remark
 async function approveEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
   const currentEmpCode = localStorage.getItem('employee_code');
   
   try {
     console.log("✅ Approving employee:", employeeId);
+    
+    // ✅ Show remark popup first
+    const remark = await showApproveRemarkPopup();
+    
+    if (remark === null) {
+      return; // User cancelled
+    }
     
     const confirmed = await showConfirmPopup(
       'Approve All Entries',
@@ -7441,17 +7591,18 @@ async function approveEmployee(employeeId) {
     const isPartner = localStorage.getItem("is_partner") === "true";
 
     const endpoint = isHR 
-  ? `${API_URL}/api/ope/hr/approve/${employeeId}`
-  : isPartner
-    ? `${API_URL}/api/ope/partner/approve/${employeeId}`
-    : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+      ? `${API_URL}/api/ope/hr/approve/${employeeId}`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/approve/${employeeId}`
+        : `${API_URL}/api/ope/manager/approve/${employeeId}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ remark: remark }) // ✅ Send remark to backend
     });
     
     if (response.ok) {
@@ -7743,8 +7894,9 @@ async function loadStatusData(token, empCode) {
 }
 
 
+// ✅ UPDATED: Display status table with edit tracking
 function displayStatusTable(data) {
-    console.log("🎨 Displaying status table");
+    console.log("🎨 Displaying status table with edit tracking");
     
     const tbody = document.getElementById('statusTableBody');
     if (!tbody) {
@@ -7759,7 +7911,7 @@ function displayStatusTable(data) {
         return;
     }
 
-    // ✅ Display each payroll month as one row
+    // Display each payroll month as one row
     data.forEach((entry) => {
         const row = document.createElement('tr');
         
@@ -7770,7 +7922,35 @@ function displayStatusTable(data) {
         const currentLevel = entry.current_level || 'L1';
         const overallStatus = entry.overall_status || 'pending';
         
-        // Generate status tracker HTML with compact design
+        // Check if amount was edited
+        const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
+        const editedBy = entry.last_edited_by_name || entry.last_edited_by;
+        const editedByRole = entry.last_edited_by_role;
+        const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }) : null;
+        
+        // Generate amount display with edit info
+        let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
+        
+        if (wasEdited) {
+            amountDisplay = `
+                <div class="amount-edit-info">
+                    <span class="amount-original">₹${(entry.original_total || 0).toFixed(2)}</span>
+                    <i class="fas fa-arrow-right"></i>
+                    <span class="amount-current edited">₹${(entry.total_amount || 0).toFixed(2)}</span>
+                    ${editedBy ? `
+                        <div class="edit-by">
+                            <i class="fas fa-pencil-alt"></i>
+                            Edited by: <strong>${editedBy}</strong> (${editedByRole || 'Unknown'})
+                            ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        // Generate status tracker HTML
         let statusTrackerHTML = `<div class="approval-tracker">`;
         
         // L1
@@ -7838,7 +8018,14 @@ function displayStatusTable(data) {
         
         row.innerHTML = `
             <td>${entry.payroll_month || '-'}</td>
-            <td>₹${(entry.total_amount || 0).toFixed(2)}</td>
+            <td class="amount-column">
+                ${amountDisplay}
+                ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
+                    <button class="view-history-btn" onclick="showEditHistory('${entry.payroll_month}')">
+                        <i class="fas fa-history"></i> View History
+                    </button>
+                ` : ''}
+            </td>
             <td>
                 <div class="status-badge-container">
                     <span class="status-badge ${overallStatus === 'approved' ? 'completed' : 'pending'}">
@@ -8046,6 +8233,139 @@ function getOverallStatusLabel(overallStatus, currentLevel, L1, L2, L3) {
     }
 }
 
+// ✅ NEW: Show Edit History Popup
+function showEditHistory(payrollMonth) {
+    const statusEntry = allStatusData.find(e => e.payroll_month === payrollMonth);
+    
+    if (!statusEntry || !statusEntry.amount_edit_history || statusEntry.amount_edit_history.length === 0) {
+        showErrorPopup('No edit history found');
+        return;
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: white;
+        border-radius: 16px;
+        max-width: 800px;
+        width: 95%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 30px;
+    `;
+
+    let historyHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <h2 style="font-size: 22px; color: #1e293b; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-history" style="color: #3b82f6;"></i>
+                Amount Edit History - ${payrollMonth}
+            </h2>
+            <button onclick="this.closest('.modal-overlay').remove()" 
+                    style="background: #ef4444; color: white; border: none; padding: 8px 16px; 
+                           border-radius: 8px; cursor: pointer;">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+    `;
+
+    if (statusEntry.amount_edit_history.length === 0) {
+        historyHTML += `<p style="color: #6b7280; text-align: center;">No edit history available</p>`;
+    } else {
+        historyHTML += `
+            <div style="margin-bottom: 20px;">
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">Original Amount:</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #64748b;">₹${(statusEntry.original_total || 0).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                        <span style="font-weight: 600;">Current Amount:</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #10b981;">₹${(statusEntry.total_amount || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h3 style="font-size: 18px; margin-bottom: 15px;">Edit History</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="padding: 12px; text-align: left;">Date</th>
+                        <th style="padding: 12px; text-align: left;">Edited By</th>
+                        <th style="padding: 12px; text-align: left;">Role</th>
+                        <th style="padding: 12px; text-align: right;">Old Amount</th>
+                        <th style="padding: 12px; text-align: right;">New Amount</th>
+                        <th style="padding: 12px; text-align: center;">Entries</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        // Sort history by date (newest first)
+        const sortedHistory = [...statusEntry.amount_edit_history].sort((a, b) => 
+            new Date(b.edited_date) - new Date(a.edited_date)
+        );
+
+        sortedHistory.forEach(edit => {
+            const editDate = new Date(edit.edited_date).toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            
+            historyHTML += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 12px;">${editDate}</td>
+                    <td style="padding: 12px; font-weight: 600;">${edit.edited_by_name || edit.edited_by}</td>
+                    <td style="padding: 12px;">
+                        <span style="
+                            background: ${edit.edited_by_role === 'HR' ? '#fef3c7' : 
+                                       edit.edited_by_role === 'Partner' ? '#e0e7ff' : '#dbeafe'};
+                            color: ${edit.edited_by_role === 'HR' ? '#92400e' : 
+                                   edit.edited_by_role === 'Partner' ? '#4338ca' : '#1e40af'};
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        ">
+                            ${edit.edited_by_role || 'Unknown'}
+                        </span>
+                    </td>
+                    <td style="padding: 12px; text-align: right; color: #ef4444; text-decoration: line-through;">₹${edit.old_total.toFixed(2)}</td>
+                    <td style="padding: 12px; text-align: right; color: #10b981; font-weight: 600;">₹${edit.new_total.toFixed(2)}</td>
+                    <td style="padding: 12px; text-align: center;">${edit.entries_updated}</td>
+                </tr>
+            `;
+        });
+
+        historyHTML += `
+                </tbody>
+            </table>
+        `;
+    }
+
+    modal.innerHTML = historyHTML;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+}
+
+// Make it global
+window.showEditHistory = showEditHistory;
 // ============================================
 // MOBILE MENU TOGGLE - FIXED VERSION
 // ============================================
@@ -8126,6 +8446,122 @@ function confirmSwitchToAdmin() {
     window.location.href = '/admin.html';
 }
 
+// ✅ NEW: Approval Remark Popup
+function showApproveRemarkPopup() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+      background: white;
+      padding: 35px 30px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 90%;
+      animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="
+          width: 70px;
+          height: 70px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 15px;
+        ">
+          <i class="fas fa-check-circle" style="font-size: 30px; color: white;"></i>
+        </div>
+        <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Approval Remark</h2>
+        <p style="color: #6b7280; font-size: 14px;">Add a remark (optional)</p>
+      </div>
+      
+      <textarea id="approveRemark" placeholder="Enter approval remark..." style="
+        width: 100%;
+        min-height: 100px;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        margin-bottom: 20px;
+        box-sizing: border-box;
+      "></textarea>
+      
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="submitApproveBtn" style="
+          padding: 12px 28px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        ">
+          <i class="fas fa-check"></i> Approve
+        </button>
+        <button id="cancelApproveBtn" style="
+          padding: 12px 28px;
+          background: #f1f5f9;
+          color: #4a5568;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        ">
+          Cancel
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const textarea = document.getElementById('approveRemark');
+    const submitBtn = document.getElementById('submitApproveBtn');
+    const cancelBtn = document.getElementById('cancelApproveBtn');
+
+    setTimeout(() => textarea.focus(), 100);
+
+    submitBtn.addEventListener('click', () => {
+      const remark = textarea.value.trim() || 'Approved without remark';
+      document.body.removeChild(overlay);
+      resolve(remark);
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      resolve(null);
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+        resolve(null);
+      }
+    });
+  });
+}
 // ============================================
 // UPDATED: History Section - Payroll Month Cards
 // ============================================
