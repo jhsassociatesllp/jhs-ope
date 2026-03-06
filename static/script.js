@@ -5,7 +5,7 @@ let savedEntries = []; // Temporary storage for saved entries
 // API_URL = "http://127.0.0.1:8000";
 API_URL = "";
 
-
+ 
 // Add CSS animations for popups
 const style = document.createElement('style');
 style.textContent = `
@@ -37,7 +37,7 @@ style.textContent = `
       transform: translateX(0);
     }
   }
-`;
+`;    
 document.head.appendChild(style);
 
 // Month range configuration with date ranges
