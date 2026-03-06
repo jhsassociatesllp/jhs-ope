@@ -2,8 +2,8 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-// API_URL = "http://127.0.0.1:8000";
-API_URL = "";
+API_URL = "http://127.0.0.1:8000";
+// API_URL = "";
 
 
 // Add CSS animations for popups
@@ -4302,6 +4302,7 @@ function displayPendingEmployeeTable(data) {
             </td>
             <td style="text-align: center;">
                 <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+
                     <button onclick="approveEmployee('${employeeData.employeeId}')" 
                             style="
                                 padding: 10px 20px; 
@@ -4320,7 +4321,7 @@ function displayPendingEmployeeTable(data) {
                             "
                             onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(16, 185, 129, 0.4)';"
                             onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(16, 185, 129, 0.3)';">
-                        <i class="fas fa-check-circle"></i> Approve
+                        <i class="fas fa-check-circle"></i> Approve All
                     </button>
                     <button onclick="rejectEmployee('${employeeData.employeeId}')" 
                             style="
@@ -4481,6 +4482,7 @@ window.showPendingEmployeeModal = function(employeeId) {
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Mode</th>
                                 <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Amount</th>
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Remarks</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Approval Remark</th>
                                 <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0; font-size: 13px;">PDF</th>
                                 <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Action</th>
                             </tr>
@@ -4510,6 +4512,9 @@ window.showPendingEmployeeModal = function(employeeId) {
                         onclick="showFullRemarks('${(entry.remarks || 'NA').replace(/'/g, "&apos;").replace(/"/g, "&quot;")}')"
                         title="Click to view full remarks">
                         ${entry.remarks || 'NA'}
+                    </td>
+                    <td style="padding: 12px; font-size: 13px; color: #059669; max-width: 200px;">
+                        ${entry.approval_remark || '-'}
                     </td>
                     <td style="padding: 12px; text-align: center;">
                         ${entry.ticket_pdf
@@ -5043,19 +5048,15 @@ function displayApproveEmployeeTable(data) {
 }
 
 // ✅ UPDATED: Show approved employee modal with MONTH-FILTERED data
+// ✅ UPDATED: showApprovedEmployeeModal with better remark handling
 window.showApprovedEmployeeModal = function(employeeId) {
     console.log("📋 Opening modal for employee:", employeeId);
     
-    // ✅ Get current selected month from filter
     const monthFilter = document.getElementById('approveMonthFilter');
     const selectedMonth = monthFilter ? monthFilter.value : '';
     
-    console.log("📅 Selected month filter:", selectedMonth || 'All Months');
-    
-    // Find employee's approved entries (filtered by month if selected)
     let employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
     
-    // ✅ Apply month filter
     if (selectedMonth) {
         employeeEntries = employeeEntries.filter(e => e.month_range === selectedMonth);
     }
@@ -5065,7 +5066,10 @@ window.showApprovedEmployeeModal = function(employeeId) {
         return;
     }
     
-    // Group by month
+    // Debug: Log first entry to see structure
+    console.log("📦 First entry data:", employeeEntries[0]);
+    console.log("🔍 All keys in first entry:", Object.keys(employeeEntries[0]));
+    
     const groupedByMonth = {};
     
     employeeEntries.forEach(entry => {
@@ -5076,7 +5080,6 @@ window.showApprovedEmployeeModal = function(employeeId) {
         groupedByMonth[month].push(entry);
     });
     
-    // Create modal
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = `
@@ -5104,7 +5107,6 @@ window.showApprovedEmployeeModal = function(employeeId) {
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     `;
 
-    // Get employee name
     const employeeName = employeeEntries[0]?.employee_name || employeeId;
     
     let modalContent = `
@@ -5130,7 +5132,6 @@ window.showApprovedEmployeeModal = function(employeeId) {
             </div>
     `;
     
-    // Display month-wise data
     Object.keys(groupedByMonth).sort().forEach(monthRange => {
         const entries = groupedByMonth[monthRange];
         const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -5160,12 +5161,45 @@ window.showApprovedEmployeeModal = function(employeeId) {
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Mode</th>
                                 <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Amount</th>
                                 <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Approved By</th>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Remark</th>
                             </tr>
                         </thead>
                         <tbody>
         `;
         
         entries.forEach(entry => {
+            // ✅ MULTIPLE REMARK FIELD CHECKS
+            let remarkText = '-';
+            
+            // Check all possible remark field names
+            if (entry.approval_remark) {
+                remarkText = entry.approval_remark;
+                console.log("✅ Found approval_remark:", remarkText);
+            }
+            else if (entry.L1_approval_remark) {
+                remarkText = entry.L1_approval_remark;
+                console.log("✅ Found L1_approval_remark:", remarkText);
+            }
+            else if (entry.approved_remark) {
+                remarkText = entry.approved_remark;
+                console.log("✅ Found approved_remark:", remarkText);
+            }
+            else if (entry.remark) {
+                remarkText = entry.remark;
+                console.log("✅ Found remark:", remarkText);
+            }
+            else if (entry.L1 && entry.L1.approval_remark) {
+                remarkText = entry.L1.approval_remark;
+                console.log("✅ Found nested L1.approval_remark:", remarkText);
+            }
+            else if (entry.L1 && entry.L1.remark) {
+                remarkText = entry.L1.remark;
+                console.log("✅ Found nested L1.remark:", remarkText);
+            }
+            else {
+                console.log("❌ No remark field found in entry");
+            }
+            
             modalContent += `
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding: 12px; font-size: 13px;">${entry.date || '-'}</td>
@@ -5182,6 +5216,9 @@ window.showApprovedEmployeeModal = function(employeeId) {
                     <td style="padding: 12px; font-size: 13px;">${getTravelModeLabel(entry.travel_mode)}</td>
                     <td style="padding: 12px; text-align: right; font-weight: 700; color: #059669; font-size: 14px;">₹${entry.amount || 0}</td>
                     <td style="padding: 12px; font-size: 13px; color: #059669; font-weight: 600;">${entry.approver_name || entry.approved_by || '-'}</td>
+                    <td style="padding: 12px; font-size: 13px; color: #6b7280; max-width: 200px; word-wrap: break-word;">
+                        ${remarkText}
+                    </td>
                 </tr>
             `;
         });
@@ -5200,7 +5237,6 @@ window.showApprovedEmployeeModal = function(employeeId) {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Close on overlay click
     overlay.addEventListener('click', function(e) {
         if (e.target === overlay) {
             overlay.remove();
@@ -7664,12 +7700,23 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
 // Make it global
 window.editTotalAmount = editTotalAmount;
 
+// ✅ UPDATED: approveEmployee with remark popup
+// ✅ UPDATED: approveEmployee function with HR/Partner support
 async function approveEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
   const currentEmpCode = localStorage.getItem('employee_code');
   
   try {
     console.log("✅ Approving employee:", employeeId);
+    
+    // ✅ Show remark popup first
+    const remark = await showApproveRemarkPopup();
+    
+    if (remark === null) {
+      return; // User cancelled
+    }
+    
+    console.log("📝 Approval remark:", remark || '(No remark)');
     
     const confirmed = await showConfirmPopup(
       'Approve All Entries',
@@ -7683,31 +7730,45 @@ async function approveEmployee(employeeId) {
     }
     
     // ✅ DETERMINE ENDPOINT BASED ON USER
-    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isHR = (currentEmpCode.trim().toUpperCase() === "JHS729");
     const isPartner = localStorage.getItem("is_partner") === "true";
 
     const endpoint = isHR 
-  ? `${API_URL}/api/ope/hr/approve/${employeeId}`
-  : isPartner
-    ? `${API_URL}/api/ope/partner/approve/${employeeId}`
-    : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+      ? `${API_URL}/api/ope/hr/approve/${employeeId}`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/approve/${employeeId}`
+        : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+    
+    console.log(`📡 Calling endpoint: ${endpoint}`);
     
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ remark: remark }) // ✅ Send remark in body
     });
     
     if (response.ok) {
       const result = await response.json();
-      showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
+      let message = `✅ Approved ${result.approved_count} entries for employee ${employeeId}`;
+      if (remark) {
+        message += `\n\n📝 Remark: "${remark}"`;
+      }
+      showSuccessPopup(message);
       
       const modals = document.querySelectorAll('.modal-overlay');
       modals.forEach(modal => modal.remove());
       
-      await loadPendingData(token, currentEmpCode);
+      // ✅ Reload based on role
+      if (isHR) {
+        await loadHrPendingData(); // Agar HR ka alag function hai
+      } else if (isPartner) {
+        await loadPartnerPendingData(); // Agar Partner ka alag function hai
+      } else {
+        await loadPendingData(token, currentEmpCode);
+      }
       
     } else {
       const errorData = await response.json();
@@ -7715,11 +7776,48 @@ async function approveEmployee(employeeId) {
     }
     
   } catch (error) {
-    console.error('Approval error:', error);
+    console.error('❌ Approval error:', error);
     showErrorPopup(`Network error: ${error.message}`);
   }
 }
 
+// ✅ Load HR Pending Data
+async function loadHrPendingData() {
+    const token = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    
+    try {
+        const response = await fetch(`${API_URL}/api/ope/hr/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayPendingEmployeeTable(data.employees || []);
+        }
+    } catch (error) {
+        console.error('Error loading HR pending:', error);
+    }
+}
+
+// ✅ Load Partner Pending Data
+async function loadPartnerPendingData() {
+    const token = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    
+    try {
+        const response = await fetch(`${API_URL}/api/ope/partner/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayPendingEmployeeTable(data.employees || []);
+        }
+    } catch (error) {
+        console.error('Error loading Partner pending:', error);
+    }
+}
 
 // async function rejectEmployee(employeeId) {
 //   const token = localStorage.getItem('access_token');
@@ -7945,6 +8043,130 @@ function showRejectReasonPopup() {
   });
 }
 
+
+// ✅ NEW: Approve Remark Popup - Same as reject popup but for approve
+function showApproveRemarkPopup() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+      background: white;
+      padding: 35px 30px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 90%;
+      animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="
+          width: 70px;
+          height: 70px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 15px;
+        ">
+          <i class="fas fa-check-circle" style="font-size: 30px; color: white;"></i>
+        </div>
+        <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Approval Remark</h2>
+        <p style="color: #6b7280; font-size: 14px;">Add a remark (optional) or click Approve without remark</p>
+      </div>
+      
+      <textarea id="approveRemark" placeholder="Enter approval remark (optional)..." style="
+        width: 100%;
+        min-height: 120px;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        margin-bottom: 20px;
+        box-sizing: border-box;
+      "></textarea>
+      
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="submitApproveBtn" style="
+          padding: 12px 28px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        ">
+          <i class="fas fa-check-circle"></i> Approve
+        </button>
+        <button id="cancelApproveBtn" style="
+          padding: 12px 28px;
+          background: #f1f5f9;
+          color: #4a5568;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        ">
+          Cancel
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const textarea = document.getElementById('approveRemark');
+    const submitBtn = document.getElementById('submitApproveBtn');
+    const cancelBtn = document.getElementById('cancelApproveBtn');
+
+    // Focus textarea
+    setTimeout(() => textarea.focus(), 100);
+
+    // Submit button
+    submitBtn.addEventListener('click', () => {
+      const remark = textarea.value.trim() || ''; // Empty string if no remark
+      document.body.removeChild(overlay);
+      resolve(remark);
+    });
+
+    // Cancel button
+    cancelBtn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      resolve(null);
+    });
+
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Make it globally accessible
+window.showApproveRemarkPopup = showApproveRemarkPopup;
 // ============================================
 // STATUS SECTION - NEW IMPLEMENTATION
 // ============================================
@@ -7990,7 +8212,7 @@ async function loadStatusData(token, empCode) {
 
 
 function displayStatusTable(data) {
-    console.log("🎨 Displaying status table");
+    console.log("🎨 Displaying status table with edit info");
     
     const tbody = document.getElementById('statusTableBody');
     if (!tbody) {
@@ -8016,65 +8238,224 @@ function displayStatusTable(data) {
         const currentLevel = entry.current_level || 'L1';
         const overallStatus = entry.overall_status || 'pending';
         
-        // Generate status tracker HTML with compact design
+        // ✅ EDIT INFORMATION - Directly from entry object
+        const totalEditedBy = entry.total_edited_by || null;
+        const totalEditedRole = entry.total_edited_role || null;
+        const totalEditedDate = entry.total_edited_date || null;
+        
+        // ✅ ORIGINAL AMOUNT - Check if exists, otherwise use total_amount
+        // Note: Database mein original_total_amount field nahi hai, so we'll use total_amount as original
+        // Agar future mein original_total_amount add karo to use karna
+        const originalTotalAmount = entry.original_total_amount || entry.total_amount;
+        const currentTotalAmount = entry.total_amount || 0;
+        
+        // ✅ Check if amount was edited (if total_edited_by exists)
+        const hasBeenEdited = totalEditedBy !== null;
+        
+        console.log("📊 Edit Info:", {
+            totalEditedBy,
+            totalEditedRole,
+            totalEditedDate,
+            originalTotalAmount,
+            currentTotalAmount,
+            hasBeenEdited
+        });
+        
+        // Determine status color and icon
+        let statusBadgeClass = '';
+        let statusIcon = '';
+        let statusText = '';
+        
+        if (overallStatus === 'approved') {
+            statusBadgeClass = 'completed';
+            statusIcon = 'fa-check-circle';
+            statusText = '✓ COMPLETED';
+        } 
+        else if (overallStatus === 'rejected') {
+            statusBadgeClass = 'rejected';
+            statusIcon = 'fa-times-circle';
+            statusText = '✗ REJECTED';
+        } 
+        else {
+            statusBadgeClass = 'pending';
+            statusIcon = 'fa-clock';
+            statusText = '⏳ IN PROGRESS';
+        }
+        
+        // Generate status tracker HTML
         let statusTrackerHTML = `<div class="approval-tracker">`;
         
-        // L1
-        const l1Class = L1.status ? 'approved' : (currentLevel === 'L1' ? 'pending' : 'inactive');
+        // ========== L1 - Reporting Manager ==========
+        let l1Class = '';
+        let l1Icon = '';
+        let l1StatusText = '';
+        let l1DateHtml = '';
+        let l1EditHtml = '';
+        
+        if (L1.status === true) {
+            l1Class = 'approved';
+            l1Icon = 'fa-check-circle';
+            l1StatusText = '✓ ' + (L1.approver_name || 'Approved');
+            if (L1.approved_date) {
+                l1DateHtml = `<div class="level-date">${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+            }
+        } 
+        else if (L1.status === false && L1.rejected_by) {
+            l1Class = 'rejected';
+            l1Icon = 'fa-times-circle';
+            l1StatusText = '✗ Rejected by ' + (L1.rejector_name || L1.rejected_by || 'Manager');
+            if (L1.rejected_date) {
+                l1DateHtml = `<div class="level-date rejected-date">${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+            }
+        } 
+        else if (currentLevel === 'L1' && overallStatus === 'pending') {
+            l1Class = 'pending';
+            l1Icon = 'fa-clock';
+            l1StatusText = '⏳ Pending';
+        } 
+        else {
+            l1Class = 'inactive';
+            l1Icon = 'fa-circle';
+            l1StatusText = '⏳ Pending';
+        }
+        
+        // Check if L1 edited amount
+        if (L1.amount_edited_by) {
+            l1EditHtml = `<div class="level-edit-info">
+                <i class="fas fa-pencil-alt"></i> Edited by ${L1.amount_edited_by_name || L1.amount_edited_by} (${L1.amount_edited_by_role || 'Manager'})
+                ${L1.amount_edited_date ? ` on ${new Date(L1.amount_edited_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}` : ''}
+            </div>`;
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l1Class}">
-                <i class="fas ${L1.status ? 'fa-check-circle' : (currentLevel === 'L1' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l1Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L1 - ${L1.level_name || 'Manager'}</div>
-                    <div class="level-status">
-                        ${L1.status ? '✓ ' + (L1.approver_name || 'Approved') : '⏳ Pending'}
-                    </div>
-                    ${L1.status && L1.approved_date ? `
-                        <div class="level-date">
-                            ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-                        </div>
-                    ` : ''}
+                    <div class="level-title">L1 - ${L1.level_name || 'Reporting Manager'}</div>
+                    <div class="level-status">${l1StatusText}</div>
+                    ${l1DateHtml}
+                    ${l1EditHtml}
                 </div>
             </div>
             <i class="fas fa-arrow-right approval-arrow ${L1.status ? 'active' : 'inactive'}"></i>
         `;
         
-        // L2
-        const l2Class = L2.status ? 'approved' : (currentLevel === 'L2' ? 'pending' : 'inactive');
+        // ========== L2 - Partner/HR ==========
+        let l2Class = '';
+        let l2Icon = '';
+        let l2StatusText = '';
+        let l2DateHtml = '';
+        let l2EditHtml = '';
+        
+        if (L2.status === true) {
+            l2Class = 'approved';
+            l2Icon = 'fa-check-circle';
+            l2StatusText = '✓ ' + (L2.approver_name || 'Approved');
+            if (L2.approved_date) {
+                l2DateHtml = `<div class="level-date">${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+            }
+        } 
+        else if (L2.status === false && L2.rejected_by) {
+            l2Class = 'rejected';
+            l2Icon = 'fa-times-circle';
+            l2StatusText = '✗ Rejected by ' + (L2.rejector_name || L2.rejected_by || (totalLevels === 2 ? 'HR' : 'Partner'));
+            if (L2.rejected_date) {
+                l2DateHtml = `<div class="level-date rejected-date">${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+            }
+        } 
+        else if (currentLevel === 'L2' && overallStatus === 'pending') {
+            l2Class = 'pending';
+            l2Icon = 'fa-clock';
+            l2StatusText = '⏳ Pending';
+        } 
+        else if (L1.status === true && overallStatus === 'pending') {
+            l2Class = 'pending';
+            l2Icon = 'fa-clock';
+            l2StatusText = '⏳ Pending';
+        } 
+        else {
+            l2Class = 'inactive';
+            l2Icon = 'fa-circle';
+            l2StatusText = '⏳ Pending';
+        }
+        
+        // Check if L2 edited amount
+        if (L2.amount_edited_by) {
+            l2EditHtml = `<div class="level-edit-info">
+                <i class="fas fa-pencil-alt"></i> Edited by ${L2.amount_edited_by_name || L2.amount_edited_by} (${L2.amount_edited_by_role || 'Partner'})
+                ${L2.amount_edited_date ? ` on ${new Date(L2.amount_edited_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}` : ''}
+            </div>`;
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l2Class}">
-                <i class="fas ${L2.status ? 'fa-check-circle' : (currentLevel === 'L2' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l2Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L2 - ${L2.level_name || 'Partner'}</div>
-                    <div class="level-status">
-                        ${L2.status ? '✓ ' + (L2.approver_name || 'Approved') : '⏳ Pending'}
-                    </div>
-                    ${L2.status && L2.approved_date ? `
-                        <div class="level-date">
-                            ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-                        </div>
-                    ` : ''}
+                    <div class="level-title">L2 - ${L2.level_name || (totalLevels === 2 ? 'HR' : 'Partner')}</div>
+                    <div class="level-status">${l2StatusText}</div>
+                    ${l2DateHtml}
+                    ${l2EditHtml}
                 </div>
             </div>
         `;
         
-        // L3 (only if total_levels = 3)
+        // ========== L3 (only if total_levels = 3) ==========
         if (totalLevels === 3) {
-            const l3Class = L3.status ? 'approved' : (currentLevel === 'L3' ? 'pending' : 'inactive');
+            let l3Class = '';
+            let l3Icon = '';
+            let l3StatusText = '';
+            let l3DateHtml = '';
+            let l3EditHtml = '';
+            
+            if (L3.status === true) {
+                l3Class = 'approved';
+                l3Icon = 'fa-check-circle';
+                l3StatusText = '✓ ' + (L3.approver_name || 'Approved');
+                if (L3.approved_date) {
+                    l3DateHtml = `<div class="level-date">${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+                }
+            } 
+            else if (L3.status === false && L3.rejected_by) {
+                l3Class = 'rejected';
+                l3Icon = 'fa-times-circle';
+                l3StatusText = '✗ Rejected by ' + (L3.rejector_name || L3.rejected_by || 'HR');
+                if (L3.rejected_date) {
+                    l3DateHtml = `<div class="level-date rejected-date">${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}</div>`;
+                }
+            } 
+            else if (currentLevel === 'L3' && overallStatus === 'pending') {
+                l3Class = 'pending';
+                l3Icon = 'fa-clock';
+                l3StatusText = '⏳ Pending';
+            } 
+            else if (L1.status === true && L2.status === true && overallStatus === 'pending') {
+                l3Class = 'pending';
+                l3Icon = 'fa-clock';
+                l3StatusText = '⏳ Pending';
+            } 
+            else {
+                l3Class = 'inactive';
+                l3Icon = 'fa-circle';
+                l3StatusText = '⏳ Pending';
+            }
+            
+            // Check if L3 edited amount
+            if (L3.amount_edited_by) {
+                l3EditHtml = `<div class="level-edit-info">
+                    <i class="fas fa-pencil-alt"></i> Edited by ${L3.amount_edited_by_name || L3.amount_edited_by} (${L3.amount_edited_by_role || 'HR'})
+                    ${L3.amount_edited_date ? ` on ${new Date(L3.amount_edited_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}` : ''}
+                </div>`;
+            }
+            
             statusTrackerHTML += `
                 <i class="fas fa-arrow-right approval-arrow ${L2.status ? 'active' : 'inactive'}"></i>
                 <div class="approval-level ${l3Class}">
-                    <i class="fas ${L3.status ? 'fa-check-circle' : (currentLevel === 'L3' ? 'fa-clock' : 'fa-circle')}"></i>
+                    <i class="fas ${l3Icon}"></i>
                     <div class="level-info">
                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
-                        <div class="level-status">
-                            ${L3.status ? '✓ ' + (L3.approver_name || 'Approved') : '⏳ Pending'}
-                        </div>
-                        ${L3.status && L3.approved_date ? `
-                            <div class="level-date">
-                                ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
-                            </div>
-                        ` : ''}
+                        <div class="level-status">${l3StatusText}</div>
+                        ${l3DateHtml}
+                        ${l3EditHtml}
                     </div>
                 </div>
             `;
@@ -8082,13 +8463,47 @@ function displayStatusTable(data) {
         
         statusTrackerHTML += `</div>`;
         
+        // ✅ AMOUNT DISPLAY with original/edited info
+        let amountDisplay = '';
+        
+        if (hasBeenEdited) {
+            // Format date if exists
+            let editedDateStr = '';
+            if (totalEditedDate) {
+                try {
+                    const editedDate = new Date(totalEditedDate);
+                    editedDateStr = editedDate.toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'});
+                } catch (e) {
+                    editedDateStr = '';
+                }
+            }
+            
+            // Determine role display
+            let roleDisplay = totalEditedRole || 'Manager';
+            
+            amountDisplay = `
+                <div class="amount-container">
+                    <span class="current-amount">₹${currentTotalAmount.toFixed(2)}</span>
+                    <span class="original-amount">₹${originalTotalAmount.toFixed(2)}</span>
+                    <span class="edited-by-info">
+                        <i class="fas fa-pencil-alt"></i> 
+                        Edited by ${roleDisplay} (${totalEditedBy})
+                        ${editedDateStr ? ` on ${editedDateStr}` : ''}
+                    </span>
+                </div>
+            `;
+        } else {
+            amountDisplay = `<span class="current-amount">₹${currentTotalAmount.toFixed(2)}</span>`;
+        }
+        
+        // ✅ Row HTML
         row.innerHTML = `
-            <td>${entry.payroll_month || '-'}</td>
-            <td>₹${(entry.total_amount || 0).toFixed(2)}</td>
+            <td><strong>${entry.payroll_month || '-'}</strong></td>
+            <td>${amountDisplay}</td>
             <td>
                 <div class="status-badge-container">
-                    <span class="status-badge ${overallStatus === 'approved' ? 'completed' : 'pending'}">
-                        ${overallStatus === 'approved' ? '✓ COMPLETED' : '⏳ IN PROGRESS'}
+                    <span class="status-badge ${statusBadgeClass}">
+                        <i class="fas ${statusIcon}"></i> ${statusText}
                     </span>
                     <div class="status-info">
                         Levels: <strong>${totalLevels}</strong> | 
