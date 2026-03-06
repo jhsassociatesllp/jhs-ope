@@ -2316,7 +2316,7 @@ async def save_temp_entry(
     project_name: str = Form(...),
     project_type: str = Form(...),
     location_from: str = Form(...),
-    location_to: str = Form(...),
+    location_to: str = Form(...), 
     travel_mode: str = Form(...),
     amount: float = Form(...),
     remarks: str = Form(...),

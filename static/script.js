@@ -8125,3 +8125,518 @@ function confirmSwitchToAdmin() {
     closeAdminSwitchModal();
     window.location.href = '/admin.html';
 }
+
+// ============================================
+// UPDATED: History Section - Payroll Month Cards
+// ============================================
+
+// Store grouped history data
+let groupedHistoryData = {};
+
+// UPDATED: Load history from Temp_OPE_data (editable) and OPE_data (non-editable)
+async function loadHistoryData(token, empCode) {
+    try {
+        console.log("📡 Fetching history for:", empCode);
+        
+        document.getElementById('loadingDiv').style.display = 'block';
+        document.getElementById('historyTableSection').style.display = 'none';
+        document.getElementById('noDataDiv').style.styleSheets = 'none';
+
+        // Fetch from Temp_OPE_data (editable)
+        console.log("🔍 Fetching temp data...");
+        const tempResponse = await fetch(`${API_URL}/api/ope/temp-history/${empCode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        // Fetch from OPE_data (submitted, non-editable)
+        console.log("🔍 Fetching submitted data...");
+        const response = await fetch(`${API_URL}/api/ope/history/${empCode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!tempResponse.ok && !response.ok) {
+            throw new Error('Failed to fetch history');
+        }
+
+        const tempData = tempResponse.ok ? await tempResponse.json() : { history: [] };
+        const data = response.ok ? await response.json() : { history: [] };
+        
+        console.log("✅ Temp API Response:", tempData);
+        console.log("✅ Submitted API Response:", data);
+        
+        allHistoryData = {
+            temp: tempData.history || [],
+            submitted: data.history || []
+        };
+        
+        console.log("✅ allHistoryData set:", allHistoryData);
+        console.log("📊 Temp entries:", allHistoryData.temp.length);
+        console.log("📊 Submitted entries:", allHistoryData.submitted.length);
+
+        // ✅ NEW: Group data by payroll month
+        groupHistoryByMonth();
+        
+        populateMonthFilter();
+        
+        // ✅ Display cards instead of table
+        displayHistoryCards();
+        
+        hideLoading();
+
+    } catch (error) {
+        console.error('❌ Error loading history:', error);
+        document.getElementById('loadingDiv').style.display = 'none';
+        showNoData();
+    }
+}
+
+// ✅ NEW: Group history entries by payroll month
+function groupHistoryByMonth() {
+    groupedHistoryData = {};
+    
+    // Group submitted entries
+    (allHistoryData.submitted || []).forEach(entry => {
+        const month = entry.month_range || 'Unknown';
+        if (!groupedHistoryData[month]) {
+            groupedHistoryData[month] = {
+                submitted: [],
+                temp: []
+            };
+        }
+        groupedHistoryData[month].submitted.push(entry);
+    });
+    
+    // Group temp entries
+    (allHistoryData.temp || []).forEach(entry => {
+        const month = entry.month_range || 'Unknown';
+        if (!groupedHistoryData[month]) {
+            groupedHistoryData[month] = {
+                submitted: [],
+                temp: []
+            };
+        }
+        groupedHistoryData[month].temp.push(entry);
+    });
+    
+    console.log("📊 Grouped by month:", Object.keys(groupedHistoryData));
+}
+
+// ✅ NEW: Display history as cards
+function displayHistoryCards() {
+    console.log("🎨 displayHistoryCards called");
+    
+    const container = document.getElementById('historyCardsContainer');
+    
+    if (!container) {
+        console.error("❌ historyCardsContainer not found in DOM!");
+        return;
+    }
+
+    container.innerHTML = '';
+    
+    const months = Object.keys(groupedHistoryData);
+    
+    if (months.length === 0) {
+        console.log("📭 No data to display");
+        showNoData();
+        return;
+    }
+
+    // Sort months in descending order (newest first)
+    months.sort().reverse();
+
+    months.forEach(month => {
+        const monthData = groupedHistoryData[month];
+        const submittedEntries = monthData.submitted || [];
+        const tempEntries = monthData.temp || [];
+        
+        // Calculate totals
+        const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const totalEntries = submittedEntries.length + tempEntries.length;
+        
+        // Create card
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.dataset.month = month;
+        
+        // Determine card color based on status
+        let cardStatus = 'mixed';
+        let statusIcon = 'fa-calendar-alt';
+        let statusColor = '#3b82f6';
+        
+        if (submittedEntries.length > 0 && tempEntries.length === 0) {
+            cardStatus = 'submitted';
+            statusIcon = 'fa-check-circle';
+            statusColor = '#10b981';
+        } else if (tempEntries.length > 0 && submittedEntries.length === 0) {
+            cardStatus = 'draft';
+            statusIcon = 'fa-pen';
+            statusColor = '#f59e0b';
+        }
+        
+        card.innerHTML = `
+            <div class="history-card-header" style="background: linear-gradient(135deg, ${statusColor} 0%, ${adjustColor(statusColor, -20)} 100%);">
+                <div class="card-header-left">
+                    <i class="fas ${statusIcon}"></i>
+                    <h3>${month}</h3>
+                </div>
+                <div class="card-header-right">
+                    <span class="entry-count">${totalEntries} entries</span>
+                </div>
+            </div>
+            <div class="history-card-body" onclick="showMonthDetails('${month}')">
+                <div class="card-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Submitted</span>
+                        <span class="stat-value">${submittedEntries.length}</span>
+                        <span class="stat-amount">₹${submittedTotal.toFixed(2)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Drafts</span>
+                        <span class="stat-value">${tempEntries.length}</span>
+                        <span class="stat-amount">₹${tempTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="view-details">
+                        <i class="fas fa-chevron-right"></i> Click to view details
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+
+    const loadingDiv = document.getElementById('loadingDiv');
+    const tableSection = document.getElementById('historyTableSection');
+    const noDataDiv = document.getElementById('noDataDiv');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (noDataDiv) noDataDiv.style.display = 'none';
+    
+    if (tableSection) {
+        tableSection.style.display = 'block';
+        tableSection.style.visibility = 'visible';
+        tableSection.style.opacity = '1';
+    }
+}
+
+// Helper function to adjust color brightness
+function adjustColor(hex, percent) {
+    // Simple color adjustment for demo
+    return hex;
+}
+
+// ✅ NEW: Show month details in modal
+window.showMonthDetails = function(month) {
+    console.log("📋 Showing details for month:", month);
+    
+    const monthData = groupedHistoryData[month];
+    if (!monthData) return;
+    
+    const submittedEntries = monthData.submitted || [];
+    const tempEntries = monthData.temp || [];
+    
+    // Calculate totals
+    const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: white;
+        border-radius: 16px;
+        max-width: 1400px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    `;
+
+    let modalContent = `
+        <div style="padding: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e5e7eb; padding-bottom: 15px;">
+                <div>
+                    <h2 style="font-size: 24px; color: #1e293b; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-calendar-alt" style="color: #3b82f6;"></i>
+                        ${month}
+                    </h2>
+                    <p style="color: #64748b; font-size: 14px;">
+                        Total Entries: ${submittedEntries.length + tempEntries.length} | 
+                        Submitted: ₹${submittedTotal.toFixed(2)} | 
+                        Drafts: ₹${tempTotal.toFixed(2)}
+                    </p>
+                </div>
+                <button onclick="this.closest('.modal-overlay').remove()" 
+                        style="background: #ef4444; color: white; border: none; padding: 10px 20px; 
+                               border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
+                        onmouseover="this.style.background='#dc2626'"
+                        onmouseout="this.style.background='#ef4444'">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+    `;
+
+    // Submitted Entries Section
+    if (submittedEntries.length > 0) {
+        modalContent += `
+            <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 15px 20px;">
+                    <h3 style="color: white; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-check-circle"></i>
+                        Submitted Entries (${submittedEntries.length})
+                    </h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="history-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Remarks</th>
+                                <th>PDF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        submittedEntries.forEach(entry => {
+            modalContent += `
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-submitted">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td class="remarks" title="${entry.remarks || 'NA'}">${entry.remarks || 'NA'}</td>
+                    <td>
+                        ${entry.ticket_pdf 
+                            ? `<button class="btn-pdf" onclick="viewPdf('${entry._id}', false)">
+                                <i class="fas fa-file-pdf"></i>
+                               </button>` 
+                            : '-'}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        modalContent += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    // Draft Entries Section
+    if (tempEntries.length > 0) {
+        modalContent += `
+            <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 15px 20px;">
+                    <h3 style="color: white; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-pen"></i>
+                        Draft Entries (${tempEntries.length})
+                    </h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="history-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Remarks</th>
+                                <th>PDF</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        tempEntries.forEach(entry => {
+            modalContent += `
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-draft">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td class="remarks" title="${entry.remarks || 'NA'}">${entry.remarks || 'NA'}</td>
+                    <td>
+                        ${entry.ticket_pdf 
+                            ? `<button class="btn-pdf" onclick="viewPdf('${entry._id}', true)">
+                                <i class="fas fa-file-pdf"></i>
+                               </button>` 
+                            : '-'}
+                    </td>
+                    <td>
+                        <button class="btn-edit" onclick="editTempRow('${entry._id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-delete" onclick="deleteTempRow('${entry._id}', '${month}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        modalContent += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+    
+    modalContent += `</div>`;
+    
+    modal.innerHTML = modalContent;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Close on overlay click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+}
+
+// Update populateMonthFilter for new structure
+function populateMonthFilter() {
+    const monthSet = new Set();
+    
+    const months = Object.keys(groupedHistoryData);
+    months.forEach(month => monthSet.add(month));
+
+    const select = document.getElementById('monthRangeFilter');
+    select.innerHTML = '<option value="">All Months</option>';
+
+    Array.from(monthSet).sort().reverse().forEach(month => {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = month;
+        select.appendChild(option);
+    });
+
+    select.addEventListener('change', function() {
+        const selectedMonth = this.value;
+        
+        if (selectedMonth === '') {
+            displayHistoryCards();
+        } else {
+            // Filter to show only selected month
+            const filteredData = {
+                [selectedMonth]: groupedHistoryData[selectedMonth]
+            };
+            displayFilteredCards(filteredData);
+        }
+    });
+}
+
+// Display filtered cards
+function displayFilteredCards(filteredData) {
+    const container = document.getElementById('historyCardsContainer');
+    container.innerHTML = '';
+    
+    Object.keys(filteredData).forEach(month => {
+        const monthData = filteredData[month];
+        const submittedEntries = monthData.submitted || [];
+        const tempEntries = monthData.temp || [];
+        
+        const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const totalEntries = submittedEntries.length + tempEntries.length;
+        
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.dataset.month = month;
+        
+        let cardStatus = 'mixed';
+        let statusIcon = 'fa-calendar-alt';
+        let statusColor = '#3b82f6';
+        
+        if (submittedEntries.length > 0 && tempEntries.length === 0) {
+            cardStatus = 'submitted';
+            statusIcon = 'fa-check-circle';
+            statusColor = '#10b981';
+        } else if (tempEntries.length > 0 && submittedEntries.length === 0) {
+            cardStatus = 'draft';
+            statusIcon = 'fa-pen';
+            statusColor = '#f59e0b';
+        }
+        
+        card.innerHTML = `
+            <div class="history-card-header" style="background: linear-gradient(135deg, ${statusColor} 0%, ${adjustColor(statusColor, -20)} 100%);">
+                <div class="card-header-left">
+                    <i class="fas ${statusIcon}"></i>
+                    <h3>${month}</h3>
+                </div>
+                <div class="card-header-right">
+                    <span class="entry-count">${totalEntries} entries</span>
+                </div>
+            </div>
+            <div class="history-card-body" onclick="showMonthDetails('${month}')">
+                <div class="card-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Submitted</span>
+                        <span class="stat-value">${submittedEntries.length}</span>
+                        <span class="stat-amount">₹${submittedTotal.toFixed(2)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Drafts</span>
+                        <span class="stat-value">${tempEntries.length}</span>
+                        <span class="stat-amount">₹${tempTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="view-details">
+                        <i class="fas fa-chevron-right"></i> Click to view details
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}

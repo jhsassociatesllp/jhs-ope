@@ -209,16 +209,16 @@
       </section>
 
       <!-- History Section -->
-      <section id="historySection" class="content-section">
+      <!-- <section id="historySection" class="content-section">
         <div class="page-header">
           <h1><i class="fas fa-history"></i> Entry History</h1>
           <p>View and manage your submitted entries</p>
         </div>
 
         <div class="card">
-          <!-- <div class="card-header">
+          <div class="card-header">
               <h2><i class="fas fa-filter"></i> Filter Entries</h2>
-            </div> -->
+            </div>
           <div class="card-body">
             <div class="month-filter">
               <label for="monthRangeFilter">Filter by Month Range:</label>
@@ -257,7 +257,7 @@
                   </tr>
                 </thead>
                 <tbody id="historyTableBody">
-                  <!-- Data will be rendered here -->
+                  
                 </tbody>
               </table>
             </div>
@@ -268,7 +268,45 @@
           <i class="fas fa-inbox"></i>
           <p>No data found</p>
         </div>
-      </section>
+      </section> -->
+
+      <!-- History Section -->
+<section id="historySection" class="content-section">
+  <div class="page-header">
+    <h1><i class="fas fa-history"></i> Entry History</h1>
+    <p>View and manage your submitted entries</p>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="month-filter">
+        <label for="monthRangeFilter">Filter by Month Range:</label>
+        <select id="monthRangeFilter">
+          <option value="">All Months</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadingDiv" class="loading-container">
+    <div class="loading-spinner">
+      <i class="fas fa-spinner fa-spin"></i>
+      <p>Loading history...</p>
+    </div>
+  </div>
+
+  <div class="card" id="historyTableSection" style="display: none">
+    <div class="card-body">
+      <!-- Cards Container -->
+      <div id="historyCardsContainer" class="history-cards-container"></div>
+    </div>
+  </div>
+
+  <div id="noDataDiv" class="no-data-container" style="display: none">
+    <i class="fas fa-inbox"></i>
+    <p>No data found</p>
+  </div>
+</section>
 
       <!-- Status Section (Placeholder) -->
       <!-- Status Section -->
