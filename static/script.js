@@ -2979,9 +2979,9 @@ if (pdfFile) {
   if (successCount > 0) {
     let approvalInfo = '';
     if (totalAmount > window.employeeOPELimit) {
-      approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
+      // approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
     } else {
-      approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
+      // approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
     }
     
     showSuccessPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
@@ -7895,8 +7895,309 @@ async function loadStatusData(token, empCode) {
 
 
 // ✅ UPDATED: Display status table with edit tracking
+// ✅ UPDATED: Display status table with reject tracking
+// function displayStatusTable(data) {
+//     console.log("🎨 Displaying status table with reject tracking");
+//     console.log("Status data:", data);
+    
+//     const tbody = document.getElementById('statusTableBody');
+//     if (!tbody) {
+//         console.error("❌ statusTableBody not found!");
+//         return;
+//     }
+
+//     tbody.innerHTML = '';
+
+//     if (!data || data.length === 0) {
+//         showStatusNoData();
+//         return;
+//     }
+
+//     // Display each payroll month as one row
+//     data.forEach((entry) => {
+//         const row = document.createElement('tr');
+        
+//         const L1 = entry.L1 || {};
+//         const L2 = entry.L2 || {};
+//         const L3 = entry.L3 || {};
+//         const totalLevels = entry.total_levels || 2;
+//         const currentLevel = entry.current_level || 'L1';
+//         const overallStatus = entry.overall_status || 'pending';
+//         const isRejected = entry.is_rejected || false;
+        
+//         console.log(`Processing month: ${entry.payroll_month}, isRejected: ${isRejected}`);
+        
+//         // Check if amount was edited
+//         const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
+//         const editedBy = entry.last_edited_by_name || entry.last_edited_by;
+//         const editedByRole = entry.last_edited_by_role;
+//         const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
+//             day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+//         }) : null;
+        
+//         // Generate amount display with edit info
+//         let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
+        
+//         if (wasEdited) {
+//             amountDisplay = `
+//                 <div class="amount-edit-info">
+//                     <span class="amount-original">₹${(entry.original_total || 0).toFixed(2)}</span>
+//                     <i class="fas fa-arrow-right"></i>
+//                     <span class="amount-current edited">₹${(entry.total_amount || 0).toFixed(2)}</span>
+//                     ${editedBy ? `
+//                         <div class="edit-by">
+//                             <i class="fas fa-pencil-alt"></i>
+//                             Edited by: <strong>${editedBy}</strong> (${editedByRole || 'Unknown'})
+//                             ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             `;
+//         }
+        
+//         // Generate rejection info if rejected
+//         let rejectionHTML = '';
+//         if (isRejected) {
+//             const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
+//                 day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+//             }) : null;
+            
+//             rejectionHTML = `
+//                 <div class="rejection-info">
+//                     <div class="rejection-badge">
+//                         <i class="fas fa-times-circle"></i> REJECTED
+//                     </div>
+//                     <div class="rejection-details">
+//                         <div><strong>Rejected by:</strong> ${entry.rejected_by_name || entry.rejected_by || 'Unknown'} (${entry.rejected_by_role || 'Unknown'})</div>
+//                         ${rejectedDate ? `<div><strong>Date:</strong> ${rejectedDate}</div>` : ''}
+//                         ${entry.rejection_reason ? `<div><strong>Reason:</strong> ${entry.rejection_reason}</div>` : ''}
+//                         <div><strong>Rejected at:</strong> ${entry.rejected_level || 'Unknown'} level</div>
+//                     </div>
+//                 </div>
+//             `;
+//         }
+        
+//         // Generate status tracker HTML
+//         let statusTrackerHTML = `<div class="approval-tracker">`;
+        
+//         // L1 - Reporting Manager
+//         const l1Status = L1.status || false;
+//         const l1Rejected = L1.rejected || false;
+//         let l1Class = 'inactive';
+//         let l1Icon = 'fa-circle';
+//         let l1StatusText = 'Pending';
+        
+//         if (l1Rejected) {
+//             l1Class = 'rejected';
+//             l1Icon = 'fa-times-circle';
+//             l1StatusText = 'Rejected';
+//         } else if (l1Status) {
+//             l1Class = 'approved';
+//             l1Icon = 'fa-check-circle';
+//             l1StatusText = 'Approved';
+//         } else if (currentLevel === 'L1' && !isRejected) {
+//             l1Class = 'pending';
+//             l1Icon = 'fa-clock';
+//             l1StatusText = 'Pending';
+//         }
+        
+//         statusTrackerHTML += `
+//             <div class="approval-level ${l1Class}">
+//                 <i class="fas ${l1Icon}"></i>
+//                 <div class="level-info">
+//                     <div class="level-title">L1 - ${L1.level_name || 'Reporting Manager'}</div>
+//                     <div class="level-status">
+//                         ${l1Rejected ? '❌ Rejected' : (l1Status ? '✓ Approved' : '⏳ Pending')}
+//                     </div>
+//                     ${l1Rejected && L1.rejection_reason ? `
+//                         <div class="level-reason" title="${L1.rejection_reason}">
+//                             <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
+//                         </div>
+//                     ` : ''}
+//                     ${l1Status && L1.approved_date ? `
+//                         <div class="level-date">
+//                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                     ${l1Rejected && L1.rejected_date ? `
+//                         <div class="level-date rejected">
+//                             ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </div>
+//             <i class="fas fa-arrow-right approval-arrow ${(l1Status && !l1Rejected) ? 'active' : 'inactive'}"></i>
+//         `;
+        
+//         // L2 - Partner or HR
+//         const l2Status = L2.status || false;
+//         const l2Rejected = L2.rejected || false;
+//         let l2Class = 'inactive';
+//         let l2Icon = 'fa-circle';
+//         let l2StatusText = 'Pending';
+        
+//         if (l2Rejected) {
+//             l2Class = 'rejected';
+//             l2Icon = 'fa-times-circle';
+//             l2StatusText = 'Rejected';
+//         } else if (l2Status) {
+//             l2Class = 'approved';
+//             l2Icon = 'fa-check-circle';
+//             l2StatusText = 'Approved';
+//         } else if (currentLevel === 'L2' && !isRejected) {
+//             l2Class = 'pending';
+//             l2Icon = 'fa-clock';
+//             l2StatusText = 'Pending';
+//         }
+        
+//         statusTrackerHTML += `
+//             <div class="approval-level ${l2Class}">
+//                 <i class="fas ${l2Icon}"></i>
+//                 <div class="level-info">
+//                     <div class="level-title">L2 - ${L2.level_name || (totalLevels === 3 ? 'Partner' : 'HR')}</div>
+//                     <div class="level-status">
+//                         ${l2Rejected ? '❌ Rejected' : (l2Status ? '✓ Approved' : '⏳ Pending')}
+//                     </div>
+//                     ${l2Rejected && L2.rejection_reason ? `
+//                         <div class="level-reason" title="${L2.rejection_reason}">
+//                             <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
+//                         </div>
+//                     ` : ''}
+//                     ${l2Status && L2.approved_date ? `
+//                         <div class="level-date">
+//                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                     ${l2Rejected && L2.rejected_date ? `
+//                         <div class="level-date rejected">
+//                             ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </div>
+//         `;
+        
+//         // L3 - HR (only if total_levels = 3)
+//         if (totalLevels === 3) {
+//             const l3Status = L3.status || false;
+//             const l3Rejected = L3.rejected || false;
+//             let l3Class = 'inactive';
+//             let l3Icon = 'fa-circle';
+//             let l3StatusText = 'Pending';
+            
+//             if (l3Rejected) {
+//                 l3Class = 'rejected';
+//                 l3Icon = 'fa-times-circle';
+//                 l3StatusText = 'Rejected';
+//             } else if (l3Status) {
+//                 l3Class = 'approved';
+//                 l3Icon = 'fa-check-circle';
+//                 l3StatusText = 'Approved';
+//             } else if (currentLevel === 'L3' && !isRejected) {
+//                 l3Class = 'pending';
+//                 l3Icon = 'fa-clock';
+//                 l3StatusText = 'Pending';
+//             }
+            
+//             statusTrackerHTML += `
+//                 <i class="fas fa-arrow-right approval-arrow ${(l2Status && !l2Rejected) ? 'active' : 'inactive'}"></i>
+//                 <div class="approval-level ${l3Class}">
+//                     <i class="fas ${l3Icon}"></i>
+//                     <div class="level-info">
+//                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
+//                         <div class="level-status">
+//                             ${l3Rejected ? '❌ Rejected' : (l3Status ? '✓ Approved' : '⏳ Pending')}
+//                         </div>
+//                         ${l3Rejected && L3.rejection_reason ? `
+//                             <div class="level-reason" title="${L3.rejection_reason}">
+//                                 <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
+//                             </div>
+//                         ` : ''}
+//                         ${l3Status && L3.approved_date ? `
+//                             <div class="level-date">
+//                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             </div>
+//                         ` : ''}
+//                         ${l3Rejected && L3.rejected_date ? `
+//                             <div class="level-date rejected">
+//                                 ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             </div>
+//                         ` : ''}
+//                     </div>
+//                 </div>
+//             `;
+//         }
+        
+//         statusTrackerHTML += `</div>`;
+        
+//         // Overall status badge
+//         let statusBadge = '';
+//         if (isRejected) {
+//             statusBadge = `
+//                 <span class="status-badge rejected">
+//                     <i class="fas fa-times-circle"></i> REJECTED
+//                 </span>
+//             `;
+//         } else if (overallStatus === 'approved') {
+//             statusBadge = `
+//                 <span class="status-badge completed">
+//                     <i class="fas fa-check-circle"></i> APPROVED
+//                 </span>
+//             `;
+//         } else {
+//             statusBadge = `
+//                 <span class="status-badge pending">
+//                     <i class="fas fa-clock"></i> IN PROGRESS
+//                 </span>
+//             `;
+//         }
+        
+//         row.innerHTML = `
+//             <td>${entry.payroll_month || '-'}</td>
+//             <td class="amount-column">
+//                 ${amountDisplay}
+//                 ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
+//                     <button class="view-history-btn" onclick='showEditHistory(${JSON.stringify(entry.payroll_month)})'>
+//                         <i class="fas fa-history"></i> View History
+//                     </button>
+//                 ` : ''}
+//             </td>
+//             <td>
+//                 <div class="status-badge-container">
+//                     ${statusBadge}
+//                     <div class="status-info">
+//                         Levels: <strong>${totalLevels}</strong> | 
+//                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
+//                     </div>
+//                     ${isRejected ? `
+//                         <div class="rejection-summary" onclick='showRejectionDetails(${JSON.stringify({
+//                             rejected_by: entry.rejected_by_name || entry.rejected_by,
+//                             role: entry.rejected_by_role,
+//                             date: entry.rejected_date,
+//                             reason: entry.rejection_reason,
+//                             level: entry.rejected_level
+//                         })})'>
+//                             <i class="fas fa-info-circle"></i> Click for rejection details
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </td>
+//             <td>
+//                 ${statusTrackerHTML}
+//             </td>
+//         `;
+        
+//         tbody.appendChild(row);
+//     });
+
+//     document.getElementById('statusLoadingDiv').style.display = 'none';
+//     document.getElementById('statusTableSection').style.display = 'block';
+// }
+
+// ✅ UPDATED: Display status table with reject tracking
 function displayStatusTable(data) {
-    console.log("🎨 Displaying status table with edit tracking");
+    console.log("🎨 Displaying status table with reject tracking");
+    console.log("Status data:", data);
     
     const tbody = document.getElementById('statusTableBody');
     if (!tbody) {
@@ -7921,6 +8222,12 @@ function displayStatusTable(data) {
         const totalLevels = entry.total_levels || 2;
         const currentLevel = entry.current_level || 'L1';
         const overallStatus = entry.overall_status || 'pending';
+        const isRejected = entry.is_rejected || false;
+        const rejectedLevel = entry.rejected_level || null;
+        const rejectedByName = entry.rejected_by_name || entry.rejected_by || '';
+        const rejectionReason = entry.rejection_reason || '';
+        
+        console.log(`Processing month: ${entry.payroll_month}, isRejected: ${isRejected}, level: ${rejectedLevel}`);
         
         // Check if amount was edited
         const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
@@ -7950,63 +8257,183 @@ function displayStatusTable(data) {
             `;
         }
         
-        // Generate status tracker HTML
+        // Generate rejection info if rejected
+        let rejectionHTML = '';
+        if (isRejected) {
+            const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }) : null;
+            
+            rejectionHTML = `
+                <div class="rejection-info">
+                    <div class="rejection-badge">
+                        <i class="fas fa-times-circle"></i> REJECTED AT ${rejectedLevel || 'Unknown'}
+                    </div>
+                    <div class="rejection-details">
+                        <div><strong>Rejected by:</strong> ${rejectedByName || 'Unknown'}</div>
+                        ${rejectedDate ? `<div><strong>Date:</strong> ${rejectedDate}</div>` : ''}
+                        ${rejectionReason ? `<div><strong>Reason:</strong> ${rejectionReason}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Generate status tracker HTML with rejection indicators
         let statusTrackerHTML = `<div class="approval-tracker">`;
         
-        // L1
-        const l1Class = L1.status ? 'approved' : (currentLevel === 'L1' ? 'pending' : 'inactive');
+        // L1 - Reporting Manager
+        const l1Status = L1.status || false;
+        const l1Rejected = L1.rejected || false;
+        let l1Class = 'inactive';
+        let l1Icon = 'fa-circle';
+        let l1StatusText = 'Pending';
+        let l1StatusIcon = '⏳';
+        
+        if (l1Rejected) {
+            l1Class = 'rejected';
+            l1Icon = 'fa-times-circle';
+            l1StatusText = 'Rejected';
+            l1StatusIcon = '❌';
+        } else if (l1Status) {
+            l1Class = 'approved';
+            l1Icon = 'fa-check-circle';
+            l1StatusText = 'Approved';
+            l1StatusIcon = '✓';
+        } else if (currentLevel === 'L1' && !isRejected) {
+            l1Class = 'pending';
+            l1Icon = 'fa-clock';
+            l1StatusText = 'Pending';
+            l1StatusIcon = '⏳';
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l1Class}">
-                <i class="fas ${L1.status ? 'fa-check-circle' : (currentLevel === 'L1' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l1Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L1 - ${L1.level_name || 'Manager'}</div>
+                    <div class="level-title">L1 - ${L1.level_name || 'Reporting Manager'}</div>
                     <div class="level-status">
-                        ${L1.status ? '✓ ' + (L1.approver_name || 'Approved') : '⏳ Pending'}
+                        ${l1StatusIcon} ${l1StatusText}
                     </div>
-                    ${L1.status && L1.approved_date ? `
+                    ${l1Rejected && L1.rejection_reason ? `
+                        <div class="level-reason" title="${L1.rejection_reason}">
+                            <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l1Status && L1.approved_date ? `
                         <div class="level-date">
                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                         </div>
                     ` : ''}
+                    ${l1Rejected && L1.rejected_date ? `
+                        <div class="level-date rejected">
+                            ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
-            <i class="fas fa-arrow-right approval-arrow ${L1.status ? 'active' : 'inactive'}"></i>
+            <i class="fas fa-arrow-right approval-arrow ${(l1Status && !l1Rejected) ? 'active' : 'inactive'}"></i>
         `;
         
-        // L2
-        const l2Class = L2.status ? 'approved' : (currentLevel === 'L2' ? 'pending' : 'inactive');
+        // L2 - Partner or HR
+        const l2Status = L2.status || false;
+        const l2Rejected = L2.rejected || false;
+        let l2Class = 'inactive';
+        let l2Icon = 'fa-circle';
+        let l2StatusText = 'Pending';
+        let l2StatusIcon = '⏳';
+        
+        if (l2Rejected) {
+            l2Class = 'rejected';
+            l2Icon = 'fa-times-circle';
+            l2StatusText = 'Rejected';
+            l2StatusIcon = '❌';
+        } else if (l2Status) {
+            l2Class = 'approved';
+            l2Icon = 'fa-check-circle';
+            l2StatusText = 'Approved';
+            l2StatusIcon = '✓';
+        } else if (currentLevel === 'L2' && !isRejected) {
+            l2Class = 'pending';
+            l2Icon = 'fa-clock';
+            l2StatusText = 'Pending';
+            l2StatusIcon = '⏳';
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l2Class}">
-                <i class="fas ${L2.status ? 'fa-check-circle' : (currentLevel === 'L2' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l2Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L2 - ${L2.level_name || 'Partner'}</div>
+                    <div class="level-title">L2 - ${L2.level_name || (totalLevels === 3 ? 'Partner' : 'HR')}</div>
                     <div class="level-status">
-                        ${L2.status ? '✓ ' + (L2.approver_name || 'Approved') : '⏳ Pending'}
+                        ${l2StatusIcon} ${l2StatusText}
                     </div>
-                    ${L2.status && L2.approved_date ? `
+                    ${l2Rejected && L2.rejection_reason ? `
+                        <div class="level-reason" title="${L2.rejection_reason}">
+                            <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l2Status && L2.approved_date ? `
                         <div class="level-date">
                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                        </div>
+                    ` : ''}
+                    ${l2Rejected && L2.rejected_date ? `
+                        <div class="level-date rejected">
+                            ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                         </div>
                     ` : ''}
                 </div>
             </div>
         `;
         
-        // L3 (only if total_levels = 3)
+        // L3 - HR (only if total_levels = 3)
         if (totalLevels === 3) {
-            const l3Class = L3.status ? 'approved' : (currentLevel === 'L3' ? 'pending' : 'inactive');
+            const l3Status = L3.status || false;
+            const l3Rejected = L3.rejected || false;
+            let l3Class = 'inactive';
+            let l3Icon = 'fa-circle';
+            let l3StatusText = 'Pending';
+            let l3StatusIcon = '⏳';
+            
+            if (l3Rejected) {
+                l3Class = 'rejected';
+                l3Icon = 'fa-times-circle';
+                l3StatusText = 'Rejected';
+                l3StatusIcon = '❌';
+            } else if (l3Status) {
+                l3Class = 'approved';
+                l3Icon = 'fa-check-circle';
+                l3StatusText = 'Approved';
+                l3StatusIcon = '✓';
+            } else if (currentLevel === 'L3' && !isRejected) {
+                l3Class = 'pending';
+                l3Icon = 'fa-clock';
+                l3StatusText = 'Pending';
+                l3StatusIcon = '⏳';
+            }
+            
             statusTrackerHTML += `
-                <i class="fas fa-arrow-right approval-arrow ${L2.status ? 'active' : 'inactive'}"></i>
+                <i class="fas fa-arrow-right approval-arrow ${(l2Status && !l2Rejected) ? 'active' : 'inactive'}"></i>
                 <div class="approval-level ${l3Class}">
-                    <i class="fas ${L3.status ? 'fa-check-circle' : (currentLevel === 'L3' ? 'fa-clock' : 'fa-circle')}"></i>
+                    <i class="fas ${l3Icon}"></i>
                     <div class="level-info">
                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
                         <div class="level-status">
-                            ${L3.status ? '✓ ' + (L3.approver_name || 'Approved') : '⏳ Pending'}
+                            ${l3StatusIcon} ${l3StatusText}
                         </div>
-                        ${L3.status && L3.approved_date ? `
+                        ${l3Rejected && L3.rejection_reason ? `
+                            <div class="level-reason" title="${L3.rejection_reason}">
+                                <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                        ${l3Status && L3.approved_date ? `
                             <div class="level-date">
                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            </div>
+                        ` : ''}
+                        ${l3Rejected && L3.rejected_date ? `
+                            <div class="level-date rejected">
+                                ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                             </div>
                         ` : ''}
                     </div>
@@ -8016,25 +8443,91 @@ function displayStatusTable(data) {
         
         statusTrackerHTML += `</div>`;
         
+        // Overall status badge
+        let statusBadge = '';
+        if (isRejected) {
+            statusBadge = `
+                <span class="status-badge rejected" style="
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+                ">
+                    <i class="fas fa-times-circle"></i> REJECTED
+                </span>
+            `;
+        } else if (overallStatus === 'approved') {
+            statusBadge = `
+                <span class="status-badge completed" style="
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+                ">
+                    <i class="fas fa-check-circle"></i> APPROVED
+                </span>
+            `;
+        } else {
+            statusBadge = `
+                <span class="status-badge pending" style="
+                    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+                ">
+                    <i class="fas fa-clock"></i> IN PROGRESS
+                </span>
+            `;
+        }
+        
         row.innerHTML = `
-            <td>${entry.payroll_month || '-'}</td>
+            <td><strong>${entry.payroll_month || '-'}</strong></td>
             <td class="amount-column">
                 ${amountDisplay}
                 ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
-                    <button class="view-history-btn" onclick="showEditHistory('${entry.payroll_month}')">
+                    <button class="view-history-btn" onclick='showEditHistory(${JSON.stringify(entry.payroll_month)})'>
                         <i class="fas fa-history"></i> View History
                     </button>
                 ` : ''}
             </td>
             <td>
                 <div class="status-badge-container">
-                    <span class="status-badge ${overallStatus === 'approved' ? 'completed' : 'pending'}">
-                        ${overallStatus === 'approved' ? '✓ COMPLETED' : '⏳ IN PROGRESS'}
-                    </span>
-                    <div class="status-info">
+                    ${statusBadge}
+                    <div class="status-info" style="margin-top: 8px; font-size: 12px; color: #6b7280;">
                         Levels: <strong>${totalLevels}</strong> | 
                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
                     </div>
+                    ${isRejected ? `
+                        <div class="rejection-summary" style="margin-top: 10px; cursor: pointer;" 
+                             onclick='showRejectionDetails(${JSON.stringify({
+                                rejected_by: entry.rejected_by_name || entry.rejected_by,
+                                level: entry.rejected_level,
+                                date: entry.rejected_date,
+                                reason: entry.rejection_reason
+                             })})'>
+                            <span style="color: #ef4444; font-size: 12px; text-decoration: underline;">
+                                <i class="fas fa-info-circle"></i> Click for rejection details
+                            </span>
+                        </div>
+                    ` : ''}
                 </div>
             </td>
             <td>
@@ -8049,6 +8542,144 @@ function displayStatusTable(data) {
     document.getElementById('statusTableSection').style.display = 'block';
 }
 
+// ✅ Rejection Details Popup (already hai, confirm kar lo)
+function showRejectionDetails(rejectionData) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        width: 90%;
+        animation: slideUp 0.3s ease;
+    `;
+
+    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }) : 'Unknown';
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-times-circle" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Rejection Details</h2>
+        </div>
+        
+        <div style="background: #fef2f2; border: 2px solid #fee2e2; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: grid; gap: 15px;">
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected By</div>
+                    <div style="font-weight: 600; color: #1f2937;">${rejectionData.rejected_by || 'Unknown'}</div>
+                    <div style="font-size: 12px; color: #6b7280;">Role: ${rejectionData.role || 'Unknown'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected At Level</div>
+                    <div>
+                        <span style="
+                            background: #fee2e2;
+                            color: #991b1b;
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 13px;
+                            font-weight: 600;
+                        ">
+                            ${rejectionData.level || 'Unknown'}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Date</div>
+                    <div style="font-weight: 500; color: #374151;">${rejectedDate}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Reason</div>
+                    <div style="
+                        background: white;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 12px;
+                        min-height: 60px;
+                        font-size: 14px;
+                        color: #374151;
+                        word-wrap: break-word;
+                    ">
+                        ${rejectionData.reason || 'No reason provided'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRejectBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRejectBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showRejectionDetails = showRejectionDetails;
 function generateStatusTracker(L1, L2, L3, currentLevel) {
     return `
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -9076,3 +9707,142 @@ function displayFilteredCards(filteredData) {
         container.appendChild(card);
     });
 }
+
+// ✅ NEW: Show Rejection Details Popup
+function showRejectionDetails(rejectionData) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        width: 90%;
+        animation: slideUp 0.3s ease;
+    `;
+
+    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }) : 'Unknown';
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-times-circle" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Rejection Details</h2>
+        </div>
+        
+        <div style="background: #fef2f2; border: 2px solid #fee2e2; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: grid; gap: 15px;">
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected By</div>
+                    <div style="font-weight: 600; color: #1f2937;">${rejectionData.rejected_by || 'Unknown'}</div>
+                    <div style="font-size: 12px; color: #6b7280;">Role: ${rejectionData.role || 'Unknown'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected At Level</div>
+                    <div>
+                        <span style="
+                            background: #fee2e2;
+                            color: #991b1b;
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 13px;
+                            font-weight: 600;
+                        ">
+                            ${rejectionData.level || 'Unknown'}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Date</div>
+                    <div style="font-weight: 500; color: #374151;">${rejectedDate}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Reason</div>
+                    <div style="
+                        background: white;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 12px;
+                        min-height: 60px;
+                        font-size: 14px;
+                        color: #374151;
+                        word-wrap: break-word;
+                    ">
+                        ${rejectionData.reason || 'No reason provided'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRejectBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRejectBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showRejectionDetails = showRejectionDetails;

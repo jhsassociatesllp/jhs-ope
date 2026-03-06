@@ -3806,13 +3806,15 @@ async def approve_single_entry(
 async def get_employee_status(employee_code: str, current_user=Depends(get_current_user)):
     """
     Get approval status for all payroll months of an employee
-    Now includes amount edit tracking information
+    Now includes rejection tracking with visual indicators
     """
     try:
         employee_code = employee_code.strip().upper()
         current_emp_code = current_user["employee_code"].strip().upper()
         
-        print(f"📊 Fetching status for: {employee_code}")
+        print(f"\n{'='*60}")
+        print(f"📊 FETCHING STATUS FOR: {employee_code}")
+        print(f"{'='*60}\n")
         
         if current_emp_code != employee_code:
             raise HTTPException(status_code=403, detail="Access denied")
@@ -3821,6 +3823,7 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if not status_doc:
+            print(f"📭 No status document found for {employee_code}")
             return {"status_entries": []}
         
         approval_status = status_doc.get("approval_status", [])
@@ -3829,42 +3832,157 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         
         status_entries = []
         
-        for ps in approval_status:
+        for ps_index, ps in enumerate(approval_status):
+            print(f"\n{'─'*40}")
+            print(f"📅 Processing payroll: {ps.get('payroll_month')}")
+            print(f"{'─'*40}")
+            
+            # Get all level data
+            L1 = ps.get("L1", {})
+            L2 = ps.get("L2", {})
+            L3 = ps.get("L3", {}) if "L3" in ps else {}
+            
+            total_levels = ps.get("total_levels", 2)
+            current_level = ps.get("current_level", "L1")
+            overall_status = ps.get("overall_status", "pending")
+            
+            # Check for rejection at each level
+            is_rejected = False
+            rejected_level = None
+            rejected_by = None
+            rejected_by_name = None
+            rejected_date = None
+            rejection_reason = None
+            
+            # Check L1 rejection
+            l1_rejected = L1.get("rejected", False)
+            if l1_rejected or L1.get("rejected_by"):
+                is_rejected = True
+                rejected_level = "L1"
+                rejected_by = L1.get("rejected_by")
+                rejected_by_name = L1.get("rejector_name") or L1.get("rejected_by")
+                rejected_date = L1.get("rejected_date")
+                rejection_reason = L1.get("rejection_reason")
+                overall_status = "rejected"
+                print(f"   ❌ L1 REJECTED")
+            
+            # Check L2 rejection (if not already rejected)
+            elif L2.get("rejected", False) or L2.get("rejected_by"):
+                is_rejected = True
+                rejected_level = "L2"
+                rejected_by = L2.get("rejected_by")
+                rejected_by_name = L2.get("rejector_name") or L2.get("rejected_by")
+                rejected_date = L2.get("rejected_date")
+                rejection_reason = L2.get("rejection_reason")
+                overall_status = "rejected"
+                print(f"   ❌ L2 REJECTED")
+            
+            # Check L3 rejection (if exists and not already rejected)
+            elif L3 and (L3.get("rejected", False) or L3.get("rejected_by")):
+                is_rejected = True
+                rejected_level = "L3"
+                rejected_by = L3.get("rejected_by")
+                rejected_by_name = L3.get("rejector_name") or L3.get("rejected_by")
+                rejected_date = L3.get("rejected_date")
+                rejection_reason = L3.get("rejection_reason")
+                overall_status = "rejected"
+                print(f"   ❌ L3 REJECTED")
+            
+            # Build entry with rejection info
             entry = {
                 "employeeId": employee_code,
                 "employeeName": status_doc.get("employeeName", ""),
                 "payroll_month": ps.get("payroll_month"),
                 "ope_label": ps.get("ope_label"),
-                "total_levels": ps.get("total_levels"),
+                "total_levels": total_levels,
                 "limit": ps.get("limit"),
                 "total_amount": ps.get("total_amount"),
-                "original_total": ps.get("original_total", ps.get("total_amount")),  # Original amount before edit
+                "original_total": ps.get("original_total", ps.get("total_amount")),
                 "last_edited_by": ps.get("last_edited_by"),
                 "last_edited_by_name": ps.get("last_edited_by_name"),
                 "last_edited_by_role": ps.get("last_edited_by_role"),
                 "last_edited_date": ps.get("last_edited_date"),
-                "amount_edit_history": ps.get("amount_edit_history", []),  # Complete edit history
-                "L1": ps.get("L1", {}),
-                "L2": ps.get("L2", {}),
-                "current_level": ps.get("current_level"),
-                "overall_status": ps.get("overall_status"),
-                "submission_date": ps.get("submission_date")
+                "amount_edit_history": ps.get("amount_edit_history", []),
+                "L1": {
+                    "status": L1.get("status", False),
+                    "level_name": L1.get("level_name", "Reporting Manager"),
+                    "approver_code": L1.get("approver_code"),
+                    "approver_name": L1.get("approver_name"),
+                    "approved_date": L1.get("approved_date"),
+                    "approval_remark": L1.get("approval_remark"),
+                    "rejected": L1.get("rejected", False),
+                    "rejected_by": L1.get("rejected_by"),
+                    "rejector_name": L1.get("rejector_name"),
+                    "rejected_date": L1.get("rejected_date"),
+                    "rejection_reason": L1.get("rejection_reason")
+                },
+                "L2": {
+                    "status": L2.get("status", False),
+                    "level_name": L2.get("level_name", "Partner" if total_levels == 3 else "HR"),
+                    "approver_code": L2.get("approver_code"),
+                    "approver_name": L2.get("approver_name"),
+                    "approved_date": L2.get("approved_date"),
+                    "approval_remark": L2.get("approval_remark"),
+                    "rejected": L2.get("rejected", False),
+                    "rejected_by": L2.get("rejected_by"),
+                    "rejector_name": L2.get("rejector_name"),
+                    "rejected_date": L2.get("rejected_date"),
+                    "rejection_reason": L2.get("rejection_reason")
+                },
+                "current_level": current_level,
+                "overall_status": overall_status,
+                "submission_date": ps.get("submission_date"),
+                # Top-level rejection tracking
+                "is_rejected": is_rejected,
+                "rejected_level": rejected_level,
+                "rejected_by": rejected_by,
+                "rejected_by_name": rejected_by_name,
+                "rejected_date": rejected_date,
+                "rejection_reason": rejection_reason
             }
             
-            # Add L3 only if it exists
-            if "L3" in ps:
-                entry["L3"] = ps.get("L3", {})
+            # Add L3 if exists
+            if L3:
+                entry["L3"] = {
+                    "status": L3.get("status", False),
+                    "level_name": L3.get("level_name", "HR"),
+                    "approver_code": L3.get("approver_code"),
+                    "approver_name": L3.get("approver_name"),
+                    "approved_date": L3.get("approved_date"),
+                    "approval_remark": L3.get("approval_remark"),
+                    "rejected": L3.get("rejected", False),
+                    "rejected_by": L3.get("rejected_by"),
+                    "rejector_name": L3.get("rejector_name"),
+                    "rejected_date": L3.get("rejected_date"),
+                    "rejection_reason": L3.get("rejection_reason")
+                }
             
             status_entries.append(entry)
+            
+            # Print summary
+            if is_rejected:
+                print(f"\n   🚨 FINAL: REJECTED at {rejected_level}")
+                if rejection_reason:
+                    print(f"      Reason: {rejection_reason[:50]}...")
+            else:
+                print(f"\n   ✅ FINAL: {overall_status.upper()}")
+        
+        print(f"\n{'='*60}")
+        print(f"✅ Returning {len(status_entries)} status entries")
+        for entry in status_entries:
+            status = "REJECTED" if entry['is_rejected'] else entry['overall_status'].upper()
+            print(f"   Month: {entry['payroll_month']} - {status}")
+        print(f"{'='*60}\n")
         
         return {"status_entries": status_entries}
         
     except Exception as e:
-        print(f"❌ Error fetching status: {str(e)}")
+        print(f"\n❌❌ ERROR fetching status:")
+        print(f"   {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))    
-
+        raise HTTPException(status_code=500, detail=str(e))
+        
 # HR API
 
 @app.post("/api/ope/hr/approve/{employee_code}")

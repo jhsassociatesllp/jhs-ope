@@ -2042,3 +2042,68 @@ body {
     font-size: 11px;
     color: #64748b;
 }
+
+/* Rejection Styles */
+/* Rejection styles */
+.approval-level.rejected {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border: 2px solid #ef4444 !important;
+}
+
+.approval-level.rejected i {
+    color: #ef4444 !important;
+}
+
+.approval-level.rejected .level-status {
+    color: #b91c1c !important;
+    font-weight: 600;
+}
+
+.level-date.rejected {
+    color: #b91c1c;
+}
+
+.rejection-badge {
+    background: #ef4444;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rejection-details {
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.rejection-details strong {
+    color: #374151;
+}
+
+.rejection-details div {
+    margin-bottom: 4px;
+}
+
+.status-badge.rejected {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
