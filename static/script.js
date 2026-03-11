@@ -42,11 +42,6 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'oct-nov-2025': { 
-    start: '2025-10-21', 
-    end: '2025-11-20', 
-    display: 'Oct 2025 - Nov 2025' 
-  },
   'nov-dec-2025': { 
     start: '2025-11-21', 
     end: '2025-12-20', 
