@@ -61,6 +61,11 @@ const monthRanges = {
     start: '2026-01-21', 
     end: '2026-02-20', 
     display: 'Jan 2026 - Feb 2026' 
+  },
+  'feb-mar-2026': {
+    start: '2026-02-21', 
+    end: '2026-03-20', 
+    display: 'Feb 2026 - Mar 2026' 
   }
 };
 
