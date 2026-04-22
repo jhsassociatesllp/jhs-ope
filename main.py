@@ -2173,7 +2173,7 @@ async def edit_total_amount(
         print(f"❌ Error editing total amount: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))    
 
 # ============================================
 # ALSO UPDATE: SINGLE AMOUNT EDIT ENDPOINT

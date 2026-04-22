@@ -7569,7 +7569,7 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
         showErrorPopup('Total amount must be greater than 0');
         return;
     }
-    
+          
     const token = localStorage.getItem('access_token');
     
     try {
