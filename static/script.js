@@ -42,25 +42,20 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'oct-nov-2025': { 
-    start: '2025-10-21', 
-    end: '2025-11-20', 
-    display: 'Oct 2025 - Nov 2025' 
-  },
-  'nov-dec-2025': { 
-    start: '2025-11-21', 
-    end: '2025-12-20', 
-    display: 'Nov 2025 - Dec 2025' 
-  },
-  'dec-jan-2026': {  // ✅ FIXED KEY (removed space)
-    start: '2025-12-21', 
-    end: '2026-01-20', 
-    display: 'Dec 2025 - Jan 2026' 
-  },
   'jan-feb-2026': {
     start: '2026-01-21', 
     end: '2026-02-20', 
     display: 'Jan 2026 - Feb 2026' 
+  },
+  'feb-mar-2026': {
+    start: '2026-01-21', 
+    end: '2026-02-20', 
+    display: 'Feb 2026 - Mar 2026' 
+  },
+  'mar-april-2026': {
+    start: '2026-01-21', 
+    end: '2026-02-20', 
+    display: 'Mar 2026 - April 2026' 
   }
 };
 
@@ -4199,10 +4194,13 @@ window.showPendingEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
+                              data-entries="${entries.length}"
+                              data-original="${totalAmount.toFixed(2)}"
+                              style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            Original: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
                         </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})" 
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})"
                                 style="
                                     background: rgba(255, 255, 255, 0.3);
                                     color: white;
@@ -6208,10 +6206,13 @@ window.showRejectedEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
+                              data-entries="${entries.length}"
+                              data-original="${totalAmount.toFixed(2)}"
+                              style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            Original: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
                         </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})" 
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})"
                                 style="
                                     background: rgba(255, 255, 255, 0.3);
                                     color: white;
@@ -7499,6 +7500,64 @@ function showAmountEditPopup(currentAmount) {
 window.editEntryAmount = editEntryAmount;
 
 // ✅ NEW: Edit Total Amount for entire month
+// async function editTotalAmount(employeeId, monthRange, currentTotal) {
+//     const newTotal = await showAmountEditPopup(currentTotal);
+    
+//     if (newTotal === null || newTotal === currentTotal) {
+//         return;
+//     }
+    
+//     if (newTotal <= 0) {
+//         showErrorPopup('Total amount must be greater than 0');
+//         return;
+//     }
+    
+//     const token = localStorage.getItem('access_token');
+    
+//     try {
+//         console.log(`💰 Updating total amount for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
+        
+//         const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
+//             method: 'PUT',
+//             headers: {
+//                 'Authorization': `Bearer ${token}`,
+//                 'Content-Type': 'application/json'
+//             },
+//             body: JSON.stringify({
+//                 employee_id: employeeId,
+//                 month_range: monthRange,
+//                 new_total: newTotal
+//             })
+//         });
+        
+//         if (response.ok) {
+//             const result = await response.json();
+//             showSuccessPopup(`Total amount updated successfully!\n\nOld Total: ₹${currentTotal}\nNew Total: ₹${newTotal}\nEntries adjusted: ${result.entries_updated}`);
+            
+//             // Reload the current section
+//             const empCode = localStorage.getItem('employee_code');
+//             const navPending = document.getElementById('navPending');
+//             const navApprove = document.getElementById('navApprove');
+//             const navReject = document.getElementById('navReject');
+            
+//             if (navPending && navPending.classList.contains('active')) {
+//                 await loadPendingData(token, empCode);
+//             } else if (navApprove && navApprove.classList.contains('active')) {
+//                 await loadApproveData(token, empCode);
+//             } else if (navReject && navReject.classList.contains('active')) {
+//                 await loadRejectData(token, empCode);
+//             }
+//         } else {
+//             const errorData = await response.json();
+//             showErrorPopup(errorData.detail || 'Failed to update total amount');
+//         }
+        
+//     } catch (error) {
+//         console.error('Error updating total amount:', error);
+//         showErrorPopup('Network error');
+//     }
+// }
+
 async function editTotalAmount(employeeId, monthRange, currentTotal) {
     const newTotal = await showAmountEditPopup(currentTotal);
     
@@ -7514,7 +7573,7 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
     const token = localStorage.getItem('access_token');
     
     try {
-        console.log(`💰 Updating total amount for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
+        console.log(`💰 Updating total for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
         
         const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
             method: 'PUT',
@@ -7530,10 +7589,34 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
         });
         
         if (response.ok) {
-            const result = await response.json();
-            showSuccessPopup(`Total amount updated successfully!\n\nOld Total: ₹${currentTotal}\nNew Total: ₹${newTotal}\nEntries adjusted: ${result.entries_updated}`);
+            // ✅ Update the span directly inside the open modal
+            const spanId = `total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}`;
+            const span = document.getElementById(spanId);
             
-            // Reload the current section
+            if (span) {
+                const entryCount = span.dataset.entries;
+                const originalAmount = span.dataset.original;
+                
+                span.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <div style="font-size: 11px; opacity: 0.8;">
+                            Original: <span style="text-decoration: line-through;">₹${parseFloat(originalAmount).toFixed(2)}</span>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 700;">
+                            Edited: ₹${newTotal.toFixed(2)} | Entries: ${entryCount}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            showSuccessPopup(
+                `Payroll total updated successfully!<br><br>` +
+                `<b>Original Total:</b> ₹${currentTotal.toFixed(2)}<br>` +
+                `<b>Edited Total:</b> ₹${newTotal.toFixed(2)}<br><br>` +
+                `<span style="color:#6b7280; font-size:12px;">Individual entry amounts are unchanged.</span>`
+            );
+            
+            // Reload background data
             const empCode = localStorage.getItem('employee_code');
             const navPending = document.getElementById('navPending');
             const navApprove = document.getElementById('navApprove');
@@ -7546,6 +7629,7 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
             } else if (navReject && navReject.classList.contains('active')) {
                 await loadRejectData(token, empCode);
             }
+            
         } else {
             const errorData = await response.json();
             showErrorPopup(errorData.detail || 'Failed to update total amount');
@@ -7557,6 +7641,7 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
     }
 }
 
+// window.editTotalAmount = editTotalAmount;
 // Make it global
 window.editTotalAmount = editTotalAmount;
 

@@ -647,7 +647,7 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
                         "client": entry.get("client"),
                         "project_id": entry.get("project_id"),
                         "project_name": entry.get("project_name"),
-                        "project_type": entry.get("project_type", "N/A"),  # ✅ NEW FIELD ADDED
+                        "project_type": entry.get("project_type", "N/A"), 
                         "location_from": entry.get("location_from"),
                         "location_to": entry.get("location_to"),
                         "travel_mode": entry.get("travel_mode"),
@@ -665,7 +665,7 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
         print(f"❌ Error fetching history: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ---------- UPDATE ENTRY ----------
+
 # ---------- UPDATE ENTRY ----------
 @app.put("/api/ope/update/{entry_id}")
 async def update_ope_entry(
@@ -1834,15 +1834,233 @@ async def reject_employee_entries(
 # ============================================
 # EDIT ENTRY AMOUNT (Manager/Partner/HR)
 # ============================================
+# @app.put("/api/ope/manager/edit-total-amount")
+# async def edit_total_amount(
+#     request: Request,
+#     current_user=Depends(get_current_user)
+# ):
+#     """
+#     Edit total amount for entire month - proportionally distributes to all entries
+#     Now tracks who edited and shows original vs edited amounts
+#     """
+#     try:
+#         user_emp_code = current_user["employee_code"].strip().upper()
+        
+#         body = await request.json()
+#         employee_id = body.get("employee_id")
+#         month_range = body.get("month_range")
+#         new_total = body.get("new_total")
+        
+#         print(f"\n{'='*60}")
+#         print(f"💰💰 EDIT TOTAL AMOUNT REQUEST")
+#         print(f"   User: {user_emp_code}")
+#         print(f"   Employee: {employee_id}")
+#         print(f"   Month: {month_range}")
+#         print(f"   New Total: ₹{new_total}")
+#         print(f"{'='*60}\n")
+        
+#         # ============================================
+#         # ✅ AUTHORIZATION CHECK
+#         # ============================================
+#         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
+#         is_hr = (user_emp_code == "JHS729")
+#         is_partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
+        
+#         if not (is_manager or is_hr or is_partner):
+#             error_msg = "Only managers, partners, and HR can edit amounts"
+#             print(f"❌ Authorization failed: {error_msg}")
+#             raise HTTPException(status_code=403, detail=error_msg)
+        
+#         # Determine user role
+#         if is_hr:
+#             user_role = "HR"
+#             user_name = "HR Department"
+#         elif is_partner:
+#             partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
+#             user_role = "Partner"
+#             user_name = partner.get("Partner_Name", user_emp_code) if partner else user_emp_code
+#         else:
+#             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
+#             user_role = "Manager"
+#             user_name = manager.get("ReportingEmpName", user_emp_code) if manager else user_emp_code
+        
+#         print(f"✅ User role: {user_role} - {user_name}")
+        
+#         # Validate inputs
+#         if not employee_id or not month_range or new_total is None:
+#             raise HTTPException(status_code=400, detail="Missing required fields")
+        
+#         if new_total <= 0:
+#             raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
+        
+#         # Find employee's OPE data
+#         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
+        
+#         if not ope_doc:
+#             raise HTTPException(status_code=404, detail="Employee data not found")
+        
+#         data_array = ope_doc.get("Data", [])
+#         entries_found = []
+#         data_index = None
+#         old_total = 0
+        
+#         # Find the month's entries
+#         for i, data_item in enumerate(data_array):
+#             if month_range in data_item:
+#                 entries_found = data_item[month_range]
+#                 data_index = i
+#                 old_total = sum(float(e.get("amount", 0)) for e in entries_found)
+#                 break
+        
+#         if not entries_found:
+#             raise HTTPException(status_code=404, detail="No entries found for this month")
+        
+#         print(f"📊 Found {len(entries_found)} entries")
+#         print(f"💵 Old Total: ₹{old_total}")
+#         print(f"💵 New Total: ₹{new_total}")
+        
+#         # ✅ CALCULATE PROPORTIONAL DISTRIBUTION
+#         entries_updated = 0
+#         current_time = datetime.utcnow().isoformat()
+#         edited_amounts = []  # Track original amounts for status
+        
+#         if old_total > 0:
+#             # Proportional distribution based on original amounts
+#             ratio = new_total / old_total
+#             print(f"📐 Distribution ratio: {ratio:.4f}")
+            
+#             for j, entry in enumerate(entries_found):
+#                 old_amount = float(entry.get("amount", 0))
+#                 new_amount = round(old_amount * ratio, 2)
+                
+#                 # Store original amount for tracking
+#                 edited_amounts.append({
+#                     "entry_id": str(entry.get("_id")),
+#                     "original_amount": old_amount,
+#                     "new_amount": new_amount,
+#                     "date": entry.get("date")
+#                 })
+                
+#                 # Update entry with edit tracking
+#                 await db["OPE_data"].update_one(
+#                     {"employeeId": employee_id},
+#                     {"$set": {
+#                         f"Data.{data_index}.{month_range}.{j}.amount": new_amount,
+#                         f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
+#                         f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
+#                     }}
+#                 )
+                
+#                 entries_updated += 1
+#                 print(f"   Entry {j+1}: ₹{old_amount} → ₹{new_amount}")
+#         else:
+#             # If old total is 0, distribute equally
+#             amount_per_entry = round(new_total / len(entries_found), 2)
+#             print(f"📐 Equal distribution: ₹{amount_per_entry} per entry")
+            
+#             for j, entry in enumerate(entries_found):
+#                 old_amount = float(entry.get("amount", 0))
+                
+#                 edited_amounts.append({
+#                     "entry_id": str(entry.get("_id")),
+#                     "original_amount": old_amount,
+#                     "new_amount": amount_per_entry,
+#                     "date": entry.get("date")
+#                 })
+                
+#                 await db["OPE_data"].update_one(
+#                     {"employeeId": employee_id},
+#                     {"$set": {
+#                         f"Data.{data_index}.{month_range}.{j}.amount": amount_per_entry,
+#                         f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
+#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
+#                         f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
+#                     }}
+#                 )
+                
+#                 entries_updated += 1
+#                 print(f"   Entry {j+1}: ₹{old_amount} → ₹{amount_per_entry}")
+        
+#         # ✅ UPDATE STATUS COLLECTION WITH EDIT TRACKING
+#         status_doc = await db["Status"].find_one({"employeeId": employee_id})
+        
+#         if status_doc:
+#             approval_status = status_doc.get("approval_status", [])
+            
+#             for i, ps in enumerate(approval_status):
+#                 if ps.get("payroll_month") == month_range:
+#                     # Get existing edit history or create new
+#                     edit_history = ps.get("amount_edit_history", [])
+                    
+#                     # Add new edit record
+#                     edit_history.append({
+#                         "edited_by": user_emp_code,
+#                         "edited_by_name": user_name,
+#                         "edited_by_role": user_role,
+#                         "edited_date": current_time,
+#                         "old_total": old_total,
+#                         "new_total": new_total,
+#                         "entries_updated": entries_updated,
+#                         "edited_amounts": edited_amounts
+#                     })
+                    
+#                     await db["Status"].update_one(
+#                         {"employeeId": employee_id},
+#                         {"$set": {
+#                             f"approval_status.{i}.total_amount": new_total,
+#                             f"approval_status.{i}.last_edited_by": user_emp_code,
+#                             f"approval_status.{i}.last_edited_by_name": user_name,
+#                             f"approval_status.{i}.last_edited_by_role": user_role,
+#                             f"approval_status.{i}.last_edited_date": current_time,
+#                             f"approval_status.{i}.original_total": old_total,
+#                             f"approval_status.{i}.amount_edit_history": edit_history
+#                         }}
+#                     )
+#                     print(f"✅ Updated Status collection with edit history")
+#                     break
+        
+#         print(f"\n✅✅ TOTAL AMOUNT UPDATE COMPLETE")
+#         print(f"   Updated by: {user_role} - {user_name} ({user_emp_code})")
+#         print(f"   Entries updated: {entries_updated}")
+#         print(f"   Old Total: ₹{old_total}")
+#         print(f"   New Total: ₹{new_total}")
+#         print(f"{'='*60}\n")
+        
+#         return {
+#             "success": True,
+#             "message": "Total amount updated successfully",
+#             "updated_by": {
+#                 "code": user_emp_code,
+#                 "name": user_name,
+#                 "role": user_role
+#             },
+#             "old_total": old_total,
+#             "new_total": new_total,
+#             "entries_updated": entries_updated,
+#             "distribution_method": "proportional" if old_total > 0 else "equal"
+#         }
+        
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         print(f"❌ Error editing total amount: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.put("/api/ope/manager/edit-total-amount")
 async def edit_total_amount(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Edit total amount for entire month - proportionally distributes to all entries
-    Now tracks who edited and shows original vs edited amounts
-    """
     try:
         user_emp_code = current_user["employee_code"].strip().upper()
         
@@ -1859,19 +2077,15 @@ async def edit_total_amount(
         print(f"   New Total: ₹{new_total}")
         print(f"{'='*60}\n")
         
-        # ============================================
-        # ✅ AUTHORIZATION CHECK
-        # ============================================
+        # Authorization check
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
         is_hr = (user_emp_code == "JHS729")
         is_partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
         
         if not (is_manager or is_hr or is_partner):
-            error_msg = "Only managers, partners, and HR can edit amounts"
-            print(f"❌ Authorization failed: {error_msg}")
-            raise HTTPException(status_code=403, detail=error_msg)
+            raise HTTPException(status_code=403, detail="Only managers, partners, and HR can edit amounts")
         
-        # Determine user role
+        # Determine user role and name
         if is_hr:
             user_role = "HR"
             user_name = "HR Department"
@@ -1884,158 +2098,64 @@ async def edit_total_amount(
             user_role = "Manager"
             user_name = manager.get("ReportingEmpName", user_emp_code) if manager else user_emp_code
         
-        print(f"✅ User role: {user_role} - {user_name}")
-        
-        # Validate inputs
         if not employee_id or not month_range or new_total is None:
             raise HTTPException(status_code=400, detail="Missing required fields")
         
         if new_total <= 0:
             raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
         
-        # Find employee's OPE data
-        ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
-        
-        if not ope_doc:
-            raise HTTPException(status_code=404, detail="Employee data not found")
-        
-        data_array = ope_doc.get("Data", [])
-        entries_found = []
-        data_index = None
-        old_total = 0
-        
-        # Find the month's entries
-        for i, data_item in enumerate(data_array):
-            if month_range in data_item:
-                entries_found = data_item[month_range]
-                data_index = i
-                old_total = sum(float(e.get("amount", 0)) for e in entries_found)
-                break
-        
-        if not entries_found:
-            raise HTTPException(status_code=404, detail="No entries found for this month")
-        
-        print(f"📊 Found {len(entries_found)} entries")
-        print(f"💵 Old Total: ₹{old_total}")
-        print(f"💵 New Total: ₹{new_total}")
-        
-        # ✅ CALCULATE PROPORTIONAL DISTRIBUTION
-        entries_updated = 0
         current_time = datetime.utcnow().isoformat()
-        edited_amounts = []  # Track original amounts for status
         
-        if old_total > 0:
-            # Proportional distribution based on original amounts
-            ratio = new_total / old_total
-            print(f"📐 Distribution ratio: {ratio:.4f}")
-            
-            for j, entry in enumerate(entries_found):
-                old_amount = float(entry.get("amount", 0))
-                new_amount = round(old_amount * ratio, 2)
-                
-                # Store original amount for tracking
-                edited_amounts.append({
-                    "entry_id": str(entry.get("_id")),
-                    "original_amount": old_amount,
-                    "new_amount": new_amount,
-                    "date": entry.get("date")
-                })
-                
-                # Update entry with edit tracking
-                await db["OPE_data"].update_one(
-                    {"employeeId": employee_id},
-                    {"$set": {
-                        f"Data.{data_index}.{month_range}.{j}.amount": new_amount,
-                        f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
-                        f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
-                    }}
-                )
-                
-                entries_updated += 1
-                print(f"   Entry {j+1}: ₹{old_amount} → ₹{new_amount}")
-        else:
-            # If old total is 0, distribute equally
-            amount_per_entry = round(new_total / len(entries_found), 2)
-            print(f"📐 Equal distribution: ₹{amount_per_entry} per entry")
-            
-            for j, entry in enumerate(entries_found):
-                old_amount = float(entry.get("amount", 0))
-                
-                edited_amounts.append({
-                    "entry_id": str(entry.get("_id")),
-                    "original_amount": old_amount,
-                    "new_amount": amount_per_entry,
-                    "date": entry.get("date")
-                })
-                
-                await db["OPE_data"].update_one(
-                    {"employeeId": employee_id},
-                    {"$set": {
-                        f"Data.{data_index}.{month_range}.{j}.amount": amount_per_entry,
-                        f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
-                        f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
-                        f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
-                    }}
-                )
-                
-                entries_updated += 1
-                print(f"   Entry {j+1}: ₹{old_amount} → ₹{amount_per_entry}")
-        
-        # ✅ UPDATE STATUS COLLECTION WITH EDIT TRACKING
+        # ✅ ONLY UPDATE STATUS COLLECTION - DO NOT TOUCH OPE_data entries
         status_doc = await db["Status"].find_one({"employeeId": employee_id})
         
-        if status_doc:
-            approval_status = status_doc.get("approval_status", [])
-            
-            for i, ps in enumerate(approval_status):
-                if ps.get("payroll_month") == month_range:
-                    # Get existing edit history or create new
-                    edit_history = ps.get("amount_edit_history", [])
-                    
-                    # Add new edit record
-                    edit_history.append({
-                        "edited_by": user_emp_code,
-                        "edited_by_name": user_name,
-                        "edited_by_role": user_role,
-                        "edited_date": current_time,
-                        "old_total": old_total,
-                        "new_total": new_total,
-                        "entries_updated": entries_updated,
-                        "edited_amounts": edited_amounts
-                    })
-                    
-                    await db["Status"].update_one(
-                        {"employeeId": employee_id},
-                        {"$set": {
-                            f"approval_status.{i}.total_amount": new_total,
-                            f"approval_status.{i}.last_edited_by": user_emp_code,
-                            f"approval_status.{i}.last_edited_by_name": user_name,
-                            f"approval_status.{i}.last_edited_by_role": user_role,
-                            f"approval_status.{i}.last_edited_date": current_time,
-                            f"approval_status.{i}.original_total": old_total,
-                            f"approval_status.{i}.amount_edit_history": edit_history
-                        }}
-                    )
-                    print(f"✅ Updated Status collection with edit history")
-                    break
+        if not status_doc:
+            raise HTTPException(status_code=404, detail="Status document not found")
         
-        print(f"\n✅✅ TOTAL AMOUNT UPDATE COMPLETE")
-        print(f"   Updated by: {user_role} - {user_name} ({user_emp_code})")
-        print(f"   Entries updated: {entries_updated}")
-        print(f"   Old Total: ₹{old_total}")
-        print(f"   New Total: ₹{new_total}")
-        print(f"{'='*60}\n")
+        approval_status = status_doc.get("approval_status", [])
+        found = False
+        old_total = 0
+        
+        for i, ps in enumerate(approval_status):
+            if ps.get("payroll_month") == month_range:
+                old_total = ps.get("total_amount", 0)
+                
+                # Get existing edit history
+                edit_history = ps.get("amount_edit_history", [])
+                edit_history.append({
+                    "edited_by": user_emp_code,
+                    "edited_by_name": user_name,
+                    "edited_by_role": user_role,
+                    "edited_date": current_time,
+                    "old_total": old_total,
+                    "new_total": new_total,
+                    "entries_updated": 0  # No entries updated, only total changed
+                })
+                
+                # ✅ UPDATE ONLY THE TOTAL IN STATUS - individual entry amounts unchanged
+                await db["Status"].update_one(
+                    {"employeeId": employee_id},
+                    {"$set": {
+                        f"approval_status.{i}.total_amount": new_total,
+                        f"approval_status.{i}.original_total": old_total,
+                        f"approval_status.{i}.last_edited_by": user_emp_code,
+                        f"approval_status.{i}.last_edited_by_name": user_name,
+                        f"approval_status.{i}.last_edited_by_role": user_role,
+                        f"approval_status.{i}.last_edited_date": current_time,
+                        f"approval_status.{i}.amount_edit_history": edit_history
+                    }}
+                )
+                found = True
+                print(f"✅ Updated Status total: ₹{old_total} → ₹{new_total}")
+                print(f"   Individual entry amounts are UNCHANGED")
+                break
+        
+        if not found:
+            raise HTTPException(status_code=404, detail="Payroll month not found in Status")
         
         return {
             "success": True,
-            "message": "Total amount updated successfully",
+            "message": "Total amount updated successfully. Individual entry amounts unchanged.",
             "updated_by": {
                 "code": user_emp_code,
                 "name": user_name,
@@ -2043,8 +2163,8 @@ async def edit_total_amount(
             },
             "old_total": old_total,
             "new_total": new_total,
-            "entries_updated": entries_updated,
-            "distribution_method": "proportional" if old_total > 0 else "equal"
+            "entries_updated": 0,
+            "note": "Only the payroll total was updated. Entry-level amounts remain as submitted."
         }
         
     except HTTPException as he:
