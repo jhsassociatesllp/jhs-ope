@@ -4103,9 +4103,10 @@ function displayPendingEmployeeTable(data) {
 }
 
 // ✅ NEW: Show pending employee modal with MONTH-FILTERED data
-window.showPendingEmployeeModal = function(employeeId) {
+window.showPendingEmployeeModal = async function(employeeId) {
     console.log("📋 Opening pending modal for employee:", employeeId);
     
+    const token = localStorage.getItem('access_token');
     const monthFilter = document.getElementById('pendingMonthFilter');
     const selectedMonth = monthFilter ? monthFilter.value : '';
     
@@ -4120,41 +4121,40 @@ window.showPendingEmployeeModal = function(employeeId) {
         return;
     }
     
-    const groupedByMonth = {};
+    // ✅ Fetch edited totals from Status collection ONCE
+    let statusEntries = [];
+    try {
+        const statusRes = await fetch(`${API_URL}/api/ope/status/${employeeId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            statusEntries = statusData.status_entries || [];
+        }
+    } catch(e) {
+        console.warn('Could not fetch status data:', e);
+    }
     
+    const groupedByMonth = {};
     employeeEntries.forEach(entry => {
         const month = entry.month_range || 'Unknown';
-        if (!groupedByMonth[month]) {
-            groupedByMonth[month] = [];
-        }
+        if (!groupedByMonth[month]) groupedByMonth[month] = [];
         groupedByMonth[month].push(entry);
     });
     
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7); z-index: 99999;
+        display: flex; align-items: center; justify-content: center; padding: 20px;
     `;
 
     const modal = document.createElement('div');
     modal.style.cssText = `
-        background: white;
-        border-radius: 16px;
-        max-width: 1400px;
-        width: 95%;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        background: white; border-radius: 16px; max-width: 1400px;
+        width: 95%; max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     `;
 
     const employeeName = employeeEntries[0]?.employee_name || employeeId;
@@ -4174,17 +4174,37 @@ window.showPendingEmployeeModal = function(employeeId) {
                 </div>
                 <button onclick="this.closest('.modal-overlay').remove()" 
                         style="background: #ef4444; color: white; border: none; padding: 10px 20px; 
-                               border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
-                        onmouseover="this.style.background='#dc2626'"
-                        onmouseout="this.style.background='#ef4444'">
+                               border-radius: 8px; cursor: pointer; font-weight: 600;">
                     <i class="fas fa-times"></i> Close
                 </button>
             </div>
     `;
     
-    Object.keys(groupedByMonth).sort().forEach(monthRange => {
+    for (const monthRange of Object.keys(groupedByMonth).sort()) {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        // ✅ Get edited total from Status if available
+        const statusEntry = statusEntries.find(s => 
+    s.payroll_month === monthRange || 
+    s.payroll_month?.trim() === monthRange?.trim()
+);
+        const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+        const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+        const wasEdited = statusEntry && statusEntry.original_total && 
+                          parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+        
+        // ✅ Build total display HTML
+        const totalDisplayHTML = wasEdited ? `
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                    Original: ₹${parseFloat(originalTotal).toFixed(2)}
+                </div>
+                <div style="font-size: 14px; font-weight: 700;">
+                    Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+                </div>
+            </div>
+        ` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
@@ -4196,25 +4216,19 @@ window.showPendingEmployeeModal = function(employeeId) {
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
                               data-entries="${entries.length}"
-                              data-original="${totalAmount.toFixed(2)}"
+                              data-original="${parseFloat(originalTotal).toFixed(2)}"
                               style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Original: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                            ${totalDisplayHTML}
                         </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})"
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${statusTotal})" 
                                 style="
-                                    background: rgba(255, 255, 255, 0.3);
-                                    color: white;
-                                    border: 2px solid rgba(255, 255, 255, 0.5);
-                                    padding: 6px 12px;
-                                    border-radius: 8px;
-                                    cursor: pointer;
-                                    font-size: 13px;
-                                    font-weight: 600;
-                                    transition: all 0.2s ease;
-                                    backdrop-filter: blur(10px);
+                                    background: rgba(255,255,255,0.3); color: white;
+                                    border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px;
+                                    border-radius: 8px; cursor: pointer; font-size: 13px;
+                                    font-weight: 600; transition: all 0.2s ease;
                                 "
-                                onmouseover="this.style.background='rgba(255, 255, 255, 0.4)'; this.style.transform='translateY(-2px)'"
-                                onmouseout="this.style.background='rgba(255, 255, 255, 0.3)'; this.style.transform='translateY(0)'">
+                                onmouseover="this.style.background='rgba(255,255,255,0.4)'"
+                                onmouseout="this.style.background='rgba(255,255,255,0.3)'">
                             <i class="fas fa-edit"></i> Edit Total
                         </button>
                     </div>
@@ -4266,41 +4280,18 @@ window.showPendingEmployeeModal = function(employeeId) {
                     <td style="padding: 12px; text-align: center;">
                         ${entry.ticket_pdf
                             ? `<button onclick="viewPdf('${entry._id}', false)" 
-                                      style="
-                                          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-                                          color: white;
-                                          border: none;
-                                          padding: 6px 12px;
-                                          border-radius: 6px;
-                                          cursor: pointer;
-                                          font-size: 12px;
-                                          font-weight: 600;
-                                          transition: all 0.2s ease;
-                                          display: inline-flex;
-                                          align-items: center;
-                                          gap: 4px;
-                                      "
-                                      onmouseover="this.style.transform='translateY(-2px)'"
-                                      onmouseout="this.style.transform='translateY(0)'">
+                                      style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                                             color: white; border: none; padding: 6px 12px;
+                                             border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
                                   <i class="fas fa-file-pdf"></i> View
                                </button>` 
                             : `<span style="color: #9ca3af; font-size: 12px;">No PDF</span>`}
                     </td>
                     <td style="padding: 12px; text-align: center;">
                         <button onclick="editEntryAmount('${entry._id}', '${employeeId}', ${entry.amount || 0})" 
-                                style="
-                                    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-                                    color: white;
-                                    border: none;
-                                    padding: 6px 12px;
-                                    border-radius: 6px;
-                                    cursor: pointer;
-                                    font-size: 12px;
-                                    font-weight: 600;
-                                    transition: all 0.2s ease;
-                                "
-                                onmouseover="this.style.transform='translateY(-2px)'"
-                                onmouseout="this.style.transform='translateY(0)'">
+                                style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                                       color: white; border: none; padding: 6px 12px;
+                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                     </td>
@@ -4314,18 +4305,15 @@ window.showPendingEmployeeModal = function(employeeId) {
                 </div>
             </div>
         `;
-    });
+    }
     
     modalContent += `</div>`;
-    
     modal.innerHTML = modalContent;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
     overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-            overlay.remove();
-        }
+        if (e.target === overlay) overlay.remove();
     });
 }
 
@@ -4796,9 +4784,11 @@ function displayApproveEmployeeTable(data) {
 
 
 // ✅ UPDATED: Show approved employee modal with REMARK
-window.showApprovedEmployeeModal = function(employeeId) {
+window.showApprovedEmployeeModal = async function(employeeId) {
     console.log("📋 Opening modal for employee:", employeeId);
     console.log("All Approve Data:", allApproveData);
+    
+    const token = localStorage.getItem('access_token');
     
     // Get current selected month from filter
     const monthFilter = document.getElementById('approveMonthFilter');
@@ -4824,9 +4814,23 @@ window.showApprovedEmployeeModal = function(employeeId) {
         console.log(`📊 After month filter: ${employeeEntries.length} entries`);
     }
     
-    if (employeeEntries.length === 0) {
+   if (employeeEntries.length === 0) {
         showErrorPopup('No approved entries found for this employee');
         return;
+    }
+    
+    // ✅ Fetch edited totals from Status collection
+    let statusEntries = [];
+    try {
+        const statusRes = await fetch(`${API_URL}/api/ope/status/${employeeId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            statusEntries = statusData.status_entries || [];
+        }
+    } catch(e) {
+        console.warn('Could not fetch status data:', e);
     }
     
     // Group by month
@@ -4897,7 +4901,28 @@ window.showApprovedEmployeeModal = function(employeeId) {
     // Display month-wise data
     Object.keys(groupedByMonth).sort().forEach(monthRange => {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        // ✅ Get edited total from Status if available
+        const statusEntry = statusEntries.find(s => 
+            s.payroll_month === monthRange || 
+            s.payroll_month?.trim() === monthRange?.trim()
+        );
+        const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+        const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+        const wasEdited = statusEntry && statusEntry.original_total && 
+                          parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+        
+        const totalDisplayHTML = wasEdited ? `
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                    Original: ₹${parseFloat(originalTotal).toFixed(2)}
+                </div>
+                <div style="font-size: 14px; font-weight: 700;">
+                    Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+                </div>
+            </div>
+        ` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
@@ -4907,7 +4932,7 @@ window.showApprovedEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                        Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        ${totalDisplayHTML}
                     </span>
                 </div>
                 <div style="overflow-x: auto;">
@@ -6091,7 +6116,7 @@ function displayRejectEmployeeTable(data) {
 }
 
 // ✅ UPDATED: Show rejected employee modal with MONTH-FILTERED data
-window.showRejectedEmployeeModal = function(employeeId) {
+window.showRejectedEmployeeModal = async function(employeeId) {
     console.log("📋 Opening rejected modal for employee:", employeeId);
     
     // ✅ Get current selected month from filter
@@ -6196,7 +6221,27 @@ window.showRejectedEmployeeModal = function(employeeId) {
     // Display month-wise data
     Object.keys(groupedByMonth).sort().forEach(monthRange => {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+const statusEntry = statusEntries.find(s => 
+    s.payroll_month === monthRange || 
+    s.payroll_month?.trim() === monthRange?.trim()
+);
+const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+const wasEdited = statusEntry && statusEntry.original_total && 
+                  parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+const totalAmount = statusTotal;
+
+const totalDisplayHTML = wasEdited ? `
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+        <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+            Original: ₹${parseFloat(originalTotal).toFixed(2)}
+        </div>
+        <div style="font-size: 14px; font-weight: 700;">
+            Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+        </div>
+    </div>
+` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #fee2e2; border-radius: 12px; overflow: hidden;">
@@ -6207,11 +6252,11 @@ window.showRejectedEmployeeModal = function(employeeId) {
                     </h3>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
-                              data-entries="${entries.length}"
-                              data-original="${totalAmount.toFixed(2)}"
-                              style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Original: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
-                        </span>
+      data-entries="${entries.length}"
+      data-original="${parseFloat(originalTotal).toFixed(2)}"
+      style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+    ${totalDisplayHTML}
+</span>
                         <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})"
                                 style="
                                     background: rgba(255, 255, 255, 0.3);
@@ -7561,20 +7606,15 @@ window.editEntryAmount = editEntryAmount;
 async function editTotalAmount(employeeId, monthRange, currentTotal) {
     const newTotal = await showAmountEditPopup(currentTotal);
     
-    if (newTotal === null || newTotal === currentTotal) {
-        return;
-    }
-    
+    if (newTotal === null || newTotal === currentTotal) return;
     if (newTotal <= 0) {
         showErrorPopup('Total amount must be greater than 0');
         return;
     }
-          
+    
     const token = localStorage.getItem('access_token');
     
     try {
-        console.log(`💰 Updating total for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
-        
         const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
             method: 'PUT',
             headers: {
@@ -7589,18 +7629,17 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
         });
         
         if (response.ok) {
-            // ✅ Update the span directly inside the open modal
+            // ✅ Update span directly in open modal
             const spanId = `total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}`;
             const span = document.getElementById(spanId);
             
             if (span) {
                 const entryCount = span.dataset.entries;
                 const originalAmount = span.dataset.original;
-                
                 span.innerHTML = `
-                    <div style="display: flex; flex-direction: column; gap: 2px;">
-                        <div style="font-size: 11px; opacity: 0.8;">
-                            Original: <span style="text-decoration: line-through;">₹${parseFloat(originalAmount).toFixed(2)}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                        <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                            Original: ₹${parseFloat(originalAmount).toFixed(2)}
                         </div>
                         <div style="font-size: 14px; font-weight: 700;">
                             Edited: ₹${newTotal.toFixed(2)} | Entries: ${entryCount}
@@ -7610,23 +7649,18 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
             }
             
             showSuccessPopup(
-                `Payroll total updated successfully!<br><br>` +
-                `<b>Original Total:</b> ₹${currentTotal.toFixed(2)}<br>` +
-                `<b>Edited Total:</b> ₹${newTotal.toFixed(2)}<br><br>` +
-                `<span style="color:#6b7280; font-size:12px;">Individual entry amounts are unchanged.</span>`
+                `Total updated!<br><br>` +
+                `<b>Original:</b> ₹${currentTotal.toFixed(2)}<br>` +
+                `<b>Edited:</b> ₹${newTotal.toFixed(2)}<br><br>` +
+                `<span style="color:#6b7280;font-size:12px;">Entry amounts unchanged.</span>`
             );
             
-            // Reload background data
             const empCode = localStorage.getItem('employee_code');
-            const navPending = document.getElementById('navPending');
-            const navApprove = document.getElementById('navApprove');
-            const navReject = document.getElementById('navReject');
-            
-            if (navPending && navPending.classList.contains('active')) {
+            if (document.getElementById('navPending')?.classList.contains('active')) {
                 await loadPendingData(token, empCode);
-            } else if (navApprove && navApprove.classList.contains('active')) {
+            } else if (document.getElementById('navApprove')?.classList.contains('active')) {
                 await loadApproveData(token, empCode);
-            } else if (navReject && navReject.classList.contains('active')) {
+            } else if (document.getElementById('navReject')?.classList.contains('active')) {
                 await loadRejectData(token, empCode);
             }
             
@@ -7634,16 +7668,13 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
             const errorData = await response.json();
             showErrorPopup(errorData.detail || 'Failed to update total amount');
         }
-        
     } catch (error) {
-        console.error('Error updating total amount:', error);
         showErrorPopup('Network error');
     }
 }
 
-// window.editTotalAmount = editTotalAmount;
-// Make it global
 window.editTotalAmount = editTotalAmount;
+
 
 // ✅ UPDATED: Approve Employee with Remark
 async function approveEmployee(employeeId) {

@@ -3936,7 +3936,14 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         print(f"📊 FETCHING STATUS FOR: {employee_code}")
         print(f"{'='*60}\n")
         
-        if current_emp_code != employee_code:
+        # if current_emp_code != employee_code:
+        #     raise HTTPException(status_code=403, detail="Access denied")
+
+        is_hr = (current_emp_code == "JHS729")
+        is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
+        is_partner = await db["Partner"].find_one({"PartnerEmpCode": current_emp_code})
+
+        if current_emp_code != employee_code and not is_hr and not is_manager and not is_partner:
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get Status document for this employee
