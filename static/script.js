@@ -48,8 +48,8 @@ const monthRanges = {
     display: 'Jan 2026 - Feb 2026' 
   },
   'feb-mar-2026': {
-    start: '2026-01-21', 
-    end: '2026-02-20', 
+    start: '2026-02-21', 
+    end: '2026-03-20', 
     display: 'Feb 2026 - Mar 2026' 
   },
     'mar-april-2026': {
@@ -3577,19 +3577,21 @@ if (monthRangeSelect) {
     console.log("📅 Month changed to:", selectedMonth);
     
     if (selectedMonth) {
+      // ✅ FIX: Clear stale rows before loading so addNewEntryRow gets clean slate
+      const tbody = document.getElementById('entryTableBody');
+      tbody.innerHTML = '';
+      entryCounter = 0;
+
       // ✅ Load saved entries for THIS month ONLY
       await loadSavedEntries();
       
       // ✅ If no saved entries, add blank row
-      const tbody = document.getElementById('entryTableBody');
       const rows = tbody.querySelectorAll('tr');
       
       if (rows.length === 0) {
         console.log("No saved entries, adding blank row");
         addNewEntryRow();
       }
-      
-      // showSuccessPopup(`Date range updated to ${monthRanges[selectedMonth].display}`); 
     }
   });
 }
