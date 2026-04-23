@@ -3937,7 +3937,7 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         print(f"{'='*60}\n")
         
         # if current_emp_code != employee_code:
-        #     raise HTTPException(status_code=403, detail="Access denied")
+        #     raise HTTPException(status_code=403, detail="Access denied")    
 
         is_hr = (current_emp_code == "JHS729")
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})

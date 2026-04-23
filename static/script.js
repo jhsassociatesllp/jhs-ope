@@ -3591,7 +3591,7 @@ if (monthRangeSelect) {
       if (rows.length === 0) {
         console.log("No saved entries, adding blank row");
         addNewEntryRow();
-      }
+      }   
     }
   });
 }
