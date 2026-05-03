@@ -49,3 +49,4 @@ jobs:
             ghcr.io/jhsassociatesllp/jhs-ope:production
 
             docker image prune -f
+            
