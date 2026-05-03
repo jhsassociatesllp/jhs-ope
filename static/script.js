@@ -2,6 +2,9 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
+window.allProjectsList = [];   // raw list from API
+window.allClientsList  = [];   // deduplicated clients
+
 // API_URL = "http://127.0.0.1:8000";
 API_URL = "";
 
@@ -539,6 +542,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   loadEmployeeDetails();
+  loadProjectsData();
   
   // ✅ Setup navigation
   setupNavigation();
@@ -1126,13 +1130,58 @@ function getTravelModeLabel(value) {
 }
 
 // 5. PDF View karne ka function
-window.viewPdf = function(entryId) {
-    const entry = allHistoryData.find(e => e._id === entryId);
+// window.viewPdf = function(entryId) {
+//     const entry = allHistoryData.find(e => e._id === entryId);
     
-    if (entry && entry.ticket_pdf) {
-        openPdfModal(entry.ticket_pdf);
+//     if (entry && entry.ticket_pdf) {
+//         openPdfModal(entry.ticket_pdf);
+//     } else {
+//         showErrorPopup('PDF not available');
+//     }
+// };
+
+window.viewPdf = function(entryId, isTemp = false) {
+    let entry = null;
+ 
+    if (isTemp) {
+        // Temp / saved entries
+        const tempData = (allHistoryData && allHistoryData.temp) ? allHistoryData.temp : [];
+        entry = tempData.find(e => e._id === entryId);
     } else {
-        showErrorPopup('PDF not available');
+        // Submitted history
+        if (!entry && allHistoryData && allHistoryData.submitted) {
+            entry = allHistoryData.submitted.find(e => e._id === entryId);
+        }
+        // Manager pending
+        if (!entry && typeof allPendingData !== 'undefined' && Array.isArray(allPendingData)) {
+            entry = allPendingData.find(e => e._id === entryId);
+        }
+        // Manager approved
+        if (!entry && typeof allApproveData !== 'undefined' && Array.isArray(allApproveData)) {
+            entry = allApproveData.find(e => e._id === entryId);
+        }
+        // Manager rejected
+        if (!entry && typeof allRejectData !== 'undefined' && Array.isArray(allRejectData)) {
+            entry = allRejectData.find(e => e._id === entryId);
+        }
+        // Partner / HR pending entries (stored flat inside employee objects)
+        if (!entry && typeof allPendingData !== 'undefined' && Array.isArray(allPendingData)) {
+            for (const emp of allPendingData) {
+                if (emp.entries) {
+                    entry = emp.entries.find(e => e._id === entryId);
+                    if (entry) break;
+                }
+            }
+        }
+    }
+ 
+    if (entry && entry.ticket_pdf) {
+        // ticket_pdf is now a GridFS ObjectId string (e.g. "507f1f77bcf86cd799439011")
+        fetchAndOpenPdf(entry.ticket_pdf);
+    } else if (entry && !entry.ticket_pdf) {
+        showErrorPopup('No PDF was attached to this entry.');
+    } else {
+        showErrorPopup('Entry not found. Please refresh and try again.');
     }
 };
 
@@ -1333,7 +1382,8 @@ window.viewPdf = function(entryId, isTemp = false) {
     
     if (entry && entry.ticket_pdf) {
         console.log("✅ Opening PDF modal");
-        openPdfModal(entry.ticket_pdf);
+        fetchAndOpenPdf(entry.ticket_pdf);
+
     } else {
         console.error("❌ PDF not found for entry:", entryId);
         showErrorPopup('PDF not available for this entry');
@@ -1342,27 +1392,85 @@ window.viewPdf = function(entryId, isTemp = false) {
 
 // 6. PDF Modal Open karne ka function
 // NEW CODE:
-function openPdfModal(base64Pdf) {
+// function openPdfModal(base64Pdf) {
+//     const modal = document.getElementById('pdfModal');
+//     const viewer = document.getElementById('pdfViewer');
+    
+//     // ✅ Set higher z-index to show in front of employee modal
+//     modal.style.zIndex = '999999';
+    
+//     viewer.src = `data:application/pdf;base64,${base64Pdf}`;
+//     modal.classList.add('active');
+// }
+
+function openPdfModal(pdfUrl) {
     const modal = document.getElementById('pdfModal');
     const viewer = document.getElementById('pdfViewer');
-    
-    // ✅ Set higher z-index to show in front of employee modal
     modal.style.zIndex = '999999';
-    
-    viewer.src = `data:application/pdf;base64,${base64Pdf}`;
+    viewer.src = pdfUrl;
     modal.classList.add('active');
 }
 
 // 7. PDF Modal Close karne ka function
 // NEW CODE:
+// function closePdfModal() {
+//     const modal = document.getElementById('pdfModal');
+//     modal.classList.remove('active');
+    
+//     // ✅ Reset z-index
+//     modal.style.zIndex = '';
+    
+//     document.getElementById('pdfViewer').src = '';
+// }
+
+async function fetchAndOpenPdf(fileId) {
+    if (!fileId) {
+        showErrorPopup('No PDF attached to this entry.');
+        return;
+    }
+ 
+    const token = localStorage.getItem('access_token');
+    const modal  = document.getElementById('pdfModal');
+    const viewer = document.getElementById('pdfViewer');
+ 
+    // Show the modal immediately (empty) so the user sees feedback
+    modal.style.zIndex = '999999';
+    viewer.src = '';
+    modal.classList.add('active');
+ 
+    try {
+        const response = await fetch(`${API_URL}/api/ope/pdf/${fileId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+ 
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+ 
+        const blob   = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        viewer.src   = blobUrl;
+ 
+    } catch (error) {
+        console.error('PDF load error:', error);
+        closePdfModal();
+        showErrorPopup('Failed to load PDF. Please try again.');
+    }
+}
+
+ 
 function closePdfModal() {
     const modal = document.getElementById('pdfModal');
+    const viewer = document.getElementById('pdfViewer');
+ 
+    // Revoke blob URL to free memory
+    if (viewer.src && viewer.src.startsWith('blob:')) {
+        URL.revokeObjectURL(viewer.src);
+    }
+ 
     modal.classList.remove('active');
-    
-    // ✅ Reset z-index
     modal.style.zIndex = '';
-    
-    document.getElementById('pdfViewer').src = '';
+    viewer.src = '';
 }
 
 window.closePdfModal = closePdfModal;
@@ -2089,194 +2197,332 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Add New Entry Row - UPDATED VERSION
+// function addNewEntryRow() {
+//   entryCounter++;
+//   const tbody = document.getElementById('entryTableBody');
+//   const monthRangeSelect = document.getElementById('monthRange');
+//   const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
+  
+//   // ✅ UPDATED: Get date for new row based on month range
+// let newRowDate = '';
+
+// if (selectedMonth) {
+//   const existingRows = tbody.querySelectorAll('tr');
+  
+//   if (existingRows.length > 0) {
+//     // Get last row's date and add 1 day
+//     const lastRow = existingRows[existingRows.length - 1];
+//     const lastRowId = lastRow.dataset.rowId;
+//     const lastDateInput = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
+//     if (lastDateInput && lastDateInput.value) {
+//       newRowDate = getNextDate(lastDateInput.value);
+//     } else {
+//       const startDate = getStartDateForMonth(selectedMonth);
+//       newRowDate = startDate || '';  // ✅ Safety check
+//     }
+//   } else {
+//     // First row - use month start date (21st)
+//     const startDate = getStartDateForMonth(selectedMonth);
+//     newRowDate = startDate || '';  // ✅ Safety check
+//   }
+// }
+//   // ✅ If no month selected, leave date empty (no error)
+  
+//   const row = document.createElement('tr');
+//   row.dataset.rowId = entryCounter;
+  
+//   row.innerHTML = `
+//     <td><strong>${entryCounter}</strong></td>
+//     <td><button type="button" onclick="openEntryModal(${entryCounter})" 
+//                 style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
+//                        color: white; 
+//                        border: none; 
+//                        padding: 6px 10px; 
+//                        border-radius: 6px; 
+//                        cursor: pointer; 
+//                        display: inline-flex; 
+//                        align-items: center; 
+//                        gap: 4px;
+//                        transition: all 0.2s ease;
+//                        font-size: 13px;"
+//                 onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.4)';"
+//                 onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
+//                 title="Fill form in modal">
+//           <i class="fas fa-eye"></i>
+//         </button>
+// </td>
+
+//     <td><input type="date" name="date_${entryCounter}" value="${newRowDate}" required /></td>
+//     <td>
+//       <div class="table-action-btns">
+//         <button type="button" class="copy-btn" onclick="copyRow(${entryCounter})">
+//           <i class="fas fa-copy"></i> Copy
+//         </button>
+//         <button type="button" class="paste-btn" onclick="pasteRow(${entryCounter})">
+//           <i class="fas fa-paste"></i> Paste
+//         </button>
+//       </div>
+//     </td>
+//     <td><input type="text" name="client_${entryCounter}" placeholder="Client Name" required /></td>
+//     <td><input type="text" name="projectid_${entryCounter}" placeholder="Project ID" required /></td>
+//     <td><input type="text" name="projectname_${entryCounter}" placeholder="Project Name" required /></td>
+//     <td>
+//       <select name="projecttype_${entryCounter}" required>
+//         <option value="" disabled selected>Select Type</option>
+//         <option value="Concurrent">Concurrent</option>
+//         <option value="KYC">KYC</option>
+//         <option value="IFC">IFC</option>
+//         <option value="Statutory">Statutory</option>
+//         <option value="Internal">Internal</option>
+//         <option value="Cyber Security">Cyber Security</option>
+//         <option value="Consulting">Consulting</option>
+//         <option value="Outsourcing">Outsourcing</option>
+//         <option value="Other">Other</option>
+//       </select>
+//     </td>
+//     <td><input type="text" name="locationfrom_${entryCounter}" placeholder="From" required /></td>
+//     <td><input type="text" name="locationto_${entryCounter}" placeholder="To" required /></td>
+//     <td>
+//       <select name="travelmode_${entryCounter}" required>
+//         <option value="" disabled selected>Select Mode</option>
+//         <option value="metro_recharge">Metro Recharge</option>
+//         <option value="metro_pass">Metro Pass</option>
+//         <option value="metro_tickets">Metro Tickets</option>
+//         <option value="shared_auto">Shared Auto</option>
+//         <option value="shared_taxi">Shared Taxi</option>
+//         <option value="meter_auto">Meter Auto</option>
+//         <option value="taxi_cab">Taxi / Cab</option>
+//         <option value="bus_ticket">Bus Tickets</option>
+//         <option value="bus_pass">Bus Pass</option>
+//         <option value="train_pass 1st">Train Pass - 1st Class</option>
+//         <option value="train_pass 2nd">Train Pass - 2nd Class</option>
+//         <option value="train_ticket">Train Ticket</option>
+//         <option value="food_expence">Food Expence</option>
+//         <option value="mobile_expence">Mobile Top Up</option>
+//         <option value="mobile_recharge">Mobile Recharge</option>
+//         <option value="wifi">Wifi</option>
+//         <option value="other">Other</option>
+//       </select>
+//     </td>
+//     <td><input type="number" name="amount_${entryCounter}" placeholder="Amount" min="0" step="0.01" required /></td>
+//     <td><input type="text" name="remarks_${entryCounter}" placeholder="Remarks" /></td>
+//     <td><input type="file" name="ticketpdf_${entryCounter}" accept=".pdf" /></td>
+//     <td>
+//       <button type="button" class="delete-row-btn" onclick="handleDeleteRow(${entryCounter})">
+//       <i class="fas fa-trash"></i> Delete
+//       </button>
+//     </td>
+//   `;
+  
+//   tbody.appendChild(row);
+  
+//   // ✅ UPDATED: Use blur instead of change - validates only after user finishes typing
+//   const dateInput = row.querySelector(`input[name="date_${entryCounter}"]`);
+//   if (dateInput) {
+//     dateInput.addEventListener('blur', function() {
+//       // Only validate if month is selected and date is entered
+//       // ✅ UPDATED: Month range change listener - Load saved entries
+// const monthRangeSelect = document.getElementById('monthRange');
+// if (monthRangeSelect) {
+//   monthRangeSelect.addEventListener('change', async function() {
+//     const selectedMonth = this.value;
+    
+//     console.log("📅 Month changed to:", selectedMonth);
+    
+//     if (selectedMonth) {
+//       // ✅ Load saved entries for THIS month ONLY
+//       await loadSavedEntries();
+//     } else {
+//       // ✅ Clear table if no month selected
+//       const tbody = document.getElementById('entryTableBody');
+//       tbody.innerHTML = '';
+//       entryCounter = 0;
+//     }
+//   });
+// }
+//     });
+//   }
+  
+//   setTimeout(() => {
+//     row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+//   }, 100);
+// }
+
+
+// ─── addNewEntryRow ─────────────────────────────────────────────────────────
 function addNewEntryRow() {
-  entryCounter++;
-  const tbody = document.getElementById('entryTableBody');
-  const monthRangeSelect = document.getElementById('monthRange');
-  const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
-  
-  // ✅ UPDATED: Get date for new row based on month range
-let newRowDate = '';
-
-if (selectedMonth) {
-  const existingRows = tbody.querySelectorAll('tr');
-  
-  if (existingRows.length > 0) {
-    // Get last row's date and add 1 day
-    const lastRow = existingRows[existingRows.length - 1];
-    const lastRowId = lastRow.dataset.rowId;
-    const lastDateInput = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
-    if (lastDateInput && lastDateInput.value) {
-      newRowDate = getNextDate(lastDateInput.value);
-    } else {
-      const startDate = getStartDateForMonth(selectedMonth);
-      newRowDate = startDate || '';  // ✅ Safety check
-    }
-  } else {
-    // First row - use month start date (21st)
-    const startDate = getStartDateForMonth(selectedMonth);
-    newRowDate = startDate || '';  // ✅ Safety check
-  }
-}
-  // ✅ If no month selected, leave date empty (no error)
-  
-  const row = document.createElement('tr');
-  row.dataset.rowId = entryCounter;
-  
-  row.innerHTML = `
-    <td><strong>${entryCounter}</strong></td>
-    <td><button type="button" onclick="openEntryModal(${entryCounter})" 
-                style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
-                       color: white; 
-                       border: none; 
-                       padding: 6px 10px; 
-                       border-radius: 6px; 
-                       cursor: pointer; 
-                       display: inline-flex; 
-                       align-items: center; 
-                       gap: 4px;
-                       transition: all 0.2s ease;
-                       font-size: 13px;"
-                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.4)';"
-                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-                title="Fill form in modal">
-          <i class="fas fa-eye"></i>
-        </button>
-</td>
-
-    <td><input type="date" name="date_${entryCounter}" value="${newRowDate}" required /></td>
-    <td>
-      <div class="table-action-btns">
-        <button type="button" class="copy-btn" onclick="copyRow(${entryCounter})">
-          <i class="fas fa-copy"></i> Copy
-        </button>
-        <button type="button" class="paste-btn" onclick="pasteRow(${entryCounter})">
-          <i class="fas fa-paste"></i> Paste
-        </button>
-      </div>
-    </td>
-    <td><input type="text" name="client_${entryCounter}" placeholder="Client Name" required /></td>
-    <td><input type="text" name="projectid_${entryCounter}" placeholder="Project ID" required /></td>
-    <td><input type="text" name="projectname_${entryCounter}" placeholder="Project Name" required /></td>
-    <td>
-      <select name="projecttype_${entryCounter}" required>
-        <option value="" disabled selected>Select Type</option>
-        <option value="Concurrent">Concurrent</option>
-        <option value="KYC">KYC</option>
-        <option value="IFC">IFC</option>
-        <option value="Statutory">Statutory</option>
-        <option value="Internal">Internal</option>
-        <option value="Cyber Security">Cyber Security</option>
-        <option value="Consulting">Consulting</option>
-        <option value="Outsourcing">Outsourcing</option>
-        <option value="Other">Other</option>
-      </select>
-    </td>
-    <td><input type="text" name="locationfrom_${entryCounter}" placeholder="From" required /></td>
-    <td><input type="text" name="locationto_${entryCounter}" placeholder="To" required /></td>
-    <td>
-      <select name="travelmode_${entryCounter}" required>
-        <option value="" disabled selected>Select Mode</option>
-        <option value="metro_recharge">Metro Recharge</option>
-        <option value="metro_pass">Metro Pass</option>
-        <option value="metro_tickets">Metro Tickets</option>
-        <option value="shared_auto">Shared Auto</option>
-        <option value="shared_taxi">Shared Taxi</option>
-        <option value="meter_auto">Meter Auto</option>
-        <option value="taxi_cab">Taxi / Cab</option>
-        <option value="bus_ticket">Bus Tickets</option>
-        <option value="bus_pass">Bus Pass</option>
-        <option value="train_pass 1st">Train Pass - 1st Class</option>
-        <option value="train_pass 2nd">Train Pass - 2nd Class</option>
-        <option value="train_ticket">Train Ticket</option>
-        <option value="food_expence">Food Expence</option>
-        <option value="mobile_expence">Mobile Top Up</option>
-        <option value="mobile_recharge">Mobile Recharge</option>
-        <option value="wifi">Wifi</option>
-        <option value="other">Other</option>
-      </select>
-    </td>
-    <td><input type="number" name="amount_${entryCounter}" placeholder="Amount" min="0" step="0.01" required /></td>
-    <td><input type="text" name="remarks_${entryCounter}" placeholder="Remarks" /></td>
-    <td><input type="file" name="ticketpdf_${entryCounter}" accept=".pdf" /></td>
-    <td>
-      <button type="button" class="delete-row-btn" onclick="handleDeleteRow(${entryCounter})">
-      <i class="fas fa-trash"></i> Delete
-      </button>
-    </td>
-  `;
-  
-  tbody.appendChild(row);
-  
-  // ✅ UPDATED: Use blur instead of change - validates only after user finishes typing
-  const dateInput = row.querySelector(`input[name="date_${entryCounter}"]`);
-  if (dateInput) {
-    dateInput.addEventListener('blur', function() {
-      // Only validate if month is selected and date is entered
-      // ✅ UPDATED: Month range change listener - Load saved entries
-const monthRangeSelect = document.getElementById('monthRange');
-if (monthRangeSelect) {
-  monthRangeSelect.addEventListener('change', async function() {
-    const selectedMonth = this.value;
-    
-    console.log("📅 Month changed to:", selectedMonth);
-    
+    entryCounter++;
+    const tbody = document.getElementById('entryTableBody');
+    const monthRangeSelect = document.getElementById('monthRange');
+    const selectedMonth = monthRangeSelect ? monthRangeSelect.value : '';
+ 
+    let newRowDate = '';
     if (selectedMonth) {
-      // ✅ Load saved entries for THIS month ONLY
-      await loadSavedEntries();
-    } else {
-      // ✅ Clear table if no month selected
-      const tbody = document.getElementById('entryTableBody');
-      tbody.innerHTML = '';
-      entryCounter = 0;
+        const existingRows = tbody.querySelectorAll('tr');
+        if (existingRows.length > 0) {
+            const lastRow    = existingRows[existingRows.length - 1];
+            const lastRowId  = lastRow.dataset.rowId;
+            const lastDateIn = lastRow.querySelector(`input[name="date_${lastRowId}"]`);
+            if (lastDateIn && lastDateIn.value) {
+                newRowDate = getNextDate(lastDateIn.value);
+            } else {
+                newRowDate = getStartDateForMonth(selectedMonth) || '';
+            }
+        } else {
+            newRowDate = getStartDateForMonth(selectedMonth) || '';
+        }
     }
-  });
-}
-    });
-  }
-  
-  setTimeout(() => {
-    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 100);
+ 
+    const row = document.createElement('tr');
+    row.dataset.rowId = entryCounter;
+ 
+    // ✅ FIXED ORDER: Client Name → Project Name → Project ID
+    row.innerHTML = `
+        <td><strong>${entryCounter}</strong></td>
+        <td>
+            <button type="button"
+                    onclick="openEntryModal(${entryCounter})"
+                    style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;border:none;
+                           padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;"
+                    title="Edit in modal">
+                <i class="fas fa-eye"></i>
+            </button>
+        </td>
+        <td><input type="date" name="date_${entryCounter}" value="${newRowDate}" required /></td>
+        <td>
+            <div class="table-action-btns">
+                <button type="button" class="copy-btn" onclick="copyRow(${entryCounter})">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button type="button" class="paste-btn" onclick="pasteRow(${entryCounter})">
+                    <i class="fas fa-paste"></i> Paste
+                </button>
+            </div>
+        </td>
+        <td class="cell-client-${entryCounter}"></td>
+        <td class="cell-projectname-${entryCounter}"></td>
+        <td class="cell-projectid-${entryCounter}"></td>
+        <td>
+            <select name="projecttype_${entryCounter}" required>
+                <option value="" disabled selected>Select Type</option>
+                <option value="Concurrent">Concurrent</option>
+                <option value="KYC">KYC</option>
+                <option value="IFC">IFC</option>
+                <option value="Statutory">Statutory</option>
+                <option value="Internal">Internal</option>
+                <option value="Cyber Security">Cyber Security</option>
+                <option value="Consulting">Consulting</option>
+                <option value="Outsourcing">Outsourcing</option>
+                <option value="Other">Other</option>
+            </select>
+        </td>
+        <td><input type="text" name="locationfrom_${entryCounter}" placeholder="From" required /></td>
+        <td><input type="text" name="locationto_${entryCounter}" placeholder="To" required /></td>
+        <td>
+            <select name="travelmode_${entryCounter}" required>
+                <option value="" disabled selected>Select Mode</option>
+                <option value="metro_recharge">Metro Recharge</option>
+                <option value="metro_pass">Metro Pass</option>
+                <option value="metro_tickets">Metro Tickets</option>
+                <option value="shared_auto">Shared Auto</option>
+                <option value="shared_taxi">Shared Taxi</option>
+                <option value="meter_auto">Meter Auto</option>
+                <option value="taxi_cab">Taxi / Cab</option>
+                <option value="bus_ticket">Bus Tickets</option>
+                <option value="bus_pass">Bus Pass</option>
+                <option value="train_pass 1st">Train Pass - 1st Class</option>
+                <option value="train_pass 2nd">Train Pass - 2nd Class</option>
+                <option value="train_ticket">Train Ticket</option>
+                <option value="food_expence">Food Expence</option>
+                <option value="mobile_expence">Mobile Top Up</option>
+                <option value="mobile_recharge">Mobile Recharge</option>
+                <option value="wifi">Wifi</option>
+                <option value="other">Other</option>
+            </select>
+        </td>
+        <td><input type="number" name="amount_${entryCounter}" placeholder="Amount" min="0" step="0.01" required /></td>
+        <td><input type="text" name="remarks_${entryCounter}" placeholder="Remarks" /></td>
+        <td><input type="file" name="ticketpdf_${entryCounter}" accept=".pdf" /></td>
+        <td>
+            <button type="button" class="delete-row-btn" onclick="handleDeleteRow(${entryCounter})">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+        </td>
+    `;
+ 
+    tbody.appendChild(row);
+ 
+    // ✅ Inject the three linked dropdowns in the correct cells
+    buildProjectCellsInRow(entryCounter, row);
+ 
+    setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 
-// Open Entry Modal
+
+// ─── openEntryModal ──────────────────────────────────────────────────────────
+// ✅ FIXED: reads dropdown values with correct field names (projectname not projectid for name)
 function openEntryModal(rowId) {
-  const modal = document.getElementById('entryFormModal');
-  const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
-  
-  if (!row) return;
-  
-  // Get current values from row
-  const date = row.querySelector(`input[name="date_${rowId}"]`)?.value || '';
-  const client = row.querySelector(`input[name="client_${rowId}"]`)?.value || '';
-  const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value || '';
-  const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value || '';
-  const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value || '';
-  const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value || '';
-  const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value || '';
-  const travelMode = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value || '';
-  const amount = row.querySelector(`input[name="amount_${rowId}"]`)?.value || '';
-  const remarks = row.querySelector(`input[name="remarks_${rowId}"]`)?.value || '';
-  
-  // Populate modal with current values
-  document.getElementById('modalRowId').value = rowId;
-  document.getElementById('modalDate').value = date;
-  document.getElementById('modalClient').value = client;
-  document.getElementById('modalProjectId').value = projectId;
-  document.getElementById('modalProjectName').value = projectName;
-  document.getElementById('modalProjectType').value = projectType;
-  document.getElementById('modalLocationFrom').value = locationFrom;
-  document.getElementById('modalLocationTo').value = locationTo;
-  document.getElementById('modalTravelMode').value = travelMode;
-  document.getElementById('modalAmount').value = amount;
-  document.getElementById('modalRemarks').value = remarks;
-  document.getElementById('modalFileName').textContent = '';
-  
-  modal.style.display = 'flex';
-  
-  // Prevent body scroll
-  document.body.style.overflow = 'hidden';
+    const modal = document.getElementById('entryFormModal');
+    const row   = document.querySelector(`tr[data-row-id="${rowId}"]`);
+    if (!row) return;
+
+    // ── NEW: always sync dropdown options with latest loaded data ────────
+    if (window._modalClientWrap?._sd) {
+        window._modalClientWrap._sd.setOptions(getClientOptions());
+    }
+    if (window._modalProjectNameWrap?._sd) {
+        // keep current client filter if one is already chosen
+        const currentClientCode = window._modalClientWrap?._sd?.getValue();
+        const opts = currentClientCode && currentClientCode !== '__custom__'
+            ? getProjectOptionsForClient(currentClientCode)
+            : getProjectOptionsForClient('');
+        window._modalProjectNameWrap._sd.setOptions(opts);
+    }
+ 
+    const date        = row.querySelector(`input[name="date_${rowId}"]`)?.value        || '';
+    const client      = getDropdownValue(`client_${rowId}`);
+    const projectName = getDropdownValue(`projectname_${rowId}`);   // ← was projectid before
+    const projectId   = getDropdownValue(`projectid_${rowId}`);
+    const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value  || '';
+    const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value || '';
+    const locationTo   = row.querySelector(`input[name="locationto_${rowId}"]`)?.value   || '';
+    const travelMode  = row.querySelector(`select[name="travelmode_${rowId}"]`)?.value   || '';
+    const amount      = row.querySelector(`input[name="amount_${rowId}"]`)?.value        || '';
+    const remarks     = row.querySelector(`input[name="remarks_${rowId}"]`)?.value       || '';
+ 
+    // Pre-fill modal hidden inputs
+    document.getElementById('modalRowId').value    = rowId;
+    document.getElementById('modalDate').value     = date;
+    document.getElementById('modalClient').value   = client;
+    document.getElementById('modalProjectName').value = projectName;
+    document.getElementById('modalProjectId').value   = projectId;
+    document.getElementById('modalProjectType').value = projectType;
+    document.getElementById('modalLocationFrom').value = locationFrom;
+    document.getElementById('modalLocationTo').value   = locationTo;
+    document.getElementById('modalTravelMode').value  = travelMode;
+    document.getElementById('modalAmount').value      = amount;
+    document.getElementById('modalRemarks').value     = remarks;
+    document.getElementById('modalFileName').textContent = '';
+ 
+    // Pre-fill modal dropdowns (if they exist)
+    if (window._modalClientWrap && client && client !== '__custom__') {
+        const cOpt = window.allClientsList.find(c => c.client_name === client || c.client_code === client);
+        window._modalClientWrap._sd.setValue(cOpt?.client_code || client, client);
+        // Also filter projects for that client
+        if (window._modalProjectNameWrap && cOpt) {
+            const opts = getProjectOptionsForClient(cOpt.client_code);
+            window._modalProjectNameWrap._sd.setOptions(opts);
+        }
+    }
+    if (window._modalProjectNameWrap && projectName && projectName !== '__custom__') {
+        const pOpt = window.allProjectsList.find(p => p.project_name === projectName);
+        window._modalProjectNameWrap._sd.setValue(pOpt?.project_code || projectName, projectName);
+    }
+    const pidVisible = document.getElementById('modalProjectIdVisible');
+    if (pidVisible) pidVisible.value = projectId;
+ 
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 }
 
 // Close Entry Modal
@@ -2365,9 +2611,16 @@ pdfInput.addEventListener('change', function(e) {
       
       // Get form values
       const date = document.getElementById('modalDate').value;
-      const client = document.getElementById('modalClient').value.trim();
-      const projectId = document.getElementById('modalProjectId').value.trim();
-      const projectName = document.getElementById('modalProjectName').value.trim();
+    //   const client = document.getElementById('modalClient').value.trim();
+    //   const projectId = document.getElementById('modalProjectId').value.trim();
+    //   const projectName = document.getElementById('modalProjectName').value.trim();
+      const client      = document.getElementById('modalClient').value.trim()
+                        || document.getElementById('modalClientSD')?.value || '';
+      const projectName = document.getElementById('modalProjectName').value.trim()
+                        || document.getElementById('modalProjectNameSD')?.value || '';
+      const projectId   = document.getElementById('modalProjectIdVisible')?.value
+                        || document.getElementById('modalProjectId').value.trim() || '';
+ 
       const projectType = document.getElementById('modalProjectType').value;
       const locationFrom = document.getElementById('modalLocationFrom').value.trim();
       const locationTo = document.getElementById('modalLocationTo').value.trim();
@@ -2399,20 +2652,48 @@ pdfInput.addEventListener('change', function(e) {
         return;
       }
       
-      // Update table row with modal data
-      const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
-      if (row) {
-        row.querySelector(`input[name="date_${rowId}"]`).value = date;
-        row.querySelector(`input[name="client_${rowId}"]`).value = client;
-        row.querySelector(`input[name="projectid_${rowId}"]`).value = projectId;
-        row.querySelector(`input[name="projectname_${rowId}"]`).value = projectName;
-        row.querySelector(`select[name="projecttype_${rowId}"]`).value = projectType;
-        row.querySelector(`input[name="locationfrom_${rowId}"]`).value = locationFrom;
-        row.querySelector(`input[name="locationto_${rowId}"]`).value = locationTo;
-        row.querySelector(`select[name="travelmode_${rowId}"]`).value = travelMode;
-        row.querySelector(`input[name="amount_${rowId}"]`).value = amount;
-        row.querySelector(`input[name="remarks_${rowId}"]`).value = remarks;
-        
+    //   // Update table row with modal data
+    //   const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+    //   if (row) {
+    //     row.querySelector(`input[name="date_${rowId}"]`).value = date;
+    //     row.querySelector(`input[name="client_${rowId}"]`).value = client;
+    //     row.querySelector(`input[name="projectid_${rowId}"]`).value = projectId;
+    //     row.querySelector(`input[name="projectname_${rowId}"]`).value = projectName;
+    //     row.querySelector(`select[name="projecttype_${rowId}"]`).value = projectType;
+    //     row.querySelector(`input[name="locationfrom_${rowId}"]`).value = locationFrom;
+    //     row.querySelector(`input[name="locationto_${rowId}"]`).value = locationTo;
+    //     row.querySelector(`select[name="travelmode_${rowId}"]`).value = travelMode;
+    //     row.querySelector(`input[name="amount_${rowId}"]`).value = amount;
+    //     row.querySelector(`input[name="remarks_${rowId}"]`).value = remarks;
+
+        const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+        if (row) {
+            row.querySelector(`input[name="date_${rowId}"]`).value = date;
+
+            // Client — update hidden input + visible text in dropdown
+            const rowClientHidden = document.getElementById(`client_${rowId}`);
+            if (rowClientHidden) rowClientHidden.value = client;
+            const rowClientVisible = document.querySelector(`.cell-client-${rowId} .sd-input`);
+            if (rowClientVisible) rowClientVisible.value = client;
+
+            // Project Name — update hidden input + visible text in dropdown
+            const rowProjNameHidden = document.getElementById(`projectname_${rowId}`);
+            if (rowProjNameHidden) rowProjNameHidden.value = projectName;
+            const rowProjNameVisible = document.querySelector(`.cell-projectname-${rowId} .sd-input`);
+            if (rowProjNameVisible) rowProjNameVisible.value = projectName;
+
+            // Project ID — update readonly input
+            const rowProjIdInput = document.getElementById(`projectid_${rowId}`);
+            if (rowProjIdInput) rowProjIdInput.value = projectId;
+
+            // rest of the fields...
+            row.querySelector(`select[name="projecttype_${rowId}"]`).value = projectType;
+            row.querySelector(`input[name="locationfrom_${rowId}"]`).value = locationFrom;
+            row.querySelector(`input[name="locationto_${rowId}"]`).value   = locationTo;
+            row.querySelector(`select[name="travelmode_${rowId}"]`).value  = travelMode;
+            row.querySelector(`input[name="amount_${rowId}"]`).value       = amount;
+            row.querySelector(`input[name="remarks_${rowId}"]`).value      = remarks;
+                
         // Handle PDF file
         if (pdfFile) {
           const pdfInput = row.querySelector(`input[name="ticketpdf_${rowId}"]`);
@@ -2786,9 +3067,12 @@ async function saveAllEntries() {
     }
     
     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-    const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-    const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-    const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
+    // const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
+    // const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
+    // const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
+    const client      = getDropdownValue(`client_${rowId}`);
+    const projectId   = getDropdownValue(`projectid_${rowId}`);
+    const projectName = getDropdownValue(`projectname_${rowId}`);
     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
@@ -2915,8 +3199,8 @@ if (pdfFile) {
         const formData = new FormData();
         formData.append('date', date);
         formData.append('client', client);
-        formData.append('project_id', projectId);
         formData.append('project_name', projectName);
+        formData.append('project_id', projectId);
         formData.append('project_type', projectType);
         formData.append('location_from', locationFrom);
         formData.append('location_to', locationTo);
@@ -3565,6 +3849,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
   loadEmployeeDetails();
+  loadProjectsData();
+
   setupNavigation();
   checkUserRole();
 
@@ -3743,66 +4029,491 @@ if (existingStyle) {
 // PENDING SECTION
 let allPendingEmployees = [];
 
-// async function loadPendingData(token, empCode) {
-//     try {
-//         console.log("🔍 Loading pending data for:", empCode);
-        
-//         document.getElementById('pendingLoadingDiv').style.display = 'block';
-//         document.getElementById('pendingTableSection').style.display = 'none';
-//         document.getElementById('pendingNoDataDiv').style.display = 'none';
+async function loadProjectsData() {
+    const token   = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    if (!token || !empCode) return;
 
-//         // ✅ CHECK IF USER IS HR
-//         const isHR = (empCode.trim().toUpperCase() === "JHS729");
-        
-//         if (isHR) {
-//             console.log("👔 Loading HR pending data");
-//         } else {
-//             console.log("👔 Loading Manager pending data");
-//         }
+    try {
+        const res = await fetch(`${API_URL}/api/projects/${empCode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            console.warn('⚠️ Could not load projects:', res.status);
+            return;
+        }
+        const data = await res.json();
+        window.allProjectsList = data.projects || [];
+        window.allClientsList  = data.clients  || [];
+        console.log(`✅ Loaded ${window.allProjectsList.length} projects, ${window.allClientsList.length} clients`);
 
-//         const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
-//             headers: { 'Authorization': `Bearer ${token}` }
-//         });
+        // ── NEW: now that data is ready, rebuild every dropdown ──────────
+        // 1. Modal dropdowns
+        buildProjectFieldsModal();
 
-//         if (!response.ok) {
-//             const errorText = await response.text();
-//             console.error("❌ Failed to fetch pending:", response.status, errorText);
-//             throw new Error('Failed to fetch pending entries');
-//         }
+        // 2. Table-row dropdowns (for any rows already in the DOM)
+        const tbody = document.getElementById('entryTableBody');
+        if (tbody) {
+            tbody.querySelectorAll('tr').forEach(row => {
+                const rowId = row.dataset.rowId;
+                if (!rowId) return;
+                const clientWrap = row.querySelector(`.cell-client-${rowId} .sd-wrap`);
+                if (clientWrap && clientWrap._sd) {
+                    clientWrap._sd.setOptions(getClientOptions());
+                }
+                const projWrap = row.querySelector(`.cell-projectname-${rowId} .sd-wrap`);
+                if (projWrap && projWrap._sd) {
+                    projWrap._sd.setOptions(getProjectOptionsForClient(''));
+                }
+            });
+        }
+        // ─────────────────────────────────────────────────────────────────
 
-//         const data = await response.json();
-//         const pendingEmployees = data.employees || [];
+    } catch (err) {
+        console.error('❌ loadProjectsData error:', err);
+    }
+}
 
-//         console.log("✅ Pending employees:", pendingEmployees);
-//         console.log("📊 Total pending employees:", pendingEmployees.length);
-        
-//         // ✅ Store all pending data globally
-//         allPendingData = [];
-//         pendingEmployees.forEach(emp => {
-//             emp.entries.forEach(entry => {
-//                 allPendingData.push({
-//                     ...entry,
-//                     employee_id: emp.employeeId,
-//                     employee_name: emp.employeeName,
-//                     designation: emp.designation
-//                 });
-//             });
-//         });
+function createSearchableDropdown(config) {
+    const {
+        id,
+        placeholder = 'Select...',
+        options = [],
+        allowCustom = true,
+        value: preValue = '',
+        disabled = false,
+        onSelect,
+    } = config;
+ 
+    const wrap = document.createElement('div');
+    wrap.className = 'sd-wrap';
+ 
+    // Visible text input (acts as the trigger + filter)
+    const visibleInput = document.createElement('input');
+    visibleInput.type = 'text';
+    visibleInput.className = 'sd-input';
+    visibleInput.placeholder = placeholder;
+    visibleInput.autocomplete = 'off';
+    visibleInput.readOnly = false;
+    if (disabled) visibleInput.disabled = true;
+ 
+    // Hidden value holder
+    const hiddenInput = document.createElement('input');
+    hiddenInput.type = 'hidden';
+    hiddenInput.id   = id;
+    hiddenInput.name = id;
+ 
+    // Pre-fill if value provided
+    if (preValue) {
+        const matched = options.find(o => o.value === preValue || o.label === preValue);
+        visibleInput.value = matched ? matched.label : preValue;
+        hiddenInput.value  = preValue;
+    }
+ 
+    // Dropdown panel
+    const panel = document.createElement('div');
+    panel.className = 'sd-panel';
+ 
+    // Search input inside panel
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'sd-search';
+    searchInput.placeholder = 'Search…';
+ 
+    // Options list
+    const list = document.createElement('div');
+    list.className = 'sd-list';
+ 
+    panel.appendChild(searchInput);
+    panel.appendChild(list);
+    wrap.appendChild(visibleInput);
+    wrap.appendChild(hiddenInput);
+    wrap.appendChild(panel);
+ 
+    // ── Render options ──────────────────────────────────────
+    function renderOptions(filter = '') {
+        list.innerHTML = '';
+        const q = filter.toLowerCase();
+ 
+        const filtered = options.filter(o =>
+            !q || o.label.toLowerCase().includes(q)
+        );
+ 
+        if (filtered.length === 0 && !allowCustom) {
+            const empty = document.createElement('div');
+            empty.className = 'sd-empty';
+            empty.textContent = 'No results found';
+            list.appendChild(empty);
+        }
+ 
+        filtered.forEach(opt => {
+            const div = document.createElement('div');
+            div.className = 'sd-option' + (hiddenInput.value === opt.value ? ' sd-selected' : '');
+            div.textContent = opt.label;
+            div.dataset.value = opt.value;
+ 
+            div.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectOption(opt.value, opt.label, false);
+            });
+ 
+            list.appendChild(div);
+        });
+ 
+        // "Type here" sentinel
+        if (allowCustom) {
+            const customOpt = document.createElement('div');
+            customOpt.className = 'sd-option sd-type-here';
+            customOpt.innerHTML = `<i class="fas fa-keyboard"></i> Type here (not in list)`;
+            customOpt.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                activateCustomInput();
+            });
+            list.appendChild(customOpt);
+        }
+    }
+ 
+    // ── Select a proper option ───────────────────────────────
+    function selectOption(value, label, isCustom) {
+        hiddenInput.value  = value;
+        visibleInput.value = label;
+        visibleInput.classList.remove('sd-custom-input');
+        closePanel();
+        if (onSelect) onSelect(value, label, isCustom);
+    }
+ 
+    // ── Activate free-type mode ──────────────────────────────
+    function activateCustomInput() {
+        hiddenInput.value  = '__custom__';
+        visibleInput.value = '';
+        visibleInput.placeholder = 'Type your value…';
+        visibleInput.classList.add('sd-custom-input');
+        visibleInput.readOnly = false;
+        closePanel();
+ 
+        // Update hidden value as user types
+        visibleInput.addEventListener('input', onCustomType);
+        visibleInput.focus();
+ 
+        if (onSelect) onSelect('__custom__', '', true);
+    }
+ 
+    function onCustomType() {
+        hiddenInput.value = visibleInput.value;
+    }
+ 
+    // ── Panel open/close ─────────────────────────────────────────
+    let _scrollHandler = null;
 
-//         console.log("📊 Total pending entries:", allPendingData.length);
-        
-//         if (allPendingData.length === 0) {
-//             showPendingNoData();
-//         } else {
-//             populatePendingMonthFilter();
-//             displayPendingEmployeeTable(allPendingData);
-//         }
-//     } catch (error) {
-//         console.error('❌ Error:', error);
-//         document.getElementById('pendingLoadingDiv').style.display = 'none';
-//         showPendingNoData();
-//     }
-// }
+    function repositionPanel() {
+        const rect = visibleInput.getBoundingClientRect();
+        panel.style.top   = (rect.bottom + 2) + 'px';
+        panel.style.left  = rect.left + 'px';
+        panel.style.width = Math.max(rect.width, 260) + 'px';
+    }
+
+    function openPanel() {
+        if (disabled) return;
+        renderOptions(searchInput.value);
+        panel.classList.add('sd-visible');
+        visibleInput.classList.add('sd-open');
+        searchInput.value = '';
+
+        const computedPos = window.getComputedStyle(panel).position;
+
+        if (computedPos === 'fixed') {
+            // Initial position
+            repositionPanel();
+
+            // ── Keep panel anchored while page scrolls ──
+            _scrollHandler = () => repositionPanel();
+            window.addEventListener('scroll', _scrollHandler, true); // capture = true catches all scroll containers
+        } else {
+            panel.style.removeProperty('top');
+            panel.style.removeProperty('left');
+            panel.style.removeProperty('width');
+        }
+
+        searchInput.focus();
+    }
+
+    function closePanel() {
+        panel.classList.remove('sd-visible');
+        visibleInput.classList.remove('sd-open');
+
+        // ── Clean up scroll listener ──
+        if (_scrollHandler) {
+            window.removeEventListener('scroll', _scrollHandler, true);
+            _scrollHandler = null;
+        }
+    }
+ 
+    // ── Events ───────────────────────────────────────────────
+    visibleInput.addEventListener('click', () => {
+        if (hiddenInput.value !== '__custom__') openPanel();
+    });
+ 
+    searchInput.addEventListener('input', () => {
+        renderOptions(searchInput.value);
+    });
+ 
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closePanel();
+    });
+ 
+    // Close when clicking elsewhere
+    document.addEventListener('mousedown', (e) => {
+        if (!wrap.contains(e.target)) closePanel();
+    }, true);
+ 
+    // Public API exposed on the element
+    wrap._sd = {
+        getValue:    ()  => hiddenInput.value,
+        getLabel:    ()  => visibleInput.value,
+        setValue:    (v, l) => { hiddenInput.value = v; visibleInput.value = l || v; },
+        setOptions:  (newOpts) => { options.length = 0; options.push(...newOpts); renderOptions(); },
+        setDisabled: (d) => { disabled = d; visibleInput.disabled = d; },
+        reset:       ()  => {
+            hiddenInput.value  = '';
+            visibleInput.value = '';
+            visibleInput.placeholder = placeholder;
+            visibleInput.classList.remove('sd-custom-input');
+            visibleInput.removeEventListener('input', onCustomType);
+        },
+        isCustom: () => hiddenInput.value === '__custom__',
+    };
+ 
+    return wrap;
+}   
+
+function getClientOptions() {
+    return window.allClientsList.map(c => ({
+        value: c.client_code,
+        label: c.client_name,
+    }));
+}
+ 
+function getProjectOptionsForClient(clientCode) {
+    const projects = !clientCode
+        ? window.allProjectsList
+        : window.allProjectsList.filter(p => p.client_code === clientCode);
+ 
+    return projects.map(p => ({
+        value: p.project_code,
+        label: p.project_name,
+        meta:  p,
+    }));
+}
+
+function buildProjectCellsInRow(rowId, row) {
+    const clientTd      = row.querySelector(`td.cell-client-${rowId}`);
+    const projectNameTd = row.querySelector(`td.cell-projectname-${rowId}`);
+    const projectIdTd   = row.querySelector(`td.cell-projectid-${rowId}`);
+ 
+    if (!clientTd || !projectNameTd || !projectIdTd) return;
+ 
+    // ── Project ID field (readonly, filled by project-name selection) ──────
+    const projectIdInput = document.createElement('input');
+    projectIdInput.type        = 'text';
+    projectIdInput.id          = `projectid_${rowId}`;
+    projectIdInput.name        = `projectid_${rowId}`;
+    projectIdInput.className   = 'sd-input sd-readonly-field';
+    projectIdInput.placeholder = 'Auto-fill';
+    projectIdInput.readOnly    = true;
+    projectIdTd.appendChild(projectIdInput);
+ 
+    // ── Project Name dropdown ──────────────────────────────────────────────
+    const projectNameWrap = createSearchableDropdown({
+        id:          `projectname_${rowId}`,
+        placeholder: 'Project Name',
+        options:     getProjectOptionsForClient(''),
+        allowCustom: true,
+        onSelect: (value, label, isCustom) => {
+            if (isCustom) {
+                projectIdInput.value    = '';
+                projectIdInput.readOnly = false;
+                projectIdInput.classList.remove('sd-readonly-field');
+                projectIdInput.classList.add('sd-custom-input');
+                projectIdInput.placeholder = 'Type project code';
+            } else {
+                const matched = window.allProjectsList.find(p => p.project_code === value);
+                if (matched) projectIdInput.value = matched.project_code;
+                projectIdInput.readOnly = true;
+                projectIdInput.classList.add('sd-readonly-field');
+                projectIdInput.classList.remove('sd-custom-input');
+            }
+        },
+    });
+    projectNameTd.appendChild(projectNameWrap);
+ 
+    // ── Client Name dropdown ───────────────────────────────────────────────
+    const clientWrap = createSearchableDropdown({
+        id:          `client_${rowId}`,
+        placeholder: 'Client Name',
+        options:     getClientOptions(),
+        allowCustom: true,
+        onSelect: (value, label, isCustom) => {
+            if (isCustom) {
+                projectNameWrap._sd.setOptions([]);
+                projectNameWrap._sd.reset();
+                const pnInput = projectNameWrap.querySelector('.sd-input');
+                if (pnInput) {
+                    pnInput.value       = '';
+                    pnInput.placeholder = 'Type project name';
+                    pnInput.classList.add('sd-custom-input');
+                }
+                const pnHidden = projectNameWrap.querySelector('input[type="hidden"]');
+                if (pnHidden) pnHidden.value = '__custom__';
+ 
+                projectIdInput.value    = '';
+                projectIdInput.readOnly = false;
+                projectIdInput.classList.remove('sd-readonly-field');
+                projectIdInput.classList.add('sd-custom-input');
+                projectIdInput.placeholder = 'Type project code';
+            } else {
+                const newOpts = getProjectOptionsForClient(value);
+                projectNameWrap._sd.setOptions(newOpts);
+                projectNameWrap._sd.reset();
+                projectIdInput.value    = '';
+                projectIdInput.readOnly = true;
+                projectIdInput.classList.add('sd-readonly-field');
+                projectIdInput.classList.remove('sd-custom-input');
+                projectIdInput.placeholder = 'Auto-fill';
+            }
+        },
+    });
+    clientTd.appendChild(clientWrap);
+}
+
+// ─── buildProjectFieldsModal ─────────────────────────────────────────────────
+// ✅ FIXED: modal order is Client → Project Name → Project ID
+function buildProjectFieldsModal() {
+    const projectIdContainer     = document.getElementById('modalProjectIdContainer');
+    const existingProjectIdInput = document.getElementById('modalProjectId');
+    if (!projectIdContainer || !existingProjectIdInput) return;
+ 
+    // Visible readonly input for Project ID
+    const projectIdVisible = document.createElement('input');
+    projectIdVisible.type      = 'text';
+    projectIdVisible.id        = 'modalProjectIdVisible';
+    projectIdVisible.className = 'sd-input sd-readonly-field';
+    projectIdVisible.placeholder = 'Auto-fill from project';
+    projectIdVisible.readOnly  = true;
+    projectIdVisible.style.cssText = `
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 14px;
+        background: #f1f5f9;
+        color: #475569;
+        font-weight: 600;
+        box-sizing: border-box;
+    `;
+    projectIdContainer.innerHTML = '';
+    projectIdContainer.appendChild(existingProjectIdInput); // keep hidden
+    projectIdContainer.appendChild(projectIdVisible);
+ 
+    function setProjectId(code, isCustom) {
+        existingProjectIdInput.value     = code;
+        projectIdVisible.value           = code;
+        projectIdVisible.readOnly        = !isCustom;
+        projectIdVisible.style.background  = isCustom ? '#fffbeb' : '#f1f5f9';
+        projectIdVisible.style.borderColor = isCustom ? '#f59e0b' : '#e5e7eb';
+        if (isCustom) {
+            projectIdVisible.placeholder = 'Type project code';
+            projectIdVisible.addEventListener('input', () => {
+                existingProjectIdInput.value = projectIdVisible.value;
+            });
+        } else {
+            projectIdVisible.placeholder = 'Auto-fill from project';
+        }
+    }
+ 
+    // ── Project Name dropdown ──────────────────────────────────────────────
+    const projectNameContainer = document.getElementById('modalProjectNameContainer');
+    if (!projectNameContainer) return;
+ 
+    const modalProjectNameWrap = createSearchableDropdown({
+        id:          'modalProjectNameSD',
+        placeholder: 'Select project name',
+        options:     getProjectOptionsForClient(''),
+        allowCustom: true,
+        onSelect: (value, label, isCustom) => {
+            const orig = document.getElementById('modalProjectName');
+            if (orig) orig.value = isCustom ? '' : label;
+            if (isCustom) {
+                setProjectId('', true);
+            } else {
+                setProjectId(value, false);
+            }
+        },
+    });
+    projectNameContainer.innerHTML = '';
+    projectNameContainer.appendChild(modalProjectNameWrap);
+ 
+    window._modalProjectNameWrap = modalProjectNameWrap;
+    window._setModalProjectId    = setProjectId;
+ 
+    // ── Client Name dropdown ───────────────────────────────────────────────
+    const clientContainer = document.getElementById('modalClientContainer');
+    if (!clientContainer) return;
+ 
+    const modalClientWrap = createSearchableDropdown({
+        id:          'modalClientSD',
+        placeholder: 'Select client name',
+        options:     getClientOptions(),
+        allowCustom: true,
+        onSelect: (value, label, isCustom) => {
+            const orig = document.getElementById('modalClient');
+            if (orig) orig.value = isCustom ? '' : label;
+ 
+            if (isCustom) {
+                modalProjectNameWrap._sd.setOptions([]);
+                modalProjectNameWrap._sd.reset();
+                const pnIn = modalProjectNameWrap.querySelector('.sd-input');
+                if (pnIn) { pnIn.classList.add('sd-custom-input'); pnIn.placeholder = 'Type project name'; }
+                const pnHid = modalProjectNameWrap.querySelector('input[type="hidden"]');
+                if (pnHid) pnHid.value = '__custom__';
+                setProjectId('', true);
+            } else {
+                const newOpts = getProjectOptionsForClient(value);
+                modalProjectNameWrap._sd.setOptions(newOpts);
+                modalProjectNameWrap._sd.reset();
+                setProjectId('', false);
+            }
+        },
+    });
+    clientContainer.innerHTML = '';
+    clientContainer.appendChild(modalClientWrap);
+ 
+    window._modalClientWrap = modalClientWrap;
+    console.log('✅ Modal project dropdowns initialized');
+}
+ 
+// Expose globally
+window.buildProjectFieldsModal = buildProjectFieldsModal;
+ 
+
+function getDropdownValue(nameAttr) {
+    // Try hidden input by id first
+    const el = document.getElementById(nameAttr) || document.querySelector(`input[name="${nameAttr}"]`);
+    if (!el) return '';
+ 
+    const val = el.value;
+    if (val === '__custom__') {
+        // For custom: read the visible text input in the same wrapper
+        const wrap = el.closest('.sd-wrap');
+        if (wrap) return wrap.querySelector('.sd-input')?.value || '';
+        return '';
+    }
+    return val;
+}
+
+window.loadProjectsData     = loadProjectsData;
+window.buildProjectFieldsModal = buildProjectFieldsModal;
+window.createSearchableDropdown = createSearchableDropdown;
+window.getDropdownValue     = getDropdownValue;
 
 async function loadPendingData(token, empCode) {
     try {

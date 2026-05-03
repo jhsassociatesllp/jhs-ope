@@ -2107,3 +2107,240 @@ body {
         box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
     }
 }
+
+/* ---- Wrapper ---- */
+.sd-wrap {
+    position: relative;
+    width: 100%;
+    min-width: 140px;
+}
+ 
+/* ---- The visible input ---- */
+.sd-input {
+    width: 100%;
+    padding: 9px 32px 9px 11px;   /* right padding for caret icon */
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+ 
+.sd-input:focus,
+.sd-input.sd-open {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    background-color: #fff;
+}
+ 
+.sd-input.sd-readonly-field {
+    background-color: #f1f5f9;
+    color: #475569;
+    cursor: default;
+    font-weight: 600;
+}
+ 
+.sd-input.sd-custom-input {
+    border-color: #f59e0b;
+    background-color: #fffbeb;
+}
+ 
+/* ---- Dropdown panel ---- */
+.sd-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 2px solid #667eea;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 9999;
+    max-height: 220px;
+    overflow: hidden;
+    flex-direction: column;
+}
+ 
+.sd-panel.sd-visible {
+    display: flex;
+}
+ 
+/* ---- Search box inside panel ---- */
+.sd-search {
+    padding: 8px 10px;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+    color: #1e293b;
+}
+ 
+.sd-search::placeholder { color: #94a3b8; }
+ 
+/* ---- Scrollable options list ---- */
+.sd-list {
+    overflow-y: auto;
+    flex: 1;
+}
+ 
+/* ---- Each option ---- */
+.sd-option {
+    padding: 9px 12px;
+    font-size: 13px;
+    color: #374151;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+ 
+.sd-option:last-child { border-bottom: none; }
+.sd-option:hover     { background: #eef2ff; color: #4338ca; }
+ 
+.sd-option.sd-selected {
+    background: #eef2ff;
+    color: #4338ca;
+    font-weight: 600;
+}
+ 
+/* ---- "Type here" special option ---- */
+.sd-option.sd-type-here {
+    color: #f59e0b;
+    font-style: italic;
+    font-weight: 600;
+    border-top: 1px dashed #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+ 
+.sd-option.sd-type-here:hover { background: #fffbeb; }
+ 
+/* ---- Empty state ---- */
+.sd-empty {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #94a3b8;
+    text-align: center;
+    font-style: italic;
+}
+ 
+/* ---- Disabled / loading state ---- */
+.sd-input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+ 
+/* ---- In the modal form (larger inputs) ---- */
+#entryFormModal .sd-input {
+    padding: 12px 36px 12px 16px;
+    font-size: 14px;
+    border-radius: 10px;
+}
+ 
+#entryFormModal .sd-panel {
+    max-height: 260px;
+}
+ 
+#entryFormModal .sd-option,
+#entryFormModal .sd-search {
+    font-size: 14px;
+}
+ 
+
+/* ============================================================
+   ADD TO style.css — fixes for modal dropdown sizing/style
+   ============================================================ */
+
+/* Make modal container divs fill their grid cell */
+#modalClientContainer,
+#modalProjectNameContainer,
+#modalProjectIdContainer {
+    width: 100%;
+}
+
+/* Modal dropdown inputs — match the modal's larger input style */
+#modalClientContainer .sd-input,
+#modalProjectNameContainer .sd-input,
+#modalProjectIdContainer .sd-input,
+#modalProjectIdContainer input[type="text"] {
+    width: 100%;
+    padding: 12px 36px 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.3s ease;
+    background: #f9fafb;
+    box-sizing: border-box;
+}
+
+#modalClientContainer .sd-input:focus,
+#modalClientContainer .sd-input.sd-open,
+#modalProjectNameContainer .sd-input:focus,
+#modalProjectNameContainer .sd-input.sd-open {
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Project ID in modal — gray readonly style */
+#modalProjectIdContainer input[type="text"].sd-readonly-field {
+    background: #f1f5f9;
+    color: #475569;
+    cursor: default;
+    font-weight: 600;
+}
+
+/* Project ID custom (free-type) style */
+#modalProjectIdContainer input[type="text"].sd-custom-input {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    cursor: text;
+}
+
+/* Dropdown panel in modal — needs higher z-index than modal itself */
+#modalClientContainer .sd-panel,
+#modalProjectNameContainer .sd-panel {
+    z-index: 999999;
+    max-height: 280px;
+    font-size: 14px;
+}
+
+#modalClientContainer .sd-option,
+#modalClientContainer .sd-search,
+#modalProjectNameContainer .sd-option,
+#modalProjectNameContainer .sd-search {
+    font-size: 14px;
+}
+
+/* ── Searchable-dropdown panel: escape table cell overflow ── */
+.entry-table .sd-wrap {
+    position: relative;
+    min-width: 160px;
+}
+
+.entry-table .sd-panel {
+    position: fixed;      /* escape overflow:hidden on table cells */
+    width: 260px;
+    max-height: 220px;
+    z-index: 99999;
+}
+
+.entry-table .sd-input {
+    width: 100%;
+    min-width: 140px;
+    padding: 8px 28px 8px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+}
