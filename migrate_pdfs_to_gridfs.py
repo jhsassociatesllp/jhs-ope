@@ -26,7 +26,6 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB  = os.getenv("MONGO_DB")
 
-
 def is_base64_pdf(value: str) -> bool:
     """Return True if value looks like a base64-encoded PDF (not a GridFS ObjectId)."""
     if not value or not isinstance(value, str):
