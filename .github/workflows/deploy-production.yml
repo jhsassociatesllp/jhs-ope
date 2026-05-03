@@ -1,5 +1,9 @@
 name: Docker Deploy Production
 
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches: [main]
@@ -11,9 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # - name: Login to GHCR
+      #   run: |
+      #     echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Login to GHCR
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u jhsassociatesllp --password-stdin
 
       - name: Build & Push Image
         run: |
