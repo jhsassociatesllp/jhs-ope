@@ -21,7 +21,7 @@ jobs:
 
       - name: Login to GHCR
         run: |
-          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u jhsassociatesllp --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u jhsassociatesllp --password-stdin
 
       - name: Build & Push Image
         run: |
