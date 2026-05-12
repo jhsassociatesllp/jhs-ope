@@ -1,19 +1,22 @@
 from fastapi.security import OAuth2PasswordBearer  
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi.responses import FileResponse, StreamingResponse
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+import calendar
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from typing import Optional
 from dotenv import load_dotenv
 import os
-import base64
+import io
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Request
 from starlette.requests import Request
+from fastapi.responses import JSONResponse
+import json
 
 # Load env vars
 load_dotenv()
@@ -26,10 +29,24 @@ JWT_EXPIRE_MINUTES = 14400
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# ---------- FastAPI app ----------
-app = FastAPI()
+class SafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        def sanitize(obj):
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            if isinstance(obj, dict):
+                return {k: sanitize(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [sanitize(i) for i in obj]
+            return obj
+        return json.dumps(sanitize(content), ensure_ascii=False).encode("utf-8")
 
-# CORS (agar HTML ko alag port se serve kar rahe ho)
+# ---------- FastAPI app ----------
+app = FastAPI(default_response_class=SafeJSONResponse)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  
@@ -42,6 +59,34 @@ app.add_middleware(
 client = AsyncIOMotorClient(MONGO_URI)
 db = client[MONGO_DB]
 user_collection = db["user"]   
+
+
+# ---------- GridFS Helpers ----------
+async def upload_to_gridfs(file_content: bytes, filename: str) -> str:
+    """Upload a file to GridFS and return the file_id as string."""
+    bucket = AsyncIOMotorGridFSBucket(db)
+    file_id = await bucket.upload_from_stream(filename, io.BytesIO(file_content))
+    return str(file_id)
+
+
+async def delete_from_gridfs(file_id: str):
+    """Delete a file from GridFS by its file_id string."""
+    try:
+        bucket = AsyncIOMotorGridFSBucket(db)
+        await bucket.delete(ObjectId(file_id))
+    except Exception:
+        pass
+
+
+def is_gridfs_id(value: str) -> bool:
+    """Check if a string is a valid GridFS ObjectId (24 hex chars)."""
+    if not value:
+        return False
+    try:
+        ObjectId(value)
+        return len(value) == 24
+    except Exception:
+        return False
 
 
 # ---------- Models ----------
@@ -62,6 +107,20 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     employee_code: Optional[str] = None
+
+
+import math
+
+def safe_float(val) -> float:
+    try:
+        if val is None or str(val).strip().lower() in ("", "nan", "inf", "-inf"):
+            return 0.0
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return 0.0
+        return f
+    except (ValueError, TypeError):
+        return 0.0
 
 
 # ---------- Utility functions ----------
@@ -88,7 +147,7 @@ async def get_user_by_employee_code(employee_code: str):
 # ---------- JWT dependency ----------
 from fastapi.security import OAuth2PasswordBearer
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")  # logical name
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -116,13 +175,37 @@ async def is_valid_employee(employee_code: str) -> bool:
     emp = await db["Employee_details"].find_one({"Employee_ID": employee_code})
     return emp is not None
 
+
+# ---------- PDF Serve Endpoint ----------
+@app.get("/api/ope/pdf/{file_id}")
+async def serve_pdf(file_id: str, current_user=Depends(get_current_user)):
+    """
+    Serve a PDF stored in GridFS by its file_id.
+    Requires authentication.
+    """
+    try:
+        bucket = AsyncIOMotorGridFSBucket(db)
+        stream = await bucket.open_download_stream(ObjectId(file_id))
+        content = await stream.read()
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename=ticket_{file_id}.pdf",
+                "Cache-Control": "private, max-age=3600"
+            }
+        )
+    except Exception as e:
+        print(f"❌ PDF serve error for {file_id}: {str(e)}")
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+
 # ---------- Auth endpoints ----------
 
 @app.post("/api/register")
 async def register(user: UserCreate):
     print("📌 Incoming register data:", user.employee_code)
 
-    # Check if exists
     existing = await user_collection.find_one({"employee_code": user.employee_code})
     print("📌 Existing user:", existing)
 
@@ -165,7 +248,6 @@ async def login(user: UserLogin):
 # ---------- Protected example route ----------
 @app.get("/api/me")
 async def read_current_user(current_user=Depends(get_current_user)):
-    # yaha future me Employee_details se jo marzi data fetch kar sakte ho
     return {
         "employee_code": current_user["employee_code"],
         "created_at": current_user.get("created_at"),
@@ -246,10 +328,7 @@ async def submit_ope_entry(
         # ✅ STEP 2: CHECK COLLECTIONS
         # ============================================
         
-        # Check if submitter is in Reporting_Managers collection
         is_rm_in_collection = await db["Reporting_Managers"].find_one({"EmployeeId": emp_code})
-        
-        # Check if submitter is in Partner collection
         is_partner_in_collection = await db["Partner"].find_one({"PartnerEmpCode": emp_code})
         
         print(f"\n🔍 Collection Checks:")
@@ -258,12 +337,14 @@ async def submit_ope_entry(
         print(f"   ReportingEmpCode == PartnerEmpCode: {reporting_manager_code == partner_code}")
         
         # ============================================
-        # ✅ STEP 3: HANDLE PDF
+        # ✅ STEP 3: HANDLE PDF - GridFS Upload
         # ============================================
-        ticket_pdf_base64 = None
+        ticket_pdf_id = None
         if ticket_pdf:
             pdf_content = await ticket_pdf.read()
-            ticket_pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+            pdf_filename = f"ope_{emp_code}_{datetime.utcnow().timestamp()}.pdf"
+            ticket_pdf_id = await upload_to_gridfs(pdf_content, pdf_filename)
+            print(f"✅ PDF uploaded to GridFS: {ticket_pdf_id}")
         
         # ============================================
         # ✅ STEP 4: CREATE OPE ENTRY
@@ -282,7 +363,7 @@ async def submit_ope_entry(
             "amount": amount,
             "remarks": remarks,
             "month_range": month_range,
-            "ticket_pdf": ticket_pdf_base64,
+            "ticket_pdf": ticket_pdf_id,       # GridFS file_id or None
             "status": "pending",
             "submission_date": datetime.utcnow(),
             "L1_approved": {"status": False},
@@ -299,30 +380,16 @@ async def submit_ope_entry(
         # ============================================
         
         if is_rm_in_collection:
-            # ============================================
-            # 🔥 REPORTING MANAGER SELF-SUBMISSION
-            # Scenarios: 1, 2, 3
-            # ============================================
             print(f"\n{'🔥'*30}")
             print(f"🔥 REPORTING MANAGER SELF-SUBMISSION")
             print(f"{'🔥'*30}")
             print(f"   RM Code: {emp_code}")
             print(f"   RM Name: {employee_name}")
             
-            # ✅ ALWAYS 2-LEVEL FOR RM (regardless of amount)
             total_levels = 2
             
-            # ✅ Determine Partner approver
             if reporting_manager_code == partner_code:
-                # ============================================
-                # 📌 SCENARIO 1: RM reports to SELF (as Partner)
-                # Example: JHS01 is both RM and Partner
-                # ============================================
                 print(f"\n   📌 SCENARIO 1: RM Reports to Self (Partner Role)")
-                print(f"      EmployeeId: {emp_code}")
-                print(f"      ReportingEmpCode: {reporting_manager_code}")
-                print(f"      PartnerEmpCode: {partner_code}")
-                print(f"      ✅ MATCH! Using Partner role for approval")
                 
                 partner_entry = await db["Partner"].find_one({"PartnerEmpCode": partner_code})
                 
@@ -336,17 +403,8 @@ async def submit_ope_entry(
                 l1_approver_name = partner_entry.get("Partner_Name", partner_name)
                 pending_queue_code = partner_code
                 
-                print(f"      ✅ L1 Approver: Partner {l1_approver_name} ({l1_approver_code})")
-                print(f"      ✅ Pending Queue: {pending_queue_code}")
-            
             elif is_partner_in_collection:
-                # ============================================
-                # 📌 SCENARIO 2: RM is ALSO Partner, reports to DIFFERENT Partner
-                # Example: JHS02 (RM + Partner) reports to JHS01 (Partner)
-                # ============================================
                 print(f"\n   📌 SCENARIO 2: RM is ALSO Partner, reports to different Partner")
-                print(f"      RM/Partner Code: {emp_code}")
-                print(f"      Reports to Partner: {partner_code}")
                 
                 partner_entry = await db["Partner"].find_one({"PartnerEmpCode": partner_code})
                 
@@ -360,17 +418,8 @@ async def submit_ope_entry(
                 l1_approver_name = partner_entry.get("Partner_Name", partner_name)
                 pending_queue_code = partner_code
                 
-                print(f"      ✅ L1 Approver: Partner {l1_approver_name} ({l1_approver_code})")
-                print(f"      ✅ Pending Queue: {pending_queue_code}")
-            
             else:
-                # ============================================
-                # 📌 SCENARIO 3: Regular RM (NOT a Partner)
-                # Example: JHS03 (RM only) reports to JHS01 (Partner)
-                # ============================================
                 print(f"\n   📌 SCENARIO 3: Regular RM (not a Partner)")
-                print(f"      RM Code: {emp_code}")
-                print(f"      Reports to Partner: {partner_code}")
                 
                 partner_entry = await db["Partner"].find_one({"PartnerEmpCode": partner_code})
                 
@@ -383,11 +432,7 @@ async def submit_ope_entry(
                 l1_approver_code = partner_code
                 l1_approver_name = partner_entry.get("Partner_Name", partner_name)
                 pending_queue_code = partner_code
-                
-                print(f"      ✅ L1 Approver: Partner {l1_approver_name} ({l1_approver_code})")
-                print(f"      ✅ Pending Queue: {pending_queue_code}")
             
-            # ✅ CREATE STATUS DOCUMENT (2-LEVEL: Partner → HR)
             status_doc = {
                 "employeeId": emp_code,
                 "employee_name": employee_name,
@@ -416,14 +461,12 @@ async def submit_ope_entry(
                 }
             }
             
-            # ✅ Upsert Status
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
                 upsert=True
             )
             
-            # ✅ ADD TO PARTNER'S PENDING
             await db["Pending"].update_one(
                 {"ReportingEmpCode": pending_queue_code},
                 {
@@ -452,10 +495,6 @@ async def submit_ope_entry(
             }
         
         else:
-            # ============================================
-            # 👤 REGULAR EMPLOYEE SUBMISSION
-            # Scenarios: 4, 5
-            # ============================================
             print(f"\n{'='*60}")
             print(f"👤 REGULAR EMPLOYEE SUBMISSION")
             print(f"{'='*60}")
@@ -464,10 +503,6 @@ async def submit_ope_entry(
             print(f"   Partner: {partner_code} - {partner_name}")
             
             if amount > ope_limit:
-                # ============================================
-                # 📌 SCENARIO 4: Employee, Amount > Limit
-                # 3-LEVEL: RM → Partner → HR
-                # ============================================
                 total_levels = 3
                 
                 print(f"\n   📌 SCENARIO 4: Employee Amount EXCEEDS Limit")
@@ -509,7 +544,6 @@ async def submit_ope_entry(
                     }
                 }
                 
-                # ✅ ADD TO RM'S PENDING
                 await db["Pending"].update_one(
                     {"ReportingEmpCode": reporting_manager_code},
                     {
@@ -519,19 +553,9 @@ async def submit_ope_entry(
                     upsert=True
                 )
                 
-                print(f"\n      ✅ Approval Flow:")
-                print(f"         L1: RM - {reporting_manager_name} ({reporting_manager_code})")
-                print(f"         L2: Partner - {partner_name} ({partner_code})")
-                print(f"         L3: HR (JHS729)")
-                print(f"      ✅ Added to: {reporting_manager_code}'s Pending (RM queue)")
-                
                 scenario_name = "Employee_Amount_Exceeds_Limit"
                 
             else:
-                # ============================================
-                # 📌 SCENARIO 5: Employee, Amount ≤ Limit
-                # 2-LEVEL: RM → HR
-                # ============================================
                 total_levels = 2
                 
                 print(f"\n   📌 SCENARIO 5: Employee Amount WITHIN Limit")
@@ -567,7 +591,6 @@ async def submit_ope_entry(
                     }
                 }
                 
-                # ✅ ADD TO RM'S PENDING
                 await db["Pending"].update_one(
                     {"ReportingEmpCode": reporting_manager_code},
                     {
@@ -577,14 +600,8 @@ async def submit_ope_entry(
                     upsert=True
                 )
                 
-                print(f"\n      ✅ Approval Flow:")
-                print(f"         L1: RM - {reporting_manager_name} ({reporting_manager_code})")
-                print(f"         L2: HR (JHS729)")
-                print(f"      ✅ Added to: {reporting_manager_code}'s Pending (RM queue)")
-                
                 scenario_name = "Employee_Amount_Within_Limit"
             
-            # ✅ Upsert Status
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
@@ -623,17 +640,14 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
     try:
         print(f"📌 Fetching history for: {employee_code}")
         
-        # Verify user can only access their own data
         if current_user["employee_code"] != employee_code:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Get employee's OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
             return {"history": []}
         
-        # Flatten all entries from all month ranges
         history = []
         data_array = ope_doc.get("Data", [])
         
@@ -653,7 +667,7 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
                         "travel_mode": entry.get("travel_mode"),
                         "amount": entry.get("amount"),
                         "remarks": entry.get("remarks"),
-                        "ticket_pdf": entry.get("ticket_pdf"),
+                        "ticket_pdf": entry.get("ticket_pdf"),   # GridFS ID or None
                         "created_time": entry.get("created_time"),
                         "updated_time": entry.get("updated_time")
                     })
@@ -670,24 +684,21 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
 @app.put("/api/ope/update/{entry_id}")
 async def update_ope_entry(
     entry_id: str,
-    update_data: dict,  # Assuming you're using dict or Pydantic model
+    update_data: dict,
     current_user=Depends(get_current_user)
 ):
     try:
         employee_code = current_user["employee_code"]
         print(f"📌 Updating entry {entry_id} for: {employee_code}")
         
-        # Get month_range from request
         month_range = update_data.get("month_range")
         if not month_range:
             raise HTTPException(status_code=400, detail="month_range required")
         
-        # Find the document
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         if not ope_doc:
             raise HTTPException(status_code=404, detail="Employee data not found")
         
-        # Find and update the entry
         data_array = ope_doc.get("Data", [])
         updated = False
         
@@ -696,13 +707,12 @@ async def update_ope_entry(
                 entries = data_item[month_range]
                 for j, entry in enumerate(entries):
                     if str(entry.get("_id")) == entry_id:
-                        # Update fields
                         update_fields = {
                             f"Data.{i}.{month_range}.{j}.date": update_data.get("date"),
                             f"Data.{i}.{month_range}.{j}.client": update_data.get("client"),
                             f"Data.{i}.{month_range}.{j}.project_id": update_data.get("project_id"),
                             f"Data.{i}.{month_range}.{j}.project_name": update_data.get("project_name"),
-                            f"Data.{i}.{month_range}.{j}.project_type": update_data.get("project_type"),  # ✅ NEW FIELD
+                            f"Data.{i}.{month_range}.{j}.project_type": update_data.get("project_type"),
                             f"Data.{i}.{month_range}.{j}.location_from": update_data.get("location_from"),
                             f"Data.{i}.{month_range}.{j}.location_to": update_data.get("location_to"),
                             f"Data.{i}.{month_range}.{j}.travel_mode": update_data.get("travel_mode"),
@@ -734,31 +744,27 @@ async def update_ope_entry(
 @app.delete("/api/ope/delete/{entry_id}")
 async def delete_ope_entry(
     entry_id: str,
-    delete_data: dict,  # Contains month_range
+    delete_data: dict,
     current_user=Depends(get_current_user)
 ):
     try:
         employee_code = current_user["employee_code"]
         print(f"📌 Deleting entry {entry_id} for: {employee_code}")
         
-        # Validate entry_id
         if not entry_id or entry_id == "dummy":
             raise HTTPException(status_code=400, detail="Invalid entry ID")
         
-        # Get month_range from request body
         month_range = delete_data.get("month_range")
         if not month_range:
             raise HTTPException(status_code=400, detail="month_range required")
         
         print(f"📌 Month range: {month_range}")
         
-        # Find the employee's document
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
             raise HTTPException(status_code=404, detail="Employee data not found")
         
-        # Find and delete the entry
         data_array = ope_doc.get("Data", [])
         deleted = False
         
@@ -766,12 +772,16 @@ async def delete_ope_entry(
             if month_range in data_item:
                 entries = data_item[month_range]
                 
-                # Find the entry with matching _id
                 for j, entry in enumerate(entries):
                     if str(entry.get("_id")) == entry_id:
                         print(f"✅ Found entry at Data.{i}.{month_range}.{j}")
                         
-                        # If this is the only entry in this month range, remove the entire month
+                        # Delete PDF from GridFS if exists
+                        pdf_id = entry.get("ticket_pdf")
+                        if pdf_id and is_gridfs_id(pdf_id):
+                            await delete_from_gridfs(pdf_id)
+                            print(f"✅ PDF deleted from GridFS: {pdf_id}")
+                        
                         if len(entries) == 1:
                             print(f"🗑️ Removing entire month range: {month_range}")
                             await db["OPE_data"].update_one(
@@ -779,7 +789,6 @@ async def delete_ope_entry(
                                 {"$pull": {"Data": {month_range: {"$exists": True}}}}
                             )
                         else:
-                            # Remove only this entry from the array
                             print(f"🗑️ Removing single entry from month range")
                             await db["OPE_data"].update_one(
                                 {"employeeId": employee_code},
@@ -812,23 +821,17 @@ async def delete_ope_entry(
     
 @app.get("/api/check-role/{employee_code}")
 async def check_user_role(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Check user role: Employee, Reporting Manager, Partner, or HR
-    """
     try:
         emp_code = employee_code.strip().upper()
         
         if current_user["employee_code"].upper() != emp_code:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Check HR
         is_hr = (emp_code == "JHS729")
         
-        # Check Partner
         partner = await db["Partner"].find_one({"PartnerEmpCode": emp_code})
         is_partner = partner is not None
         
-        # Check Reporting Manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": emp_code})
         is_manager = manager is not None
         
@@ -846,20 +849,14 @@ async def check_user_role(employee_code: str, current_user=Depends(get_current_u
 
 @app.get("/api/check-manager/{employee_code}")
 async def check_if_manager(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Check if the logged-in employee is a reporting manager
-    """
     try:
-        # Clean and uppercase the employee code
         emp_code = employee_code.strip().upper()
         
         print(f"🔍 Checking if {emp_code} is a manager...")
         
-        # Verify user can only check their own role
         if current_user["employee_code"].upper() != emp_code:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Check in Reporting_managers collection
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": emp_code})
         
         is_manager = manager is not None
@@ -871,7 +868,7 @@ async def check_if_manager(employee_code: str, current_user=Depends(get_current_
         
         return {
             "employee_code": emp_code,
-            "isManager": is_manager,  # ✅ Changed to match your frontend
+            "isManager": is_manager,
             "manager_name": manager.get("ReportingEmpName") if manager else None,
             "email": manager.get("Email ID") if manager else None
         }
@@ -881,27 +878,20 @@ async def check_if_manager(employee_code: str, current_user=Depends(get_current_
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ NEW API: Get employees by status (Pending/Approved/Rejected)
 @app.get("/api/ope/manager/employees/{status}")
 async def get_employees_by_status(
-    status: str,  # pending, approved, rejected
+    status: str,
     current_user=Depends(get_current_user)
 ):
-    """
-    Get all employees under a reporting manager filtered by status
-    Status can be: pending, approved, rejected
-    """
     try:
         reporting_emp_code = current_user["employee_code"].strip().upper()
         
         print(f"🔍 Fetching {status} employees for manager: {reporting_emp_code}")
         
-        # Verify user is a manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
-        # Determine which collection to use based on status
         status_lower = status.lower()
         if status_lower == "pending":
             collection_name = "Pending"
@@ -912,7 +902,6 @@ async def get_employees_by_status(
         else:
             raise HTTPException(status_code=400, detail="Invalid status. Use: pending, approved, or rejected")
         
-        # Get status collection document
         status_collection = db[collection_name]
         status_doc = await status_collection.find_one({"ReportingEmpCode": reporting_emp_code})
         
@@ -930,7 +919,6 @@ async def get_employees_by_status(
         
         employees_data = []
         
-        # Fetch OPE data for each employee
         for emp_code in employee_codes:
             ope_data = await db["OPE_data"].find_one(
                 {"employeeId": emp_code},
@@ -970,231 +958,7 @@ async def get_employees_by_status(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-    # ============================================
-# EMPLOYEE-SPECIFIC STATUS ENDPOINTS
-# ============================================    
-# @app.get("/api/ope/manager/pending")
-# async def get_manager_pending_employees(current_user=Depends(get_current_user)):
-#     """
-#     Get all employees with pending entries
-#     - For Reporting Managers: Show entries where status = "pending"
-#     - For HR (JHS729): Show entries where L1 is approved (or L1 + L2 for 3-level)
-#     """
-#     try:
-#         current_emp_code = current_user["employee_code"].strip().upper()
-        
-#         print(f"\n{'='*60}")
-#         print(f"🔍 PENDING REQUEST FROM: {current_emp_code}")
-#         print(f"{'='*60}\n")
-        
-#         # ✅ CHECK IF USER IS HR
-#         is_hr = (current_emp_code == "JHS729")
-        
-#         if is_hr:
-#             print(f"👔 USER IS HR - Fetching L1/L2 approved entries")
-            
-#             # ✅ STEP 1: Get ALL Status documents
-#             all_status_docs = await db["Status"].find({}).to_list(length=None)
-#             print(f"📊 Total Status documents in DB: {len(all_status_docs)}")
-            
-#             pending_employees = []
-            
-#             # ✅ STEP 2: Process each employee
-#             for status_doc in all_status_docs:
-#                 employee_id = status_doc.get("employeeId")
-#                 employee_name = status_doc.get("employeeName", "Unknown")
-#                 approval_status = status_doc.get("approval_status", [])
-                
-#                 print(f"\n📋 Checking Employee: {employee_id} ({employee_name})")
-#                 print(f"   Total payroll months: {len(approval_status)}")
-                
-#                 # Get OPE data for this employee
-#                 ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
-                
-#                 if not ope_doc:
-#                     print(f"   ⚠️ No OPE_data found - skipping")
-#                     continue
-                
-#                 pending_entries = []
-                
-#                 # ✅ STEP 3: Check each payroll month
-#                 for ps_index, ps in enumerate(approval_status):
-#                     payroll_month = ps.get("payroll_month")
-#                     total_levels = ps.get("total_levels", 2)
-#                     current_level = ps.get("current_level", "L1")
-#                     overall_status = ps.get("overall_status", "pending")
-                    
-#                     L1 = ps.get("L1", {})
-#                     L2 = ps.get("L2", {})
-                    
-#                     print(f"\n   📅 Payroll: {payroll_month}")
-#                     print(f"      Total Levels: {total_levels}")
-#                     print(f"      Current Level: {current_level}")
-#                     print(f"      Overall Status: {overall_status}")
-#                     print(f"      L1 Status: {L1.get('status')}")
-#                     print(f"      L2 Status: {L2.get('status')}")
-                    
-#                     # ✅ HR LOGIC: Determine if this month should show for HR
-#                     should_show_to_hr = False
-                    
-#                     # Case 1: 2-level approval (Amount ≤ Limit)
-#                     if total_levels == 2:
-#                         # HR should see if: L1 approved AND current_level is L2
-#                         if L1.get("status") == True and current_level == "L2" and overall_status == "pending":
-#                             should_show_to_hr = True
-#                             print(f"      ✅ MATCH: 2-level pending at HR (L1 approved)")
-                    
-#                     # Case 2: 3-level approval (Amount > Limit)
-#                     elif total_levels == 3:
-#                         L3 = ps.get("L3", {})
-#                         print(f"      L3 Status: {L3.get('status')}")
-                        
-#                         # HR should see if: L1 approved AND L2 approved AND current_level is L3
-#                         if (L1.get("status") == True and 
-#                             L2.get("status") == True and 
-#                             current_level == "L3" and 
-#                             overall_status == "pending"):
-#                             should_show_to_hr = True
-#                             print(f"      ✅ MATCH: 3-level pending at HR (L1+L2 approved)")
-                    
-#                     if not should_show_to_hr:
-#                         print(f"      ❌ NOT for HR - skipping")
-#                         continue
-                    
-#                     # ✅ STEP 4: Get entries for this payroll month
-#                     data_array = ope_doc.get("Data", [])
-                    
-#                     for data_item in data_array:
-#                         if payroll_month in data_item:
-#                             entries = data_item[payroll_month]
-#                             print(f"      📦 Found {len(entries)} entries in OPE_data")
-                            
-#                             for entry in entries:
-#                                 entry_status = entry.get("status", "").lower()
-                                
-#                                 # ✅ Only show entries with status "approved" by manager
-#                                 if entry_status == "approved":
-#                                     pending_entries.append({
-#                                         "_id": str(entry.get("_id", "")),
-#                                         "month_range": payroll_month,
-#                                         "date": entry.get("date"),
-#                                         "client": entry.get("client"),
-#                                         "project_id": entry.get("project_id"),
-#                                         "project_name": entry.get("project_name"),
-#                                         "project_type": entry.get("project_type", "N/A"),
-#                                         "location_from": entry.get("location_from"),
-#                                         "location_to": entry.get("location_to"),
-#                                         "travel_mode": entry.get("travel_mode"),
-#                                         "amount": entry.get("amount"),
-#                                         "remarks": entry.get("remarks"),
-#                                         "ticket_pdf": entry.get("ticket_pdf"),
-#                                         "total_levels": total_levels,
-#                                         "current_level": current_level
-#                                     })
-#                                     print(f"         ✅ Entry added: {entry.get('date')} - ₹{entry.get('amount')}")
-#                                 else:
-#                                     print(f"         ⚠️ Entry skipped - status: {entry_status}")
-                            
-#                             break  # Found the month, exit loop
-                
-#                 # ✅ STEP 5: Add employee to result if has pending entries
-#                 if pending_entries:
-#                     pending_employees.append({
-#                         "employeeId": employee_id,
-#                         "employeeName": employee_name,
-#                         "designation": ope_doc.get("designation", ""),
-#                         "pendingCount": len(pending_entries),
-#                         "entries": pending_entries
-#                     })
-#                     print(f"\n   ✅ ADDED: {employee_name} with {len(pending_entries)} pending entries")
-#                 else:
-#                     print(f"   ❌ No pending entries for HR")
-            
-#             print(f"\n{'='*60}")
-#             print(f"✅ FINAL RESULT: {len(pending_employees)} employees pending for HR")
-#             print(f"{'='*60}\n")
-            
-#             return {
-#                 "reporting_manager": current_emp_code,
-#                 "is_hr": True,
-#                 "total_employees": len(pending_employees),
-#                 "employees": pending_employees
-#             }
-        
-#         else:
-#             # ✅ REPORTING MANAGER LOGIC (unchanged)
-#             print(f"👔 USER IS REPORTING MANAGER")
-            
-#             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
-#             if not manager:
-#                 raise HTTPException(status_code=403, detail="You are not a reporting manager")
-            
-#             employees = await db["Employee_details"].find(
-#                 {"ReportingEmpCode": current_emp_code}
-#             ).to_list(length=None)
-            
-#             print(f"👥 Found {len(employees)} employees under manager")
-            
-#             pending_employees = []
-            
-#             for emp in employees:
-#                 emp_code = emp.get("EmpID")
-#                 emp_name = emp.get("Emp Name")
-                
-#                 ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
-                
-#                 if ope_doc:
-#                     pending_entries = []
-#                     data_array = ope_doc.get("Data", [])
-                    
-#                     for data_item in data_array:
-#                         for month_range, entries in data_item.items():
-#                             for entry in entries:
-#                                 entry_status = entry.get("status", "pending").lower()
-#                                 if entry_status == "pending":
-#                                     pending_entries.append({
-#                                         "_id": str(entry.get("_id", "")),
-#                                         "month_range": month_range,
-#                                         "date": entry.get("date"),
-#                                         "client": entry.get("client"),
-#                                         "project_id": entry.get("project_id"),
-#                                         "project_name": entry.get("project_name"),
-#                                         "project_type": entry.get("project_type", "N/A"),
-#                                         "location_from": entry.get("location_from"),
-#                                         "location_to": entry.get("location_to"),
-#                                         "travel_mode": entry.get("travel_mode"),
-#                                         "amount": entry.get("amount"),
-#                                         "remarks": entry.get("remarks"),
-#                                         "ticket_pdf": entry.get("ticket_pdf")
-#                                     })
-                    
-#                     if pending_entries:
-#                         pending_employees.append({
-#                             "employeeId": emp_code,
-#                             "employeeName": emp_name,
-#                             "designation": emp.get("Designation Name", ""),
-#                             "pendingCount": len(pending_entries),
-#                             "entries": pending_entries
-#                         })
-            
-#             print(f"✅ Returning {len(pending_employees)} employees for manager")
-            
-#             return {
-#                 "reporting_manager": current_emp_code,
-#                 "is_hr": False,
-#                 "total_employees": len(pending_employees),
-#                 "employees": pending_employees
-#             }
-        
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         print(f"❌ Error: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/ope/manager/pending")
 async def get_manager_pending_employees(current_user=Depends(get_current_user)):
@@ -1287,7 +1051,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                                         "travel_mode": entry.get("travel_mode"),
                                         "amount": entry.get("amount"),
                                         "remarks": entry.get("remarks"),
-                                        "ticket_pdf": entry.get("ticket_pdf"),
+                                        "ticket_pdf": entry.get("ticket_pdf"),    # GridFS ID
                                         "total_levels": total_levels,
                                         "current_level": current_level
                                     })
@@ -1399,7 +1163,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                                                 "travel_mode": entry.get("travel_mode"),
                                                 "amount": entry.get("amount"),
                                                 "remarks": entry.get("remarks"),
-                                                "ticket_pdf": entry.get("ticket_pdf"),
+                                                "ticket_pdf": entry.get("ticket_pdf"),   # GridFS ID
                                                 "total_levels": total_levels,
                                                 "current_level": current_level
                                             })
@@ -1466,7 +1230,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                                         "travel_mode": entry.get("travel_mode"),
                                         "amount": entry.get("amount"),
                                         "remarks": entry.get("remarks"),
-                                        "ticket_pdf": entry.get("ticket_pdf")
+                                        "ticket_pdf": entry.get("ticket_pdf")    # GridFS ID
                                     })
 
                     if pending_entries:
@@ -1495,18 +1259,12 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-# ============================================
-# FIXED: GET APPROVED ENTRIES ENDPOINT
-# ============================================
 
 @app.get("/api/ope/approved/{employee_code}")
 async def get_employee_approved(
     employee_code: str, 
     current_user=Depends(get_current_user)
 ):
-    """
-    Get approved entries for a specific employee
-    """
     try:
         employee_code = employee_code.strip().upper()
         current_emp_code = current_user["employee_code"].strip().upper()
@@ -1517,25 +1275,18 @@ async def get_employee_approved(
         print(f"   Current user: {current_emp_code}")
         print(f"{'='*60}\n")
         
-        # ✅ CHECK 1: Is user HR?
         is_hr = (current_emp_code == "JHS729")
-        
-        # ✅ CHECK 2: Is user accessing their own data?
         is_own_data = (current_emp_code == employee_code)
-        
-        # ✅ CHECK 3: Is current user a manager?
         is_manager = await db["Reporting_managers"].find_one(
             {"ReportingEmpCode": current_emp_code}
         )
         
-        # ✅ ALLOW ACCESS IF: HR, Own Data, OR Manager
         if not (is_hr or is_own_data or is_manager):
             print(f"❌ Access denied - Not HR, not own data, and not a manager")
             raise HTTPException(status_code=403, detail="Access denied")
         
         print(f"✅ Access granted - Fetching OPE data")
         
-        # ✅ FETCH OPE DATA
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -1544,7 +1295,6 @@ async def get_employee_approved(
         
         print(f"✅ OPE document found")
         
-        # ✅ FLATTEN AND FILTER APPROVED ENTRIES
         approved_entries = []
         data_array = ope_doc.get("Data", [])
         
@@ -1558,9 +1308,7 @@ async def get_employee_approved(
                     entry_status = entry.get("status", "").lower()
                     print(f"      Entry ID: {entry.get('_id')}, Status: '{entry_status}'")
                     
-                    # ✅ ONLY APPROVED ENTRIES
                     if entry_status == "approved":
-                        # Get approval remark - check multiple possible field names
                         approval_remark = entry.get("approval_remark") or entry.get("remark") or ""
                         
                         approved_entries.append({
@@ -1579,10 +1327,10 @@ async def get_employee_approved(
                             "travel_mode": entry.get("travel_mode"),
                             "amount": entry.get("amount"),
                             "remarks": entry.get("remarks"),
-                            "ticket_pdf": entry.get("ticket_pdf"),
+                            "ticket_pdf": entry.get("ticket_pdf"),    # GridFS ID
                             "approved_by": entry.get("approved_by"),
                             "approver_name": entry.get("approver_name"),
-                            "approval_remark": approval_remark,  # ✅ YEH LINE ADD KI
+                            "approval_remark": approval_remark,
                             "approved_date": entry.get("approved_date"),
                             "created_time": entry.get("created_time"),
                             "L1_approved": entry.get("L1_approved"),
@@ -1592,7 +1340,6 @@ async def get_employee_approved(
                         print(f"      ✅ APPROVED entry added with remark: {approval_remark}")
         
         print(f"\n✅ Total approved entries found: {len(approved_entries)}\n")
-        print(f"✅ Sample first entry remark: {approved_entries[0].get('approval_remark') if approved_entries else 'No entries'}")
         
         return {"approved": approved_entries}
         
@@ -1610,9 +1357,6 @@ async def get_employee_rejected(
     employee_code: str, 
     current_user=Depends(get_current_user)
 ):
-    """
-    Get rejected entries for a specific employee
-    """
     try:
         employee_code = employee_code.strip().upper()
         current_emp_code = current_user["employee_code"].strip().upper()
@@ -1623,25 +1367,18 @@ async def get_employee_rejected(
         print(f"   Current user: {current_emp_code}")
         print(f"{'='*60}\n")
         
-        # ✅ CHECK 1: Is user HR?
         is_hr = (current_emp_code == "JHS729")
-        
-        # ✅ CHECK 2: Is user accessing their own data?
         is_own_data = (current_emp_code == employee_code)
-        
-        # ✅ CHECK 3: Is current user a manager?
         is_manager = await db["Reporting_managers"].find_one(
             {"ReportingEmpCode": current_emp_code}
         )
         
-        # ✅ ALLOW ACCESS IF: HR, Own Data, OR Manager
         if not (is_hr or is_own_data or is_manager):
             print(f"❌ Access denied")
             raise HTTPException(status_code=403, detail="Access denied")
         
         print(f"✅ Access granted - Fetching OPE data")
         
-        # ✅ FETCH OPE DATA
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -1650,7 +1387,6 @@ async def get_employee_rejected(
         
         print(f"✅ OPE document found")
         
-        # ✅ FLATTEN AND FILTER REJECTED ENTRIES
         rejected_entries = []
         data_array = ope_doc.get("Data", [])
         
@@ -1664,13 +1400,12 @@ async def get_employee_rejected(
                     entry_status = entry.get("status", "").lower()
                     print(f"      Entry ID: {entry.get('_id')}, Status: '{entry_status}'")
                     
-                    # ✅ ONLY REJECTED ENTRIES
                     if entry_status == "rejected":
                         rejected_entries.append({
                             "_id": str(entry.get("_id", "")),
                             "employee_id": employee_code,
                             "employee_name": ope_doc.get("employeeName", ""),
-                            "designation": ope_doc.get("designation", ""),  # ✅ ADDED
+                            "designation": ope_doc.get("designation", ""),
                             "month_range": month_range,
                             "date": entry.get("date"),
                             "client": entry.get("client"),
@@ -1682,12 +1417,12 @@ async def get_employee_rejected(
                             "travel_mode": entry.get("travel_mode"),
                             "amount": entry.get("amount"),
                             "remarks": entry.get("remarks"),
-                            "ticket_pdf": entry.get("ticket_pdf"),
+                            "ticket_pdf": entry.get("ticket_pdf"),    # GridFS ID
                             "rejected_by": entry.get("rejected_by"),
                             "rejector_name": entry.get("rejector_name"),
                             "rejected_date": entry.get("rejected_date"),
                             "rejection_reason": entry.get("rejection_reason"),
-                            "rejected_level": entry.get("rejected_level"),  # ✅ ADDED
+                            "rejected_level": entry.get("rejected_level"),
                             "created_time": entry.get("created_time")
                         })
                         print(f"      ✅ REJECTED entry added")
@@ -1726,21 +1461,18 @@ async def reject_employee_entries(
         print(f"Reason: {rejection_reason}")
         print(f"{'='*60}\n")
         
-        # Get manager details
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
         manager_name = manager.get("ReportingEmpName", reporting_emp_code)
         
-        # Get employee details
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
         emp_reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
         
-        # Get OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         if not ope_doc:
             raise HTTPException(status_code=404, detail="No data found")
@@ -1749,24 +1481,21 @@ async def reject_employee_entries(
         rejected_count = 0
         current_time = datetime.utcnow().isoformat()
         
-        # ✅ UPDATE ALL PENDING ENTRIES TO REJECTED
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
                     if entry.get("status", "").lower() == "pending":
-                        # Update entry status
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
                                 f"Data.{i}.{month_range}.{j}.status": "rejected",
                                 f"Data.{i}.{month_range}.{j}.rejected_by": reporting_emp_code,
-                                f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,  # ✅ KEY FIX
+                                f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason
                             }}
                         )
                         
-                        # Update Status collection
                         status_id = entry.get("status_id")
                         if status_id:
                             await db["Status"].update_one(
@@ -1787,14 +1516,12 @@ async def reject_employee_entries(
         
         print(f"\n✅ Total entries rejected: {rejected_count}")
         
-        # ✅ REMOVE FROM PENDING
         await db["Pending"].update_one(
             {"ReportingEmpCode": emp_reporting_manager_code},
             {"$pull": {"EmployeesCodes": employee_code}}
         )
         print(f"✅ Removed from Pending collection")
         
-        # ✅ ADD TO REJECTED (UNDER CURRENT MANAGER'S CODE)
         rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
         
         if not rejected_doc:
@@ -1831,231 +1558,6 @@ async def reject_employee_entries(
         raise HTTPException(status_code=500, detail=str(e))  
 
 
-# ============================================
-# EDIT ENTRY AMOUNT (Manager/Partner/HR)
-# ============================================
-# @app.put("/api/ope/manager/edit-total-amount")
-# async def edit_total_amount(
-#     request: Request,
-#     current_user=Depends(get_current_user)
-# ):
-#     """
-#     Edit total amount for entire month - proportionally distributes to all entries
-#     Now tracks who edited and shows original vs edited amounts
-#     """
-#     try:
-#         user_emp_code = current_user["employee_code"].strip().upper()
-        
-#         body = await request.json()
-#         employee_id = body.get("employee_id")
-#         month_range = body.get("month_range")
-#         new_total = body.get("new_total")
-        
-#         print(f"\n{'='*60}")
-#         print(f"💰💰 EDIT TOTAL AMOUNT REQUEST")
-#         print(f"   User: {user_emp_code}")
-#         print(f"   Employee: {employee_id}")
-#         print(f"   Month: {month_range}")
-#         print(f"   New Total: ₹{new_total}")
-#         print(f"{'='*60}\n")
-        
-#         # ============================================
-#         # ✅ AUTHORIZATION CHECK
-#         # ============================================
-#         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
-#         is_hr = (user_emp_code == "JHS729")
-#         is_partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
-        
-#         if not (is_manager or is_hr or is_partner):
-#             error_msg = "Only managers, partners, and HR can edit amounts"
-#             print(f"❌ Authorization failed: {error_msg}")
-#             raise HTTPException(status_code=403, detail=error_msg)
-        
-#         # Determine user role
-#         if is_hr:
-#             user_role = "HR"
-#             user_name = "HR Department"
-#         elif is_partner:
-#             partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
-#             user_role = "Partner"
-#             user_name = partner.get("Partner_Name", user_emp_code) if partner else user_emp_code
-#         else:
-#             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
-#             user_role = "Manager"
-#             user_name = manager.get("ReportingEmpName", user_emp_code) if manager else user_emp_code
-        
-#         print(f"✅ User role: {user_role} - {user_name}")
-        
-#         # Validate inputs
-#         if not employee_id or not month_range or new_total is None:
-#             raise HTTPException(status_code=400, detail="Missing required fields")
-        
-#         if new_total <= 0:
-#             raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
-        
-#         # Find employee's OPE data
-#         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
-        
-#         if not ope_doc:
-#             raise HTTPException(status_code=404, detail="Employee data not found")
-        
-#         data_array = ope_doc.get("Data", [])
-#         entries_found = []
-#         data_index = None
-#         old_total = 0
-        
-#         # Find the month's entries
-#         for i, data_item in enumerate(data_array):
-#             if month_range in data_item:
-#                 entries_found = data_item[month_range]
-#                 data_index = i
-#                 old_total = sum(float(e.get("amount", 0)) for e in entries_found)
-#                 break
-        
-#         if not entries_found:
-#             raise HTTPException(status_code=404, detail="No entries found for this month")
-        
-#         print(f"📊 Found {len(entries_found)} entries")
-#         print(f"💵 Old Total: ₹{old_total}")
-#         print(f"💵 New Total: ₹{new_total}")
-        
-#         # ✅ CALCULATE PROPORTIONAL DISTRIBUTION
-#         entries_updated = 0
-#         current_time = datetime.utcnow().isoformat()
-#         edited_amounts = []  # Track original amounts for status
-        
-#         if old_total > 0:
-#             # Proportional distribution based on original amounts
-#             ratio = new_total / old_total
-#             print(f"📐 Distribution ratio: {ratio:.4f}")
-            
-#             for j, entry in enumerate(entries_found):
-#                 old_amount = float(entry.get("amount", 0))
-#                 new_amount = round(old_amount * ratio, 2)
-                
-#                 # Store original amount for tracking
-#                 edited_amounts.append({
-#                     "entry_id": str(entry.get("_id")),
-#                     "original_amount": old_amount,
-#                     "new_amount": new_amount,
-#                     "date": entry.get("date")
-#                 })
-                
-#                 # Update entry with edit tracking
-#                 await db["OPE_data"].update_one(
-#                     {"employeeId": employee_id},
-#                     {"$set": {
-#                         f"Data.{data_index}.{month_range}.{j}.amount": new_amount,
-#                         f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
-#                         f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
-#                     }}
-#                 )
-                
-#                 entries_updated += 1
-#                 print(f"   Entry {j+1}: ₹{old_amount} → ₹{new_amount}")
-#         else:
-#             # If old total is 0, distribute equally
-#             amount_per_entry = round(new_total / len(entries_found), 2)
-#             print(f"📐 Equal distribution: ₹{amount_per_entry} per entry")
-            
-#             for j, entry in enumerate(entries_found):
-#                 old_amount = float(entry.get("amount", 0))
-                
-#                 edited_amounts.append({
-#                     "entry_id": str(entry.get("_id")),
-#                     "original_amount": old_amount,
-#                     "new_amount": amount_per_entry,
-#                     "date": entry.get("date")
-#                 })
-                
-#                 await db["OPE_data"].update_one(
-#                     {"employeeId": employee_id},
-#                     {"$set": {
-#                         f"Data.{data_index}.{month_range}.{j}.amount": amount_per_entry,
-#                         f"Data.{data_index}.{month_range}.{j}.updated_time": current_time,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by": user_emp_code,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_name": user_name,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_by_role": user_role,
-#                         f"Data.{data_index}.{month_range}.{j}.amount_edited_date": current_time,
-#                         f"Data.{data_index}.{month_range}.{j}.original_amount": old_amount
-#                     }}
-#                 )
-                
-#                 entries_updated += 1
-#                 print(f"   Entry {j+1}: ₹{old_amount} → ₹{amount_per_entry}")
-        
-#         # ✅ UPDATE STATUS COLLECTION WITH EDIT TRACKING
-#         status_doc = await db["Status"].find_one({"employeeId": employee_id})
-        
-#         if status_doc:
-#             approval_status = status_doc.get("approval_status", [])
-            
-#             for i, ps in enumerate(approval_status):
-#                 if ps.get("payroll_month") == month_range:
-#                     # Get existing edit history or create new
-#                     edit_history = ps.get("amount_edit_history", [])
-                    
-#                     # Add new edit record
-#                     edit_history.append({
-#                         "edited_by": user_emp_code,
-#                         "edited_by_name": user_name,
-#                         "edited_by_role": user_role,
-#                         "edited_date": current_time,
-#                         "old_total": old_total,
-#                         "new_total": new_total,
-#                         "entries_updated": entries_updated,
-#                         "edited_amounts": edited_amounts
-#                     })
-                    
-#                     await db["Status"].update_one(
-#                         {"employeeId": employee_id},
-#                         {"$set": {
-#                             f"approval_status.{i}.total_amount": new_total,
-#                             f"approval_status.{i}.last_edited_by": user_emp_code,
-#                             f"approval_status.{i}.last_edited_by_name": user_name,
-#                             f"approval_status.{i}.last_edited_by_role": user_role,
-#                             f"approval_status.{i}.last_edited_date": current_time,
-#                             f"approval_status.{i}.original_total": old_total,
-#                             f"approval_status.{i}.amount_edit_history": edit_history
-#                         }}
-#                     )
-#                     print(f"✅ Updated Status collection with edit history")
-#                     break
-        
-#         print(f"\n✅✅ TOTAL AMOUNT UPDATE COMPLETE")
-#         print(f"   Updated by: {user_role} - {user_name} ({user_emp_code})")
-#         print(f"   Entries updated: {entries_updated}")
-#         print(f"   Old Total: ₹{old_total}")
-#         print(f"   New Total: ₹{new_total}")
-#         print(f"{'='*60}\n")
-        
-#         return {
-#             "success": True,
-#             "message": "Total amount updated successfully",
-#             "updated_by": {
-#                 "code": user_emp_code,
-#                 "name": user_name,
-#                 "role": user_role
-#             },
-#             "old_total": old_total,
-#             "new_total": new_total,
-#             "entries_updated": entries_updated,
-#             "distribution_method": "proportional" if old_total > 0 else "equal"
-#         }
-        
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         print(f"❌ Error editing total amount: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.put("/api/ope/manager/edit-total-amount")
 async def edit_total_amount(
     request: Request,
@@ -2077,7 +1579,6 @@ async def edit_total_amount(
         print(f"   New Total: ₹{new_total}")
         print(f"{'='*60}\n")
         
-        # Authorization check
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
         is_hr = (user_emp_code == "JHS729")
         is_partner = await db["Partner"].find_one({"PartnerEmpCode": user_emp_code})
@@ -2085,7 +1586,6 @@ async def edit_total_amount(
         if not (is_manager or is_hr or is_partner):
             raise HTTPException(status_code=403, detail="Only managers, partners, and HR can edit amounts")
         
-        # Determine user role and name
         if is_hr:
             user_role = "HR"
             user_name = "HR Department"
@@ -2106,7 +1606,6 @@ async def edit_total_amount(
         
         current_time = datetime.utcnow().isoformat()
         
-        # ✅ ONLY UPDATE STATUS COLLECTION - DO NOT TOUCH OPE_data entries
         status_doc = await db["Status"].find_one({"employeeId": employee_id})
         
         if not status_doc:
@@ -2120,7 +1619,6 @@ async def edit_total_amount(
             if ps.get("payroll_month") == month_range:
                 old_total = ps.get("total_amount", 0)
                 
-                # Get existing edit history
                 edit_history = ps.get("amount_edit_history", [])
                 edit_history.append({
                     "edited_by": user_emp_code,
@@ -2129,10 +1627,9 @@ async def edit_total_amount(
                     "edited_date": current_time,
                     "old_total": old_total,
                     "new_total": new_total,
-                    "entries_updated": 0  # No entries updated, only total changed
+                    "entries_updated": 0
                 })
                 
-                # ✅ UPDATE ONLY THE TOTAL IN STATUS - individual entry amounts unchanged
                 await db["Status"].update_one(
                     {"employeeId": employee_id},
                     {"$set": {
@@ -2147,7 +1644,6 @@ async def edit_total_amount(
                 )
                 found = True
                 print(f"✅ Updated Status total: ₹{old_total} → ₹{new_total}")
-                print(f"   Individual entry amounts are UNCHANGED")
                 break
         
         if not found:
@@ -2175,22 +1671,12 @@ async def edit_total_amount(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))    
 
-# ============================================
-# ALSO UPDATE: SINGLE AMOUNT EDIT ENDPOINT
-# FIND: @app.put("/api/ope/manager/edit-amount")
-# REPLACE: Is endpoint ko bhi update karna hai
-# ============================================
 
 @app.put("/api/ope/manager/edit-amount")
 async def edit_entry_amount(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Edit the amount of a pending, approved, or rejected entry
-    
-    ✅ UPDATED: HR (JHS729) bhi edit kar sakta hai!
-    """
     try:
         user_emp_code = current_user["employee_code"].strip().upper()
         
@@ -2207,13 +1693,9 @@ async def edit_entry_amount(
         print(f"   New Amount: {new_amount}")
         print(f"{'='*60}\n")
         
-        # ============================================
-        # ✅ UPDATED AUTHORIZATION CHECK
-        # ============================================
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": user_emp_code})
         is_hr = (user_emp_code == "JHS729")
         
-        # ✅ Manager YA HR hona chahiye
         if not is_manager and not is_hr:
             error_msg = "Only managers and HR can edit amounts"
             print(f"❌ Authorization failed: {error_msg}")
@@ -2225,19 +1707,16 @@ async def edit_entry_amount(
         user_role = "HR" if is_hr else "Manager"
         print(f"✅ User role: {user_role}")
         
-        # Validate inputs
         if not entry_id or not employee_id or new_amount is None:
             raise HTTPException(status_code=400, detail="Missing required fields")
         
         if new_amount <= 0:
             raise HTTPException(status_code=400, detail="Amount must be greater than 0")
         
-        # Verify employee exists
         emp = await db["Employee_details"].find_one({"EmpID": employee_id})
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
-        # Find and update the entry in OPE_data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         
         if not ope_doc:
@@ -2256,14 +1735,13 @@ async def edit_entry_amount(
                         old_amount = entry.get("amount", 0)
                         payroll_month = month_range
                         
-                        # ✅ UPDATE ENTRY AMOUNT WITH WHO EDITED
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
                                 f"Data.{i}.{month_range}.{j}.amount": new_amount,
                                 f"Data.{i}.{month_range}.{j}.updated_time": current_time,
                                 f"Data.{i}.{month_range}.{j}.amount_edited_by": user_emp_code,
-                                f"Data.{i}.{month_range}.{j}.amount_edited_by_role": user_role,  # ✅ NEW
+                                f"Data.{i}.{month_range}.{j}.amount_edited_by_role": user_role,
                                 f"Data.{i}.{month_range}.{j}.amount_edited_date": current_time
                             }}
                         )
@@ -2277,14 +1755,12 @@ async def edit_entry_amount(
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found")
         
-        # ✅ UPDATE STATUS COLLECTION - RECALCULATE TOTAL AMOUNT
         if payroll_month:
             status_doc = await db["Status"].find_one({"employeeId": employee_id})
             
             if status_doc:
                 approval_status = status_doc.get("approval_status", [])
                 
-                # Recalculate total for this payroll month
                 new_total = 0
                 for i, data_item in enumerate(data_array):
                     if payroll_month in data_item:
@@ -2292,7 +1768,6 @@ async def edit_entry_amount(
                         new_total = sum(float(e.get("amount", 0)) for e in entries)
                         break
                 
-                # Update Status collection
                 for i, ps in enumerate(approval_status):
                     if ps.get("payroll_month") == payroll_month:
                         await db["Status"].update_one(
@@ -2309,7 +1784,7 @@ async def edit_entry_amount(
         return {
             "success": True,
             "message": "Amount updated successfully",
-            "updated_by_role": user_role,  # ✅ NEW
+            "updated_by_role": user_role,
             "old_amount": old_amount,
             "new_amount": new_amount,
             "entry_id": entry_id
@@ -2322,168 +1797,11 @@ async def edit_entry_amount(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================================================
 # TEMPORARY SAVE ENDPOINT (Store in Temp_OPE_data)
 # ==================================================
-# @app.post("/api/ope/save-temp")
-# async def save_temp_entry(
-#     date: str = Form(...),
-#     client: str = Form(...),
-#     project_id: str = Form(...),
-#     project_name: str = Form(...),
-#     project_type: str = Form(...),
-#     location_from: str = Form(...),
-#     location_to: str = Form(...),
-#     travel_mode: str = Form(...),
-#     amount: float = Form(...),
-#     remarks: str = Form(...),
-#     month_range: str = Form(...),
-#     ticket_pdf: Optional[UploadFile] = File(None),
-#     current_user=Depends(get_current_user)
-# ):
-#     try:
-#         employee_code = current_user["employee_code"]
-        
-#         print(f"💾 Saving temporary entry for: {employee_code}")
-        
-#         # Get employee details
-#         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
-#         if not emp:
-#             raise HTTPException(status_code=404, detail="Employee not found")
-        
-#         # Format month_range
-#         def format_month_range(month_str):
-#             try:
-#                 parts = month_str.lower().split('-')
-#                 month_map = {
-#                     'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr',
-#                     'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug',
-#                     'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'
-#                 }
-                
-#                 if len(parts) == 3:
-#                     month1 = month_map.get(parts[0], parts[0].capitalize())
-#                     month2 = month_map.get(parts[1], parts[1].capitalize())
-#                     year = parts[2]
-#                     return f"{month1} {year} - {month2} {year}"
-#                 elif len(parts) == 2:
-#                     month = month_map.get(parts[0], parts[0].capitalize())
-#                     year = parts[1]
-#                     return f"{month} {year}"
-#                 else:
-#                     return month_str
-#             except Exception as e:
-#                 return month_str
-        
-#         formatted_month_range = format_month_range(month_range)
-        
-#         # ✅ CHECK FOR DUPLICATE ENTRY IN TEMP_OPE_data
-#         temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
-        
-#         if temp_doc:
-#             data_array = temp_doc.get("Data", [])
-#             for data_item in data_array:
-#                 if formatted_month_range in data_item:
-#                     entries = data_item[formatted_month_range]
-#                     for entry in entries:
-#                         # Check if exact same entry exists (excluding _id, timestamps, and PDF)
-#                         if (entry.get("date") == date and
-#                             entry.get("client") == client and
-#                             entry.get("project_id") == project_id and
-#                             entry.get("project_name") == project_name and
-#                             entry.get("project_type") == project_type and
-#                             entry.get("location_from") == location_from and
-#                             entry.get("location_to") == location_to and
-#                             entry.get("travel_mode") == travel_mode and
-#                             entry.get("amount") == amount):
-                            
-#                             raise HTTPException(
-#                                 status_code=400,
-#                                 detail="⚠️ Duplicate Entry Detected!\n\nAn entry with the same details already exists for this date and month."
-#                             )
-        
-#         # Handle PDF
-#         pdf_base64 = None
-#         if ticket_pdf:
-#             pdf_content = await ticket_pdf.read()
-#             pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
-        
-#         # Create entry
-#         entry_doc = {
-#             "_id": ObjectId(),
-#             "date": date,
-#             "client": client,
-#             "project_id": project_id,
-#             "project_name": project_name,
-#             "project_type": project_type,
-#             "location_from": location_from,
-#             "location_to": location_to,
-#             "travel_mode": travel_mode,
-#             "amount": amount,
-#             "remarks": remarks,
-#             "ticket_pdf": pdf_base64,
-#             "created_time": datetime.utcnow().isoformat(),
-#             "updated_time": datetime.utcnow().isoformat(),
-#             "status": "saved"
-#         }
-        
-#         # Find or create document in Temp_OPE_data
-#         if not temp_doc:
-#             new_doc = {
-#                 "employeeId": employee_code,
-#                 "employeeName": emp.get("Emp Name", ""),
-#                 "designation": emp.get("Designation Name", ""),
-#                 "gender": emp.get("Gender", ""),
-#                 "partner": emp.get("Partner", ""),
-#                 "reportingManager": emp.get("ReportingEmpName", ""),
-#                 "department": "",
-#                 "Data": [
-#                     {
-#                         formatted_month_range: [entry_doc]
-#                     }
-#                 ]
-#             }
-#             await db["Temp_OPE_data"].insert_one(new_doc)
-#             print(f"✅ NEW temp document created")
-#         else:
-#             # Check if month exists
-#             month_exists = False
-#             data_array = temp_doc.get("Data", [])
-            
-#             for i, data_item in enumerate(data_array):
-#                 if formatted_month_range in data_item:
-#                     await db["Temp_OPE_data"].update_one(
-#                         {"employeeId": employee_code},
-#                         {"$push": {f"Data.{i}.{formatted_month_range}": entry_doc}}
-#                     )
-#                     month_exists = True
-#                     break
-            
-#             if not month_exists:
-#                 await db["Temp_OPE_data"].update_one(
-#                     {"employeeId": employee_code},
-#                     {"$push": {"Data": {formatted_month_range: [entry_doc]}}}
-#                 )
-        
-#         print(f"✅ Entry saved temporarily")
-#         return {
-#             "message": "Entry saved temporarily",
-#             "entry_id": str(entry_doc["_id"]),
-#             "status": "saved"
-#         }
-        
-#     except HTTPException as he:
-#         raise he
-#     except Exception as e:
-#         print(f"❌ Error saving temp entry: {str(e)}")
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# ✅ SAVE TEMP ENTRY - WITH ACTUAL OPE LIMIT
-# Replace in main.py (around line ~2000)
-# ============================================
 
 @app.post("/api/ope/save-temp")
 async def save_temp_entry(
@@ -2510,26 +1828,21 @@ async def save_temp_entry(
         print(f"Amount: ₹{amount}")
         print(f"{'='*60}\n")
         
-        # ============================================
-        # ✅ GET EMPLOYEE DETAILS WITH ACTUAL OPE LIMIT
-        # ============================================
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
-        # 🔥 GET ACTUAL OPE LIMIT FROM DATABASE
         actual_ope_limit = emp.get("OPE LIMIT")
         
         if actual_ope_limit is None:
             print(f"⚠️ OPE Limit not found in database, using default")
-            actual_ope_limit = 5000  # Fallback
+            actual_ope_limit = 5000
         else:
             actual_ope_limit = float(actual_ope_limit)
         
         print(f"✅ Employee's Actual OPE Limit: ₹{actual_ope_limit}")
         
-        # Format month_range
         def format_month_range(month_str):
             try:
                 parts = month_str.lower().split('-')
@@ -2555,10 +1868,6 @@ async def save_temp_entry(
         
         formatted_month_range = format_month_range(month_range)
         
-        # ============================================
-        # ✅ CALCULATE TOTAL AMOUNT FOR THIS MONTH
-        # ============================================
-        
         # Get existing temp entries for this month
         temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
         
@@ -2572,7 +1881,6 @@ async def save_temp_entry(
                     existing_month_total = sum(float(e.get("amount", 0)) for e in entries)
                     break
         
-        # Get submitted entries for this month (from OPE_data)
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         submitted_month_total = 0
@@ -2582,7 +1890,6 @@ async def save_temp_entry(
             for data_item in data_array:
                 if formatted_month_range in data_item:
                     entries = data_item[formatted_month_range]
-                    # Only count pending/approved entries
                     submitted_month_total = sum(
                         float(e.get("amount", 0)) 
                         for e in entries 
@@ -2590,7 +1897,6 @@ async def save_temp_entry(
                     )
                     break
         
-        # Calculate new total
         new_total = existing_month_total + submitted_month_total + amount
         
         print(f"\n💰 AMOUNT CALCULATION:")
@@ -2600,10 +1906,7 @@ async def save_temp_entry(
         print(f"   New Total: ₹{new_total}")
         print(f"   OPE Limit: ₹{actual_ope_limit}")
         
-        # ============================================
-        # ✅ CHECK FOR DUPLICATE ENTRY
-        # ============================================
-        
+        # Check for duplicate entry
         if temp_doc:
             data_array = temp_doc.get("Data", [])
             for data_item in data_array:
@@ -2625,11 +1928,15 @@ async def save_temp_entry(
                                 detail="⚠️ Duplicate Entry Detected!\n\nAn entry with the same details already exists for this date and month."
                             )
         
-        # Handle PDF
-        pdf_base64 = None
+        # ============================================
+        # Handle PDF - GridFS Upload
+        # ============================================
+        ticket_pdf_id = None
         if ticket_pdf:
             pdf_content = await ticket_pdf.read()
-            pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+            pdf_filename = f"temp_ope_{employee_code}_{datetime.utcnow().timestamp()}.pdf"
+            ticket_pdf_id = await upload_to_gridfs(pdf_content, pdf_filename)
+            print(f"✅ PDF uploaded to GridFS: {ticket_pdf_id}")
         
         # Create entry
         entry_doc = {
@@ -2644,13 +1951,12 @@ async def save_temp_entry(
             "travel_mode": travel_mode,
             "amount": amount,
             "remarks": remarks,
-            "ticket_pdf": pdf_base64,
+            "ticket_pdf": ticket_pdf_id,       # GridFS file_id or None
             "created_time": datetime.utcnow().isoformat(),
             "updated_time": datetime.utcnow().isoformat(),
             "status": "saved"
         }
         
-        # Find or create document in Temp_OPE_data
         if not temp_doc:
             new_doc = {
                 "employeeId": employee_code,
@@ -2669,7 +1975,6 @@ async def save_temp_entry(
             await db["Temp_OPE_data"].insert_one(new_doc)
             print(f"✅ NEW temp document created")
         else:
-            # Check if month exists
             month_exists = False
             data_array = temp_doc.get("Data", [])
             
@@ -2687,10 +1992,6 @@ async def save_temp_entry(
                     {"employeeId": employee_code},
                     {"$push": {"Data": {formatted_month_range: [entry_doc]}}}
                 )
-        
-        # ============================================
-        # ✅ DETERMINE APPROVAL LEVELS BASED ON NEW TOTAL
-        # ============================================
         
         if new_total > actual_ope_limit:
             approval_levels = 3
@@ -2710,7 +2011,7 @@ async def save_temp_entry(
             "entry_id": str(entry_doc["_id"]),
             "status": "saved",
             "total_amount": new_total,
-            "ope_limit": actual_ope_limit,  # 🔥 ACTUAL LIMIT
+            "ope_limit": actual_ope_limit,
             "within_limit": within_limit,
             "approval_levels": approval_levels
         }
@@ -2722,6 +2023,8 @@ async def save_temp_entry(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
 # ========================
 # GET TEMPORARY HISTORY
 # =========================
@@ -2758,7 +2061,7 @@ async def get_temp_history(employee_code: str, current_user=Depends(get_current_
                         "travel_mode": entry.get("travel_mode"),
                         "amount": entry.get("amount"),
                         "remarks": entry.get("remarks"),
-                        "ticket_pdf": entry.get("ticket_pdf"),
+                        "ticket_pdf": entry.get("ticket_pdf"),    # GridFS ID or None
                         "status": "saved"
                     })
         
@@ -2870,7 +2173,12 @@ async def delete_temp_entry(
                     if str(entry.get("_id")) == entry_id:
                         print(f"✅ Found entry at Data.{i}.{month_range}.{j}")
                         
-                        # If only entry in month, remove entire month
+                        # Delete PDF from GridFS if exists
+                        pdf_id = entry.get("ticket_pdf")
+                        if pdf_id and is_gridfs_id(pdf_id):
+                            await delete_from_gridfs(pdf_id)
+                            print(f"✅ PDF deleted from GridFS: {pdf_id}")
+                        
                         if len(entries) == 1:
                             print(f"🗑️ Removing entire month range")
                             await db["Temp_OPE_data"].update_one(
@@ -2878,7 +2186,6 @@ async def delete_temp_entry(
                                 {"$pull": {"Data": {month_range: {"$exists": True}}}}
                             )
                         else:
-                            # Remove only this entry
                             print(f"🗑️ Removing single entry")
                             await db["Temp_OPE_data"].update_one(
                                 {"employeeId": employee_code},
@@ -2954,7 +2261,6 @@ async def submit_final_entries(
         formatted_month_range = format_month_range(month_range)
         print(f"📅 Formatted month range: {formatted_month_range}")
         
-        # Get temp data
         temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
         
         if not temp_doc:
@@ -2973,40 +2279,20 @@ async def submit_final_entries(
         
         print(f"📦 Found {len(entries_to_submit)} entries to submit")
         
-        # Get employee details
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         if not emp:
             raise HTTPException(status_code=404, detail="Employee details not found")
         
-        # ✅ GET OPE LIMIT FROM EMPLOYEE DETAILS COLLECTION (NOT HARDCODED)
-        ope_limit = emp.get("OPE LIMIT")
-        
-        # ✅ FALLBACK TO 5000 IF NOT FOUND IN DATABASE
-        if ope_limit is None:
-            ope_limit = 1500
-            print(f"⚠️ OPE Limit not found in Employee_details, using default: ₹{ope_limit}")
-        else:
-            ope_limit = float(ope_limit)
-            print(f"✅ OPE Limit from Employee_details: ₹{ope_limit}")
+        # Check if submitter is a Reporting Manager
+        is_reporting_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": employee_code})
         
         reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
         reporting_manager_name = emp.get("ReportingEmpName", "")
         partner_code = emp.get("PartnerEmpCode", "").strip().upper()
         partner_name = emp.get("Partner", "")
         
-        if not reporting_manager_code:
-            raise HTTPException(status_code=400, detail="No reporting manager assigned")
-        
-        print(f"👔 Reporting Manager: {reporting_manager_code} ({reporting_manager_name})")
-        print(f"👔 Partner: {partner_code} ({partner_name})")
-        
-        # ✅ CALCULATE TOTAL AMOUNT FOR NEW ENTRIES
         new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
         
-        print(f"💰 New entries amount: ₹{new_entries_amount}")
-        print(f"🎯 Employee's OPE Limit: ₹{ope_limit}")
-        
-        # ✅ CHECK IF STATUS DOCUMENT EXISTS AND GET EXISTING TOTAL
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         existing_total = 0
@@ -3017,77 +2303,138 @@ async def submit_final_entries(
             approval_status = status_doc.get("approval_status", [])
             for i, ps in enumerate(approval_status):
                 if ps.get("payroll_month") == formatted_month_range:
-                    # ✅ MONTH EXISTS - Get existing total
                     existing_total = ps.get("total_amount", 0)
                     month_exists = True
                     existing_month_index = i
                     print(f"📊 Found existing month entry with total: ₹{existing_total}")
                     break
         
-        # ✅ CALCULATE CUMULATIVE TOTAL
         cumulative_total = existing_total + new_entries_amount
-        
-        print(f"\n{'='*60}")
-        print(f"💰 AMOUNT CALCULATION:")
-        print(f"   Previous Total: ₹{existing_total}")
-        print(f"   New Entries: +₹{new_entries_amount}")
-        print(f"   Cumulative Total: ₹{cumulative_total}")
-        print(f"   OPE Limit: ₹{ope_limit}")
-        print(f"{'='*60}\n")
-        
-        # ✅ DYNAMIC APPROVAL LEVELS BASED ON CUMULATIVE TOTAL VS LIMIT
-        if cumulative_total > ope_limit:
-            ope_label = "Greater"
-            total_levels = 3
-            print(f"📊 Cumulative amount (₹{cumulative_total}) EXCEEDS limit (₹{ope_limit}) → 3-level approval required")
-        else:
-            ope_label = "Less"
-            total_levels = 2
-            print(f"📊 Cumulative amount (₹{cumulative_total}) WITHIN limit (₹{ope_limit}) → 2-level approval required")
         
         current_time = datetime.utcnow().isoformat()
         
-        # ✅ CREATE PAYROLL ENTRY WITH CUMULATIVE TOTAL
-        payroll_entry = {
-            "payroll_month": formatted_month_range,
-            "ope_label": ope_label,
-            "total_levels": total_levels,
-            "limit": ope_limit,  # ✅ Store employee's actual OPE limit
-            "total_amount": cumulative_total,
-            "L1": {
-                "status": False,
-                "approver_name": reporting_manager_name,
-                "approver_code": reporting_manager_code,
-                "approved_date": None,
-                "level_name": "Reporting Manager"
-            },
-            "L2": {
-                "status": False,
-                "approver_name": "HR" if total_levels == 2 else partner_name,
-                "approver_code": "JHS729" if total_levels == 2 else partner_code,
-                "approved_date": None,
-                "level_name": "HR" if total_levels == 2 else "Partner"
-            },
-            "current_level": "L1",
-            "overall_status": "pending",
-            "submission_date": current_time
-        }
-        
-        # ✅ ADD L3 ONLY IF TOTAL_LEVELS = 3 (Amount > Limit)
-        if total_levels == 3:
-            payroll_entry["L3"] = {
-                "status": False,
-                "approver_name": "HR",
-                "approver_code": "JHS729",
-                "approved_date": None,
-                "level_name": "HR"
+        # ============================================
+        # APPROVAL FLOW LOGIC BASED ON SUBMITTER TYPE
+        # ============================================
+        if is_reporting_manager:
+            print(f"\n{'='*60}")
+            print(f"👔 SUBMITTER IS A REPORTING MANAGER")
+            print(f"   Employee Code: {employee_code}")
+            print(f"   Partner: {partner_code} ({partner_name})")
+            print(f"{'='*60}\n")
+            
+            if not partner_code:
+                raise HTTPException(status_code=400, detail="No Partner assigned to this Reporting Manager")
+            
+            total_levels = 2
+            ope_label = "Reporting_Manager"
+            
+            payroll_entry = {
+                "payroll_month": formatted_month_range,
+                "ope_label": ope_label,
+                "submitter_type": "Reporting_Manager",
+                "total_levels": total_levels,
+                "limit": 0,
+                "total_amount": cumulative_total,
+                "L1": {
+                    "status": False,
+                    "approver_name": partner_name,
+                    "approver_code": partner_code,
+                    "approved_date": None,
+                    "level_name": "Partner"
+                },
+                "L2": {
+                    "status": False,
+                    "approver_name": "HR",
+                    "approver_code": "JHS729",
+                    "approved_date": None,
+                    "level_name": "HR"
+                },
+                "current_level": "L1",
+                "overall_status": "pending",
+                "submission_date": current_time
             }
-            print(f"✅ Added L3 (HR) level for approval")
+            
+            pending_approver_code = partner_code
+            
+        else:
+            print(f"\n{'='*60}")
+            print(f"👤 SUBMITTER IS A REGULAR EMPLOYEE")
+            print(f"   Employee Code: {employee_code}")
+            print(f"   Reporting Manager: {reporting_manager_code} ({reporting_manager_name})")
+            print(f"{'='*60}\n")
+            
+            if not reporting_manager_code:
+                raise HTTPException(status_code=400, detail="No reporting manager assigned")
+            
+            ope_limit = emp.get("OPE LIMIT")
+            
+            if ope_limit is None:
+                ope_limit = 1500
+                print(f"⚠️ OPE Limit not found in Employee_details, using default: ₹{ope_limit}")
+            else:
+                ope_limit = float(ope_limit)
+                print(f"✅ OPE Limit from Employee_details: ₹{ope_limit}")
+            
+            print(f"\n{'='*60}")
+            print(f"💰 AMOUNT CALCULATION:")
+            print(f"   Previous Total: ₹{existing_total}")
+            print(f"   New Entries: +₹{new_entries_amount}")
+            print(f"   Cumulative Total: ₹{cumulative_total}")
+            print(f"   OPE Limit: ₹{ope_limit}")
+            print(f"{'='*60}\n")
+            
+            if cumulative_total > ope_limit:
+                ope_label = "Greater"
+                total_levels = 3
+                print(f"📊 Cumulative amount (₹{cumulative_total}) EXCEEDS limit (₹{ope_limit}) → 3-level approval required")
+            else:
+                ope_label = "Less"
+                total_levels = 2
+                print(f"📊 Cumulative amount (₹{cumulative_total}) WITHIN limit (₹{ope_limit}) → 2-level approval required")
+            
+            payroll_entry = {
+                "payroll_month": formatted_month_range,
+                "ope_label": ope_label,
+                "submitter_type": "Employee",
+                "total_levels": total_levels,
+                "limit": ope_limit,
+                "total_amount": cumulative_total,
+                "L1": {
+                    "status": False,
+                    "approver_name": reporting_manager_name,
+                    "approver_code": reporting_manager_code,
+                    "approved_date": None,
+                    "level_name": "Reporting Manager"
+                },
+                "L2": {
+                    "status": False,
+                    "approver_name": "HR" if total_levels == 2 else partner_name,
+                    "approver_code": "JHS729" if total_levels == 2 else partner_code,
+                    "approved_date": None,
+                    "level_name": "HR" if total_levels == 2 else "Partner"
+                },
+                "current_level": "L1",
+                "overall_status": "pending",
+                "submission_date": current_time
+            }
+            
+            if total_levels == 3:
+                payroll_entry["L3"] = {
+                    "status": False,
+                    "approver_name": "HR",
+                    "approver_code": "JHS729",
+                    "approved_date": None,
+                    "level_name": "HR"
+                }
+                print(f"✅ Added L3 (HR) level for approval")
+            
+            pending_approver_code = reporting_manager_code
         
-        # ✅ CREATE OR UPDATE STATUS DOCUMENT
-        # ✅ CREATE OR UPDATE STATUS DOCUMENT
+        # ============================================
+        # CREATE OR UPDATE STATUS DOCUMENT
+        # ============================================
         if not status_doc:
-            # ✅ CREATE NEW STATUS DOCUMENT
             new_status_doc = {
                 "employeeId": employee_code,
                 "employeeName": emp.get("Emp Name", ""),
@@ -3100,22 +2447,24 @@ async def submit_final_entries(
             status_doc_id = str(result.inserted_id)
             
         else:
-            # ✅ UPDATE EXISTING STATUS DOCUMENT
             status_doc_id = str(status_doc["_id"])
             
             if month_exists:
-                # ✅ UPDATE EXISTING MONTH WITH CUMULATIVE TOTAL
                 print(f"🔄 Updating existing month entry at index {existing_month_index}")
                 
                 update_fields = {
                     f"approval_status.{existing_month_index}.total_amount": cumulative_total,
                     f"approval_status.{existing_month_index}.ope_label": ope_label,
                     f"approval_status.{existing_month_index}.total_levels": total_levels,
-                    f"approval_status.{existing_month_index}.limit": ope_limit, 
+                    f"approval_status.{existing_month_index}.submitter_type": payroll_entry["submitter_type"],
                     f"approval_status.{existing_month_index}.submission_date": current_time
                 }
                 
-                # ✅ Update L2 and Add L3 if total_levels changed from 2 to 3
+                if is_reporting_manager:
+                    update_fields[f"approval_status.{existing_month_index}.limit"] = 0
+                else:
+                    update_fields[f"approval_status.{existing_month_index}.limit"] = ope_limit
+                
                 if total_levels == 3:
                     update_fields[f"approval_status.{existing_month_index}.L3"] = {
                         "status": False,
@@ -3128,9 +2477,14 @@ async def submit_final_entries(
                     update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = partner_code
                     update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "Partner"
                 else:
-                    update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = "HR"
-                    update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = "JHS729"
-                    update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "HR"
+                    if is_reporting_manager:
+                        update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = "HR"
+                        update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = "JHS729"
+                        update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "HR"
+                    else:
+                        update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = "HR"
+                        update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = "JHS729"
+                        update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "HR"
                 
                 await db["Status"].update_one(
                     {"employeeId": employee_code},
@@ -3140,14 +2494,13 @@ async def submit_final_entries(
                 print(f"✅ Updated existing payroll month with cumulative total: ₹{cumulative_total}")
                 
             else:
-                # ✅ ADD NEW PAYROLL MONTH
                 await db["Status"].update_one(
                     {"employeeId": employee_code},
                     {"$push": {"approval_status": payroll_entry}}
                 )
                 print(f"✅ Added new payroll month: {formatted_month_range}")
         
-        # ✅ UPDATE EACH ENTRY WITH STATUS REFERENCE
+        # Update each entry with status reference
         for entry in entries_to_submit:
             entry["status"] = "pending"
             entry["submitted_time"] = current_time
@@ -3159,7 +2512,7 @@ async def submit_final_entries(
             entry["rejected_date"] = None
             entry["rejection_reason"] = None
         
-        # ✅ Move to OPE_data collection
+        # Move to OPE_data collection
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -3201,24 +2554,24 @@ async def submit_final_entries(
                 )
                 print(f"✅ Added new month range to OPE_data")
         
-        # ✅ Add to PENDING collection
-        pending_doc = await db["Pending"].find_one({"ReportingEmpCode": reporting_manager_code})
+        # Add to PENDING collection
+        pending_doc = await db["Pending"].find_one({"ReportingEmpCode": pending_approver_code})
         
         if not pending_doc:
             await db["Pending"].insert_one({
-                "ReportingEmpCode": reporting_manager_code,
+                "ReportingEmpCode": pending_approver_code,
                 "EmployeesCodes": [employee_code]
             })
-            print(f"✅ Created NEW Pending document for manager {reporting_manager_code}")
+            print(f"✅ Created NEW Pending document for approver {pending_approver_code}")
         else:
             if employee_code not in pending_doc.get("EmployeesCodes", []):
                 await db["Pending"].update_one(
-                    {"ReportingEmpCode": reporting_manager_code},
+                    {"ReportingEmpCode": pending_approver_code},
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
-                print(f"✅ Added employee to Pending list")
+                print(f"✅ Added employee to Pending list under {pending_approver_code}")
         
-        # ✅ Delete from Temp_OPE_data
+        # Delete from Temp_OPE_data
         temp_data_array = temp_doc.get("Data", [])
         
         for i, data_item in enumerate(temp_data_array):
@@ -3230,7 +2583,6 @@ async def submit_final_entries(
                 print(f"✅ Removed from Temp_OPE_data")
                 break
         
-        # If no more temp data, delete document
         updated_temp = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
         if updated_temp and len(updated_temp.get("Data", [])) == 0:
             await db["Temp_OPE_data"].delete_one({"employeeId": employee_code})
@@ -3238,24 +2590,25 @@ async def submit_final_entries(
         
         print(f"\n{'='*60}")
         print(f"✅✅ SUBMISSION COMPLETE ✅✅")
+        print(f"   Submitter Type: {'REPORTING MANAGER' if is_reporting_manager else 'EMPLOYEE'}")
         print(f"   Employee: {employee_code}")
         print(f"   Previous Total: ₹{existing_total}")
         print(f"   New Entries: +₹{new_entries_amount}")
         print(f"   Cumulative Total: ₹{cumulative_total}")
-        print(f"   Employee's OPE Limit: ₹{ope_limit}")
         print(f"   Approval Levels: {total_levels}")
-        print(f"   OPE Label: {ope_label}")
+        print(f"   First Approver: {pending_approver_code}")
         print(f"{'='*60}\n")
         
         return {
             "message": "Entries submitted successfully for approval",
             "submitted_count": len(entries_to_submit),
             "month_range": formatted_month_range,
-            "reporting_manager": reporting_manager_code,
+            "submitter_type": "Reporting_Manager" if is_reporting_manager else "Employee",
+            "first_approver": pending_approver_code,
             "previous_total": existing_total,
             "new_entries_amount": new_entries_amount,
             "total_amount": cumulative_total,
-            "ope_limit": ope_limit,  # ✅ Return actual employee limit
+            "ope_limit": 0 if is_reporting_manager else ope_limit,
             "ope_label": ope_label,
             "total_levels": total_levels,
             "status": "pending_approval"
@@ -3280,7 +2633,6 @@ async def approve_employee_entries(
         reporting_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
         
-        # Get remark from request body
         body = await request.json()
         approval_remark = body.get("remark", "Approved without remark")
         
@@ -3291,21 +2643,18 @@ async def approve_employee_entries(
         print(f"Remark: {approval_remark}")
         print(f"{'='*60}\n")
         
-        # Get manager details
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
         manager_name = manager.get("ReportingEmpName", reporting_emp_code)
         
-        # Get employee details
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
         emp_reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
         
-        # Get OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         if not ope_doc:
             raise HTTPException(status_code=404, detail="No OPE data found for employee")
@@ -3316,7 +2665,6 @@ async def approve_employee_entries(
         data_array = ope_doc.get("Data", [])
         payroll_months_approved = set()
         
-        # Approve all pending entries
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
@@ -3325,7 +2673,6 @@ async def approve_employee_entries(
                     if entry_status != "pending":
                         continue
                     
-                    # APPROVE THIS ENTRY WITH REMARK
                     await db["OPE_data"].update_one(
                         {"employeeId": employee_code},
                         {"$set": {
@@ -3333,7 +2680,7 @@ async def approve_employee_entries(
                             f"Data.{i}.{month_range}.{j}.approved_date": current_time,
                             f"Data.{i}.{month_range}.{j}.approved_by": reporting_emp_code,
                             f"Data.{i}.{month_range}.{j}.approver_name": manager_name,
-                            f"Data.{i}.{month_range}.{j}.approval_remark": approval_remark,  # ✅ REMARK STORE
+                            f"Data.{i}.{month_range}.{j}.approval_remark": approval_remark,
                             f"Data.{i}.{month_range}.{j}.L1_approved": True,
                             f"Data.{i}.{month_range}.{j}.L1_approver_code": reporting_emp_code,
                             f"Data.{i}.{month_range}.{j}.L1_approver_name": manager_name
@@ -3346,7 +2693,6 @@ async def approve_employee_entries(
         if approved_count == 0:
             raise HTTPException(status_code=404, detail="No pending entries found")
         
-        # UPDATE STATUS COLLECTION WITH REMARK
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         partner_code = None
@@ -3364,7 +2710,6 @@ async def approve_employee_entries(
                     print(f"   Submitter Type: {submitter_type}")
                     
                     if total_levels == 2:
-                        # 2-LEVEL: L1 approved → Now pending at L2 (HR)
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -3372,7 +2717,7 @@ async def approve_employee_entries(
                                 f"approval_status.{i}.L1.approver_code": reporting_emp_code,
                                 f"approval_status.{i}.L1.approver_name": manager_name,
                                 f"approval_status.{i}.L1.approved_date": current_time,
-                                f"approval_status.{i}.L1.approval_remark": approval_remark,  # ✅ REMARK IN STATUS
+                                f"approval_status.{i}.L1.approval_remark": approval_remark,
                                 f"approval_status.{i}.overall_status": "pending",
                                 f"approval_status.{i}.current_level": "L2"
                             }}
@@ -3394,20 +2739,18 @@ async def approve_employee_entries(
                                 f"approval_status.{i}.L1.approver_code": reporting_emp_code,
                                 f"approval_status.{i}.L1.approver_name": manager_name,
                                 f"approval_status.{i}.L1.approved_date": current_time,
-                                f"approval_status.{i}.L1.approval_remark": approval_remark,  # ✅ REMARK IN STATUS
+                                f"approval_status.{i}.L1.approval_remark": approval_remark,
                                 f"approval_status.{i}.overall_status": "pending",
                                 f"approval_status.{i}.current_level": "L2"
                             }}
                         )
         
-        # Remove from Pending
         await db["Pending"].update_one(
             {"ReportingEmpCode": emp_reporting_manager_code},
             {"$pull": {"EmployeesCodes": employee_code}}
         )
         print(f"✅ Removed from Manager's Pending")
         
-        # Add to Approved
         approved_doc = await db["Approved"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not approved_doc:
             await db["Approved"].insert_one({
@@ -3423,7 +2766,6 @@ async def approve_employee_entries(
                 )
                 print(f"✅ Added to Manager's Approved collection")
         
-        # Route to Partner's Pending if 3-level
         if partner_code:
             print(f"\n🔥 ROUTING TO PARTNER: {partner_code}")
             
@@ -3466,137 +2808,18 @@ async def approve_employee_entries(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/ope/manager/reject/{employee_code}")
-async def reject_employee_entries(
-    employee_code: str,
-    request: Request,
-    current_user=Depends(get_current_user)
-):
-    try:
-        reporting_emp_code = current_user["employee_code"].strip().upper()
-        employee_code = employee_code.strip().upper()
-        
-        body = await request.json()
-        rejection_reason = body.get("reason", "No reason provided")
-        
-        print(f"❌ Rejecting employee {employee_code}")
-        
-        manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
-        if not manager:
-            raise HTTPException(status_code=403, detail="You are not a reporting manager")
-        
-        manager_name = manager.get("ReportingEmpName", reporting_emp_code)
-        
-        # Get employee details to determine rejection level
-        emp = await db["Employee_details"].find_one({"EmpID": employee_code})
-        if not emp:
-            raise HTTPException(status_code=404, detail="Employee not found")
-        
-        emp_reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
-        emp_partner = emp.get("Partner", "")
-        
-        # Determine rejection level
-        rejection_level = None
-        if reporting_emp_code == emp_reporting_manager_code:
-            rejection_level = "L1"
-        elif manager_name == emp_partner or manager_name in emp_partner:
-            rejection_level = "L2"
-        else:
-            rejection_level = "L3"
-        
-        ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
-        if not ope_doc:
-            raise HTTPException(status_code=404, detail="No data found")
-        
-        data_array = ope_doc.get("Data", [])
-        rejected_count = 0
-        
-        for i, data_item in enumerate(data_array):
-            for month_range, entries in data_item.items():
-                for j, entry in enumerate(entries):
-                    if entry.get("status", "").lower() == "pending":
-                        # Update entry status
-                        await db["OPE_data"].update_one(
-                            {"employeeId": employee_code},
-                            {"$set": {
-                                f"Data.{i}.{month_range}.{j}.status": "rejected",
-                                f"Data.{i}.{month_range}.{j}.rejected_by": reporting_emp_code,
-                                f"Data.{i}.{month_range}.{j}.rejected_date": datetime.utcnow().isoformat(),
-                                f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason,
-                                f"Data.{i}.{month_range}.{j}.rejected_level": rejection_level,  # ✅ NEW
-                                f"Data.{i}.{month_range}.{j}.rejector_name": manager_name  # ✅ NEW
-                            }}
-                        )
-                        
-                        # Update Status collection
-                        status_id = entry.get("status_id")
-                        if status_id:
-                            await db["Status"].update_one(
-                                {"_id": ObjectId(status_id)},
-                                {"$set": {
-                                    "overall_status": "rejected",
-                                    f"{rejection_level}.status": False,
-                                    f"{rejection_level}.rejected_by": reporting_emp_code,
-                                    f"{rejection_level}.rejected_date": datetime.utcnow().isoformat()
-                                }}
-                            )
-                        
-                        rejected_count += 1
-        
-        if rejected_count == 0:
-            raise HTTPException(status_code=404, detail="No pending entries found")
-        
-        # Remove from Pending
-        await db["Pending"].update_one(
-            {"ReportingEmpCode": emp_reporting_manager_code},
-            {"$pull": {"EmployeesCodes": employee_code}}
-        )
-        
-        # Add to Rejected (under CURRENT manager's code)
-        rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
-        
-        if not rejected_doc:
-            await db["Rejected"].insert_one({
-                "ReportingEmpCode": reporting_emp_code,
-                "EmployeesCodes": [employee_code]
-            })
-        else:
-            if employee_code not in rejected_doc.get("EmployeesCodes", []):
-                await db["Rejected"].update_one(
-                    {"ReportingEmpCode": reporting_emp_code},
-                    {"$addToSet": {"EmployeesCodes": employee_code}}
-                )
-        
-        return {
-            "message": f"Rejected {rejected_count} entries",
-            "rejected_count": rejected_count,
-            "rejection_level": rejection_level
-        }
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-        
-# ✅ Get list of approved employees for a manager
+
 @app.get("/api/ope/manager/approved-list")
 async def get_approved_employees_list(current_user=Depends(get_current_user)):
-    """
-    Get list of employee codes who have approved entries under this manager
-    """
     try:
         reporting_emp_code = current_user["employee_code"].strip().upper()
         
         print(f"📋 Fetching approved list for manager: {reporting_emp_code}")
         
-        # Verify user is a manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
-        # Get approved collection
         approved_doc = await db["Approved"].find_one({"ReportingEmpCode": reporting_emp_code})
         
         employee_codes = []
@@ -3618,23 +2841,17 @@ async def get_approved_employees_list(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ Get list of rejected employees for a manager
 @app.get("/api/ope/manager/rejected-list")
 async def get_rejected_employees_list(current_user=Depends(get_current_user)):
-    """
-    Get list of employee codes who have rejected entries under this manager
-    """
     try:
         reporting_emp_code = current_user["employee_code"].strip().upper()
         
         print(f"📋 Fetching rejected list for manager: {reporting_emp_code}")
         
-        # Verify user is a manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
-        # Get rejected collection
         rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
         
         employee_codes = []
@@ -3656,15 +2873,11 @@ async def get_rejected_employees_list(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ Reject a single approved entry
 @app.post("/api/ope/manager/reject-single")
 async def reject_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Reject a single approved entry
-    """
     try:
         reporting_emp_code = current_user["employee_code"].strip().upper()
         
@@ -3675,14 +2888,12 @@ async def reject_single_entry(
         
         print(f"❌ Rejecting entry {entry_id} for employee {employee_id}")
         
-        # Verify manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
         manager_name = manager.get("ReportingEmpName", reporting_emp_code)
         
-        # Find and update the entry
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         if not ope_doc:
             raise HTTPException(status_code=404, detail="Employee data not found")
@@ -3695,19 +2906,17 @@ async def reject_single_entry(
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
                     if str(entry.get("_id")) == entry_id and entry.get("status") == "approved":
-                        # ✅ UPDATE ENTRY STATUS
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
                                 f"Data.{i}.{month_range}.{j}.status": "rejected",
                                 f"Data.{i}.{month_range}.{j}.rejected_by": reporting_emp_code,
-                                f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,  # ✅ KEY FIX
+                                f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.rejection_reason": reason
                             }}
                         )
                         
-                        # Update Status collection
                         status_id = entry.get("status_id")
                         if status_id:
                             await db["Status"].update_one(
@@ -3728,7 +2937,6 @@ async def reject_single_entry(
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found or not approved")
         
-        # ✅ CHECK IF ALL ENTRIES ARE REJECTED NOW
         all_rejected = True
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
@@ -3737,18 +2945,15 @@ async def reject_single_entry(
                         all_rejected = False
                         break
         
-        # ✅ IF ALL REJECTED, MOVE EMPLOYEE
         if all_rejected:
             print(f"🔄 Moving employee from Approved → Rejected")
             
-            # Remove from Approved
             await db["Approved"].update_one(
                 {"ReportingEmpCode": reporting_emp_code},
                 {"$pull": {"EmployeesCodes": employee_id}}
             )
             print(f"✅ Removed from Approved")
             
-            # Add to Rejected
             rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
             if not rejected_doc:
                 await db["Rejected"].insert_one({
@@ -3775,15 +2980,11 @@ async def reject_single_entry(
         raise HTTPException(status_code=500, detail=str(e))
     
 
-# ✅ Approve a single rejected entry
 @app.post("/api/ope/manager/approve-single")
 async def approve_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Approve a single rejected entry
-    """
     try:
         reporting_emp_code = current_user["employee_code"].strip().upper()
         
@@ -3798,14 +2999,12 @@ async def approve_single_entry(
         print(f"Entry ID: {entry_id}")
         print(f"{'='*60}\n")
         
-        # Verify manager
         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
         if not manager:
             raise HTTPException(status_code=403, detail="You are not a reporting manager")
         
         manager_name = manager.get("ReportingEmpName", reporting_emp_code)
         
-        # Find and update the entry
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         if not ope_doc:
             raise HTTPException(status_code=404, detail="Employee data not found")
@@ -3818,15 +3017,13 @@ async def approve_single_entry(
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
                     if str(entry.get("_id")) == entry_id and entry.get("status") == "rejected":
-                        # ✅ UPDATE ENTRY STATUS TO APPROVED
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
                                 f"Data.{i}.{month_range}.{j}.status": "approved",
                                 f"Data.{i}.{month_range}.{j}.approved_by": reporting_emp_code,
-                                f"Data.{i}.{month_range}.{j}.approver_name": manager_name,  # ✅ KEY FIX
+                                f"Data.{i}.{month_range}.{j}.approver_name": manager_name,
                                 f"Data.{i}.{month_range}.{j}.approved_date": current_time,
-                                # ✅ CLEAR REJECTION DATA
                                 f"Data.{i}.{month_range}.{j}.rejected_by": None,
                                 f"Data.{i}.{month_range}.{j}.rejector_name": None,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": None,
@@ -3834,7 +3031,6 @@ async def approve_single_entry(
                             }}
                         )
                         
-                        # Update Status collection
                         status_id = entry.get("status_id")
                         if status_id:
                             await db["Status"].update_one(
@@ -3859,7 +3055,6 @@ async def approve_single_entry(
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found or not rejected")
         
-        # ✅ CHECK IF ALL ENTRIES ARE NOW APPROVED
         all_approved = True
         any_rejected = False
         
@@ -3879,18 +3074,15 @@ async def approve_single_entry(
         print(f"   All approved: {all_approved}")
         print(f"   Any rejected: {any_rejected}")
         
-        # ✅ IF NO MORE REJECTED ENTRIES, MOVE FROM REJECTED TO APPROVED
         if not any_rejected:
             print(f"🔄 Moving employee from Rejected → Approved")
             
-            # ✅ REMOVE FROM REJECTED COLLECTION
             await db["Rejected"].update_one(
                 {"ReportingEmpCode": reporting_emp_code},
                 {"$pull": {"EmployeesCodes": employee_id}}
             )
             print(f"✅ Removed from Rejected collection")
             
-            # ✅ ADD TO APPROVED COLLECTION
             approved_doc = await db["Approved"].find_one({"ReportingEmpCode": reporting_emp_code})
             if not approved_doc:
                 await db["Approved"].insert_one({
@@ -3924,10 +3116,6 @@ async def approve_single_entry(
         
 @app.get("/api/ope/status/{employee_code}")
 async def get_employee_status(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Get approval status for all payroll months of an employee
-    Now includes rejection tracking with visual indicators
-    """
     try:
         employee_code = employee_code.strip().upper()
         current_emp_code = current_user["employee_code"].strip().upper()
@@ -3935,9 +3123,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         print(f"\n{'='*60}")
         print(f"📊 FETCHING STATUS FOR: {employee_code}")
         print(f"{'='*60}\n")
-        
-        # if current_emp_code != employee_code:
-        #     raise HTTPException(status_code=403, detail="Access denied")    
 
         is_hr = (current_emp_code == "JHS729")
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
@@ -3946,7 +3131,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         if current_emp_code != employee_code and not is_hr and not is_manager and not is_partner:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Get Status document for this employee
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if not status_doc:
@@ -3964,7 +3148,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
             print(f"📅 Processing payroll: {ps.get('payroll_month')}")
             print(f"{'─'*40}")
             
-            # Get all level data
             L1 = ps.get("L1", {})
             L2 = ps.get("L2", {})
             L3 = ps.get("L3", {}) if "L3" in ps else {}
@@ -3973,7 +3156,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
             current_level = ps.get("current_level", "L1")
             overall_status = ps.get("overall_status", "pending")
             
-            # Check for rejection at each level
             is_rejected = False
             rejected_level = None
             rejected_by = None
@@ -3981,7 +3163,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
             rejected_date = None
             rejection_reason = None
             
-            # Check L1 rejection
             l1_rejected = L1.get("rejected", False)
             if l1_rejected or L1.get("rejected_by"):
                 is_rejected = True
@@ -3993,7 +3174,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 overall_status = "rejected"
                 print(f"   ❌ L1 REJECTED")
             
-            # Check L2 rejection (if not already rejected)
             elif L2.get("rejected", False) or L2.get("rejected_by"):
                 is_rejected = True
                 rejected_level = "L2"
@@ -4004,7 +3184,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 overall_status = "rejected"
                 print(f"   ❌ L2 REJECTED")
             
-            # Check L3 rejection (if exists and not already rejected)
             elif L3 and (L3.get("rejected", False) or L3.get("rejected_by")):
                 is_rejected = True
                 rejected_level = "L3"
@@ -4015,7 +3194,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 overall_status = "rejected"
                 print(f"   ❌ L3 REJECTED")
             
-            # Build entry with rejection info
             entry = {
                 "employeeId": employee_code,
                 "employeeName": status_doc.get("employeeName", ""),
@@ -4059,7 +3237,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 "current_level": current_level,
                 "overall_status": overall_status,
                 "submission_date": ps.get("submission_date"),
-                # Top-level rejection tracking
                 "is_rejected": is_rejected,
                 "rejected_level": rejected_level,
                 "rejected_by": rejected_by,
@@ -4068,7 +3245,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 "rejection_reason": rejection_reason
             }
             
-            # Add L3 if exists
             if L3:
                 entry["L3"] = {
                     "status": L3.get("status", False),
@@ -4086,7 +3262,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
             
             status_entries.append(entry)
             
-            # Print summary
             if is_rejected:
                 print(f"\n   🚨 FINAL: REJECTED at {rejected_level}")
                 if rejection_reason:
@@ -4096,9 +3271,6 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         
         print(f"\n{'='*60}")
         print(f"✅ Returning {len(status_entries)} status entries")
-        for entry in status_entries:
-            status = "REJECTED" if entry['is_rejected'] else entry['overall_status'].upper()
-            print(f"   Month: {entry['payroll_month']} - {status}")
         print(f"{'='*60}\n")
         
         return {"status_entries": status_entries}
@@ -4118,14 +3290,10 @@ async def hr_approve_employee(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    HR approval - approves ALL pending HR entries for an employee
-    """
     try:
         hr_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
         
-        # Get remark from request body
         body = await request.json()
         approval_remark = body.get("remark", "Approved without remark")
         
@@ -4136,11 +3304,9 @@ async def hr_approve_employee(
         print(f"Remark: {approval_remark}")
         print(f"{'='*60}\n")
         
-        # Verify user is HR
         if hr_emp_code != "JHS729":
             raise HTTPException(status_code=403, detail="Only HR can perform this action")
         
-        # Get OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -4157,10 +3323,7 @@ async def hr_approve_employee(
                 for j, entry in enumerate(entries):
                     entry_status = entry.get("status", "").lower()
                     
-                    # HR approves entries that are "approved" (approved by L1/L2 but not HR yet)
-                    # OR entries that are "rejected" (re-approving rejected entries)
                     if entry_status in ["approved", "rejected"]:
-                        # Mark as HR approved with remark
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4172,7 +3335,6 @@ async def hr_approve_employee(
                                 f"Data.{i}.{month_range}.{j}.approver_name": "HR",
                                 f"Data.{i}.{month_range}.{j}.approved_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.approval_remark": approval_remark,
-                                # Clear rejection data if re-approving
                                 f"Data.{i}.{month_range}.{j}.rejected_by": None,
                                 f"Data.{i}.{month_range}.{j}.rejector_name": None,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": None,
@@ -4187,7 +3349,6 @@ async def hr_approve_employee(
         if approved_count == 0:
             raise HTTPException(status_code=404, detail="No entries found for HR approval")
         
-        # Update Status collection
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if status_doc:
@@ -4224,8 +3385,6 @@ async def hr_approve_employee(
                             }}
                         )
         
-        # Update collections
-        # Add to HR_Approved
         hr_approved_doc = await db["HR_Approved"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_approved_doc:
@@ -4240,7 +3399,6 @@ async def hr_approve_employee(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
         
-        # Remove from HR_Rejected
         await db["HR_Rejected"].update_one(
             {"HR_Code": hr_emp_code},
             {"$pull": {"EmployeesCodes": employee_code}}
@@ -4269,9 +3427,6 @@ async def hr_reject_employee(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    HR rejection - rejects ALL pending HR entries for an employee
-    """
     try:
         hr_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
@@ -4285,11 +3440,9 @@ async def hr_reject_employee(
         print(f"Employee: {employee_code}")
         print(f"{'='*60}\n")
         
-        # ✅ VERIFY USER IS HR
         if hr_emp_code != "JHS729":
             raise HTTPException(status_code=403, detail="Only HR can perform this action")
         
-        # Get OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -4306,9 +3459,7 @@ async def hr_reject_employee(
                 for j, entry in enumerate(entries):
                     entry_status = entry.get("status", "").lower()
                     
-                    # ✅ HR can reject "approved" entries (those pending HR approval)
                     if entry_status == "approved":
-                        # Mark as rejected by HR
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4317,8 +3468,7 @@ async def hr_reject_employee(
                                 f"Data.{i}.{month_range}.{j}.rejector_name": "HR",
                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason,
-                                f"Data.{i}.{month_range}.{j}.rejected_level": "L2",  # HR level
-                                # Clear HR approval data
+                                f"Data.{i}.{month_range}.{j}.rejected_level": "L2",
                                 f"Data.{i}.{month_range}.{j}.hr_approved": False,
                                 f"Data.{i}.{month_range}.{j}.hr_approved_by": None,
                                 f"Data.{i}.{month_range}.{j}.hr_approved_date": None
@@ -4331,7 +3481,6 @@ async def hr_reject_employee(
         if rejected_count == 0:
             raise HTTPException(status_code=404, detail="No entries found for HR rejection")
         
-        # ✅ UPDATE STATUS COLLECTION
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if status_doc:
@@ -4364,8 +3513,6 @@ async def hr_reject_employee(
                             }}
                         )
         
-        # ✅ UPDATE COLLECTIONS
-        # Add to HR_Rejected
         hr_rejected_doc = await db["HR_Rejected"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_rejected_doc:
@@ -4380,7 +3527,6 @@ async def hr_reject_employee(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
         
-        # Remove from HR_Approved
         await db["HR_Approved"].update_one(
             {"HR_Code": hr_emp_code},
             {"$pull": {"EmployeesCodes": employee_code}}
@@ -4404,9 +3550,6 @@ async def hr_reject_employee(
 
 @app.post("/api/ope/hr/is-hr")
 async def check_if_hr(current_user=Depends(get_current_user)):
-    """
-    Check if current user is HR
-    """
     try:
         emp_code = current_user["employee_code"].strip().upper()
         is_hr = (emp_code == "JHS729")
@@ -4421,9 +3564,6 @@ async def check_if_hr(current_user=Depends(get_current_user)):
     
 @app.get("/api/ope/hr/approved-employees")
 async def get_hr_approved_employees(current_user=Depends(get_current_user)):
-    """
-    Get list of employees with entries approved by HR
-    """
     try:
         hr_emp_code = current_user["employee_code"].strip().upper()
         
@@ -4432,7 +3572,6 @@ async def get_hr_approved_employees(current_user=Depends(get_current_user)):
         
         print(f"📋 Fetching HR approved employees")
         
-        # ✅ Get from HR_Approved collection
         hr_approved_doc = await db["HR_Approved"].find_one({"HR_Code": hr_emp_code})
         
         employee_codes = []
@@ -4457,9 +3596,6 @@ async def get_hr_approved_employees(current_user=Depends(get_current_user)):
 
 @app.get("/api/ope/hr/rejected-employees")
 async def get_hr_rejected_employees(current_user=Depends(get_current_user)):
-    """
-    Get list of employees with entries rejected by HR
-    """
     try:
         hr_emp_code = current_user["employee_code"].strip().upper()
         
@@ -4468,7 +3604,6 @@ async def get_hr_rejected_employees(current_user=Depends(get_current_user)):
         
         print(f"📋 Fetching HR rejected employees")
         
-        # ✅ Get from HR_Rejected collection
         hr_rejected_doc = await db["HR_Rejected"].find_one({"HR_Code": hr_emp_code})
         
         employee_codes = []
@@ -4492,19 +3627,14 @@ async def get_hr_rejected_employees(current_user=Depends(get_current_user)):
         
 @app.get("/api/check-partner/{employee_code}")
 async def check_if_partner(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Check if the logged-in employee is a Partner
-    """
     try:
         emp_code = employee_code.strip().upper()
         
         print(f"🔍 Checking if {emp_code} is a Partner...")
         
-        # Verify user can only check their own role
         if current_user["employee_code"].upper() != emp_code:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Check in Partner collection
         partner = await db["Partner"].find_one({"PartnerEmpCode": emp_code})
         
         is_partner = partner is not None
@@ -4525,9 +3655,6 @@ async def check_if_partner(employee_code: str, current_user=Depends(get_current_
         raise HTTPException(status_code=500, detail=str(e))
     
 
-# ✅ FIXED VERSION - Replace your existing @app.get("/api/ope/partner/pending") with this:
-# ✅ CORRECTED VERSION - Partner ko L1-approved entries dikhani chahiye!
-
 @app.get("/api/ope/partner/pending")
 async def get_partner_pending(current_user: dict = Depends(get_current_user)):
     try:
@@ -4537,7 +3664,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
         print(f"🔍 PARTNER PENDING REQUEST FROM: {partner_code}")
         print(f"{'='*60}\n")
         
-        # ✅ Get Partner's pending employee codes
         partner_pending = await db["Pending"].find_one({"ReportingEmpCode": partner_code})
         
         if not partner_pending or not partner_pending.get("EmployeesCodes"):
@@ -4555,9 +3681,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
             print(f"✅ Processing: {emp_code}")
             print(f"{'='*40}")
             
-            # ============================================
-            # ✅ Get Status documents
-            # ============================================
             status_docs = await db["Status"].find({
                 "employeeId": emp_code
             }).to_list(length=None)
@@ -4568,9 +3691,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                 print(f"   ❌ No Status - SKIP")
                 continue
             
-            # ============================================
-            # ✅ Get Employee details (with fallback)
-            # ============================================
             employee = await db["Employee"].find_one({"EmployeeId": emp_code})
             
             if not employee:
@@ -4585,9 +3705,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
             
             print(f"   👤 Name: {employee.get('EmployeeName')}")
             
-            # ============================================
-            # 🔥 GET OPE_data DOCUMENT (NESTED STRUCTURE)
-            # ============================================
             ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
             
             if not ope_doc:
@@ -4596,12 +3713,7 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
             
             print(f"   ✅ OPE_data document found")
             
-            # ============================================
-            # ✅ Process each Status document
-            # ============================================
-            
             for status_doc in status_docs:
-                # Handle Array format
                 approval_status_raw = status_doc.get("approval_status")
                 
                 print(f"\n   📄 Status Document")
@@ -4615,14 +3727,9 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                     print(f"      ❌ Unknown format - SKIP")
                     continue
                 
-                # ============================================
-                # ✅ LOOP THROUGH EACH APPROVAL STATUS
-                # ============================================
-                
                 for idx, approval_status in enumerate(approval_status_array):
                     print(f"\n   📋 Processing approval_status[{idx}]")
                     
-                    # Extract fields
                     month_range = approval_status.get("payroll_month") or approval_status.get("month_range")
                     total_levels = approval_status.get("total_levels", 2)
                     current_level = approval_status.get("current_level", "L1")
@@ -4634,7 +3741,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                     print(f"      Current Level: {current_level}")
                     print(f"      Overall Status: {overall_status}")
                     
-                    # Skip if not pending
                     if overall_status != "pending":
                         print(f"      ⚠️ Not pending - SKIP")
                         continue
@@ -4642,10 +3748,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                     if not month_range:
                         print(f"      ⚠️ No month_range - SKIP")
                         continue
-                    
-                    # ============================================
-                    # ✅ Check if Partner is current approver
-                    # ============================================
                     
                     partner_is_approver = False
                     l1_approver = "N/A"
@@ -4679,10 +3781,6 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                         print(f"      ❌ Partner NOT approver - SKIP")
                         continue
                     
-                    # ============================================
-                    # 🔥🔥🔥 EXTRACT ENTRIES FROM NESTED STRUCTURE 🔥🔥🔥
-                    # ============================================
-                    
                     print(f"      🔍 Looking for entries in nested Data structure")
                     
                     entries = []
@@ -4690,14 +3788,11 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                     
                     print(f"      📦 OPE_data.Data has {len(data_array)} items")
                     
-                    # Loop through Data array
                     for data_item in data_array:
-                        # Check if this month exists in this data_item
                         if month_range in data_item:
                             month_entries = data_item[month_range]
                             print(f"      ✅ Found month '{month_range}' with {len(month_entries)} entries")
                             
-                            # Filter by status
                             entry_status = "pending" if submitter_type == "Reporting_Manager" else "approved"
                             
                             for entry in month_entries:
@@ -4707,17 +3802,13 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                                     entries.append(entry)
                                     print(f"         ✅ Entry: {entry.get('date')} | ₹{entry.get('amount')} | status={e_status}")
                             
-                            break  # Found the month, stop searching
+                            break
                     
                     print(f"      📦 Total entries found: {len(entries)}")
                     
                     if not entries:
                         print(f"      ❌ No entries - SKIP")
                         continue
-                    
-                    # ============================================
-                    # ✅ Format response data
-                    # ============================================
                     
                     total_amount = sum(float(e.get("amount", 0)) for e in entries)
                     
@@ -4735,16 +3826,12 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
                             "travel_mode": entry.get("travel_mode"),
                             "amount": entry.get("amount"),
                             "remarks": entry.get("remarks"),
-                            "ticket_pdf": entry.get("ticket_pdf"),
+                            "ticket_pdf": entry.get("ticket_pdf"),    # GridFS ID
                             "month_range": month_range,
                             "total_levels": total_levels,
                             "current_level": current_level,
                             "submitter_type": submitter_type
                         })
-                    
-                    # ============================================
-                    # ✅ Add to response list
-                    # ============================================
                     
                     employees_list.append({
                         "employeeId": emp_code,
@@ -4781,26 +3868,16 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
-
 @app.post("/api/ope/partner/approve/{employee_code}")
 async def partner_approve_employee(
     employee_code: str,
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Partner approval for employee OPE
-    - Updates nested OPE_data structure
-    - Updates Status collection (Array format)
-    - Routes to HR for L2 (2-level) or L3 (3-level)
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
         
-        # Get remark from request body
         body = await request.json()
         approval_remark = body.get("remark", "Approved without remark")
         
@@ -4811,14 +3888,12 @@ async def partner_approve_employee(
         print(f"Remark: {approval_remark}")
         print(f"{'='*60}\n")
         
-        # Verify user is a partner
         partner = await db["Partner"].find_one({"PartnerEmpCode": partner_emp_code})
         if not partner:
             raise HTTPException(status_code=403, detail="You are not a Partner")
         
         partner_name = partner.get("Partner_Name", partner_emp_code)
         
-        # Get OPE data
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -4832,7 +3907,6 @@ async def partner_approve_employee(
         
         print(f"📦 OPE_data.Data has {len(data_array)} items")
         
-        # Approve all pending entries (nested)
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 print(f"\n📅 Processing month: {month_range}")
@@ -4841,9 +3915,7 @@ async def partner_approve_employee(
                 for j, entry in enumerate(entries):
                     entry_status = entry.get("status", "").lower()
                     
-                    # Approve entries with status "pending" or "approved"
                     if entry_status in ["pending", "approved"]:
-                        # Update entry in nested structure with remark
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4868,7 +3940,6 @@ async def partner_approve_employee(
         
         print(f"\n✅ Total entries approved: {approved_count}")
         
-        # Update Status collection (Array format)
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if status_doc:
@@ -4876,7 +3947,6 @@ async def partner_approve_employee(
             
             print(f"\n📊 Updating Status collection...")
             
-            # Handle both Array and Dict formats
             if isinstance(approval_status_array, dict):
                 approval_status_array = [approval_status_array]
             
@@ -4892,7 +3962,6 @@ async def partner_approve_employee(
                     print(f"      Submitter: {submitter_type}")
                     
                     if submitter_type == "Reporting_Manager":
-                        # RM submission: Partner is L1, now goes to L2 (HR)
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4908,7 +3977,6 @@ async def partner_approve_employee(
                         print(f"      ✅ RM: L1 approved → L2 (HR) pending")
                     
                     elif total_levels == 3:
-                        # Employee 3-level: Partner is L2, now goes to L3 (HR)
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4924,7 +3992,6 @@ async def partner_approve_employee(
                         print(f"      ✅ 3-level: L2 approved → L3 (HR) pending")
                     
                     elif total_levels == 2:
-                        # Employee 2-level: Partner is L1, now goes to L2 (HR)
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -4939,14 +4006,12 @@ async def partner_approve_employee(
                         )
                         print(f"      ✅ 2-level: L1 approved → L2 (HR) pending")
         
-        # Remove from Pending (Partner's pending)
         await db["Pending"].update_one(
             {"ReportingEmpCode": partner_emp_code},
             {"$pull": {"EmployeesCodes": employee_code}}
         )
         print(f"\n✅ Removed from Partner's Pending")
         
-        # Add to Approved (Partner's approved)
         partner_approved_doc = await db["Partner_Approved"].find_one(
             {"PartnerEmpCode": partner_emp_code}
         )
@@ -4986,12 +4051,11 @@ async def partner_approve_employee(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-# Ek temporary debug endpoint add karo main.py mein
+
 @app.get("/api/debug/partner-pending/{partner_code}")
 async def debug_partner_pending(partner_code: str):
     partner_code = partner_code.strip().upper()
     
-    # Step 1: Pending collection check
     pending = await db["Pending"].find_one({"ReportingEmpCode": partner_code})
     emp_codes = pending.get("EmployeesCodes", []) if pending else []
     
@@ -5026,12 +4090,6 @@ async def partner_reject_employee(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Partner rejection for employee OPE
-    - Updates nested OPE_data structure
-    - Updates Status collection (Array format)
-    - Moves to Partner_Rejected collection
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         employee_code = employee_code.strip().upper()
@@ -5046,16 +4104,12 @@ async def partner_reject_employee(
         print(f"Reason: {rejection_reason}")
         print(f"{'='*60}\n")
         
-        # ✅ Verify user is a partner
         partner = await db["Partner"].find_one({"PartnerEmpCode": partner_emp_code})
         if not partner:
             raise HTTPException(status_code=403, detail="You are not a Partner")
         
         partner_name = partner.get("Partner_Name", partner_emp_code)
         
-        # ============================================
-        # ✅ GET OPE_data DOCUMENT (NESTED STRUCTURE)
-        # ============================================
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
         
         if not ope_doc:
@@ -5069,10 +4123,6 @@ async def partner_reject_employee(
         
         print(f"📦 OPE_data.Data has {len(data_array)} items")
         
-        # ============================================
-        # ✅ REJECT ALL PENDING ENTRIES (NESTED)
-        # ============================================
-        
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 print(f"\n📅 Processing month: {month_range}")
@@ -5081,9 +4131,7 @@ async def partner_reject_employee(
                 for j, entry in enumerate(entries):
                     entry_status = entry.get("status", "").lower()
                     
-                    # Reject entries with status "pending" or "approved"
                     if entry_status in ["pending", "approved"]:
-                        # ✅ UPDATE ENTRY IN NESTED STRUCTURE
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -5105,10 +4153,6 @@ async def partner_reject_employee(
         
         print(f"\n❌ Total entries rejected: {rejected_count}")
         
-        # ============================================
-        # ✅ UPDATE STATUS COLLECTION (ARRAY FORMAT)
-        # ============================================
-        
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
         
         if status_doc:
@@ -5116,7 +4160,6 @@ async def partner_reject_employee(
             
             print(f"\n📊 Updating Status collection...")
             
-            # Handle both Array and Dict formats
             if isinstance(approval_status_array, dict):
                 approval_status_array = [approval_status_array]
             
@@ -5132,7 +4175,6 @@ async def partner_reject_employee(
                     print(f"      Submitter: {submitter_type}")
                     
                     if submitter_type == "Reporting_Manager":
-                        # RM submission: Partner is L1, rejected
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -5147,7 +4189,6 @@ async def partner_reject_employee(
                         print(f"      ❌ RM: L1 rejected")
                     
                     elif total_levels == 3:
-                        # Employee 3-level: Partner is L2, rejected
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -5162,7 +4203,6 @@ async def partner_reject_employee(
                         print(f"      ❌ 3-level: L2 rejected")
                     
                     elif total_levels == 2:
-                        # Employee 2-level: Partner is L1, rejected
                         await db["Status"].update_one(
                             {"employeeId": employee_code},
                             {"$set": {
@@ -5176,19 +4216,11 @@ async def partner_reject_employee(
                         )
                         print(f"      ❌ 2-level: L1 rejected")
         
-        # ============================================
-        # ✅ REMOVE FROM PENDING (Partner's pending)
-        # ============================================
-        
         await db["Pending"].update_one(
             {"ReportingEmpCode": partner_emp_code},
             {"$pull": {"EmployeesCodes": employee_code}}
         )
         print(f"\n✅ Removed from Partner's Pending")
-        
-        # ============================================
-        # ✅ ADD TO REJECTED (Partner's rejected)
-        # ============================================
         
         partner_rejected_doc = await db["Partner_Rejected"].find_one(
             {"PartnerEmpCode": partner_emp_code}
@@ -5229,9 +4261,6 @@ async def partner_reject_employee(
 
 @app.get("/api/ope/partner/approved-list")
 async def get_partner_approved_list(current_user=Depends(get_current_user)):
-    """
-    Get list of employees approved by Partner
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         
@@ -5257,23 +4286,16 @@ async def get_partner_approved_list(current_user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/check-user-role/{employee_code}")
-async def check_user_role(employee_code: str, current_user=Depends(get_current_user)):
-    """
-    Unified endpoint to check user role
-    Priority: HR > Partner > Manager > Employee
-    Returns ONLY ONE primary role (highest priority)
-    """
+async def check_user_role_unified(employee_code: str, current_user=Depends(get_current_user)):
     try:
         emp_code = employee_code.strip().upper()
         
-        # Verify user can only check their own role
         if current_user["employee_code"].upper() != emp_code:
             raise HTTPException(status_code=403, detail="Access denied")
         
         print(f"🔍 Checking unified role for: {emp_code}")
         
-        # ✅ PRIORITY-BASED ROLE DETECTION
-        role_name = "Employee"  # Default
+        role_name = "Employee"
         is_hr = False
         is_partner = False
         is_manager = False
@@ -5281,23 +4303,20 @@ async def check_user_role(employee_code: str, current_user=Depends(get_current_u
         has_approval_permissions = False
         additional_info = {}
         
-        # ✅ PRIORITY 1: Check if HR (highest priority)
         if emp_code == "JHS729":
             is_hr = True
             role_name = "HR"
             has_approval_permissions = True
             print(f"👔 {emp_code} is HR")
             
-        # ✅ PRIORITY 2: Check if Partner (only if not HR)
         elif await db["Partner"].find_one({"PartnerEmpCode": emp_code}):
             partner = await db["Partner"].find_one({"PartnerEmpCode": emp_code})
             is_partner = True
             role_name = "Partner"
             has_approval_permissions = True
             additional_info["partner_name"] = partner.get("Partner_Name")
-            print(f"👔 {emp_code} is a Partner (NOT checking manager)")
+            print(f"👔 {emp_code} is a Partner")
             
-        # ✅ PRIORITY 3: Check if Reporting Manager (only if not HR or Partner)
         elif await db["Reporting_managers"].find_one({"ReportingEmpCode": emp_code}):
             manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": emp_code})
             is_manager = True
@@ -5307,7 +4326,6 @@ async def check_user_role(employee_code: str, current_user=Depends(get_current_u
             additional_info["email"] = manager.get("Email ID")
             print(f"👔 {emp_code} is a Reporting Manager")
             
-        # ✅ PRIORITY 4: Regular Employee (if none of the above)
         else:
             is_employee = True
             role_name = "Employee"
@@ -5316,7 +4334,7 @@ async def check_user_role(employee_code: str, current_user=Depends(get_current_u
         
         return {
             "employee_code": emp_code,
-            "role": role_name,  # Primary role ONLY
+            "role": role_name,
             "is_hr": is_hr,
             "is_partner": is_partner,
             "is_manager": is_manager,
@@ -5336,9 +4354,6 @@ async def check_user_role(employee_code: str, current_user=Depends(get_current_u
 
 @app.get("/api/ope/partner/rejected-list")
 async def get_partner_rejected_list(current_user=Depends(get_current_user)):
-    """
-    Get list of employees rejected by Partner
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         
@@ -5363,13 +4378,12 @@ async def get_partner_rejected_list(current_user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+
 @app.get("/api/debug/check-partner-data/{employee_code}")
 async def debug_check_partner_data(employee_code: str):
-    """Debug: Check what data exists for partner approval"""
     try:
         partner_code = employee_code.strip().upper()
         
-        # 1. Check Status collection
         status_docs = await db["Status"].find({}).to_list(length=None)
         
         partner_matches = []
@@ -5401,572 +4415,12 @@ async def debug_check_partner_data(employee_code: str):
     except Exception as e:
         return {"error": str(e)}
 
-# ============================================
-# PARTNER REJECT ENDPOINT - Add to main.py
-# ============================================
-
-@app.post("/api/ope/partner/reject/{employee_code}")
-async def partner_reject_employee(
-    employee_code: str,
-    request: Request,
-    current_user=Depends(get_current_user)
-):
-    """Partner rejection for employee OPE"""
-    try:
-        partner_emp_code = current_user["employee_code"].strip().upper()
-        employee_code = employee_code.strip().upper()
-        
-        body = await request.json()
-        rejection_reason = body.get("reason", "No reason provided")
-        
-        print(f"\n{'='*60}")
-        print(f"❌ PARTNER REJECTION REQUEST")
-        print(f"Partner: {partner_emp_code}")
-        print(f"Employee: {employee_code}")
-        print(f"Reason: {rejection_reason}")
-        print(f"{'='*60}\n")
-        
-        # Verify user is a partner
-        partner = await db["Partner"].find_one({"PartnerEmpCode": partner_emp_code})
-        if not partner:
-            raise HTTPException(status_code=403, detail="You are not a Partner")
-        
-        partner_name = partner.get("Partner_Name", partner_emp_code)
-        
-        # Get OPE data
-        ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
-        if not ope_doc:
-            raise HTTPException(status_code=404, detail="No OPE data found")
-        
-        rejected_count = 0
-        current_time = datetime.utcnow().isoformat()
-        
-        data_array = ope_doc.get("Data", [])
-        payroll_months_rejected = set()
-        
-        # ✅ Reject all "approved" entries (L1 approved, now rejecting at L2)
-        for i, data_item in enumerate(data_array):
-            for month_range, entries in data_item.items():
-                for j, entry in enumerate(entries):
-                    entry_status = entry.get("status", "").lower()
-                    
-                    # Reject entries with status "approved" (waiting for Partner L2)
-                    if entry_status == "approved":
-                        await db["OPE_data"].update_one(
-                            {"employeeId": employee_code},
-                            {"$set": {
-                                f"Data.{i}.{month_range}.{j}.status": "rejected",
-                                f"Data.{i}.{month_range}.{j}.rejected_by": partner_emp_code,
-                                f"Data.{i}.{month_range}.{j}.rejector_name": partner_name,
-                                f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
-                                f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason,
-                                f"Data.{i}.{month_range}.{j}.rejected_level": "L2"
-                            }}
-                        )
-                        
-                        payroll_months_rejected.add(month_range)
-                        rejected_count += 1
-                        print(f"   ❌ Rejected entry: {month_range} | Date: {entry.get('date')} | Amount: ₹{entry.get('amount')}")
-        
-        if rejected_count == 0:
-            raise HTTPException(status_code=404, detail="No pending entries found for rejection")
-        
-        # ✅ Update Status collection
-        status_doc = await db["Status"].find_one({"employeeId": employee_code})
-        
-        if status_doc:
-            approval_status = status_doc.get("approval_status", [])
-            
-            for i, ps in enumerate(approval_status):
-                if ps.get("payroll_month") in payroll_months_rejected:
-                    # L2 (Partner) rejected
-                    await db["Status"].update_one(
-                        {"employeeId": employee_code},
-                        {"$set": {
-                            f"approval_status.{i}.L2.status": False,
-                            f"approval_status.{i}.L2.rejected_by": partner_emp_code,
-                            f"approval_status.{i}.L2.rejected_date": current_time,
-                            f"approval_status.{i}.overall_status": "rejected",
-                            f"approval_status.{i}.rejection_reason": rejection_reason,
-                            f"approval_status.{i}.rejected_level": "L2"
-                        }}
-                    )
-                    print(f"   📊 Updated Status: {ps.get('payroll_month')} → Rejected at L2")
-        
-        # ✅ Add to Partner_Rejected collection
-        partner_rejected_doc = await db["Partner_Rejected"].find_one(
-            {"PartnerEmpCode": partner_emp_code}
-        )
-        
-        if not partner_rejected_doc:
-            await db["Partner_Rejected"].insert_one({
-                "PartnerEmpCode": partner_emp_code,
-                "EmployeesCodes": [employee_code]
-            })
-            print(f"   📝 Created new Partner_Rejected document")
-        else:
-            if employee_code not in partner_rejected_doc.get("EmployeesCodes", []):
-                await db["Partner_Rejected"].update_one(
-                    {"PartnerEmpCode": partner_emp_code},
-                    {"$addToSet": {"EmployeesCodes": employee_code}}
-                )
-                print(f"   📝 Added to Partner_Rejected collection")
-        
-        print(f"\n{'='*60}")
-        print(f"❌ Partner rejected {rejected_count} entries for {employee_code}")
-        print(f"{'='*60}\n")
-        
-        return {
-            "message": f"Successfully rejected {rejected_count} entries",
-            "rejected_count": rejected_count
-        }
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"❌ Error in partner reject: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-    
-# ---------- Serve static HTML ----------
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
-
-@app.post("/api/ope/submit-final")
-async def submit_final_entries(
-    request: Request,
-    current_user=Depends(get_current_user)
-):
-    try:
-        employee_code = current_user["employee_code"].strip().upper()
-        
-        body = await request.json()
-        month_range = body.get("month_range")
-        
-        print(f"🚀 SUBMIT FINAL: Employee {employee_code}, Month {month_range}")
-        
-        if not month_range:
-            raise HTTPException(status_code=400, detail="month_range required")
-        
-        def format_month_range(month_str):
-            try:
-                parts = month_str.lower().split('-')
-                month_map = {
-                    'jan': 'Jan', 'feb': 'Feb', 'mar': 'Mar', 'apr': 'Apr',
-                    'may': 'May', 'jun': 'Jun', 'jul': 'Jul', 'aug': 'Aug',
-                    'sep': 'Sep', 'oct': 'Oct', 'nov': 'Nov', 'dec': 'Dec'
-                }
-                
-                if len(parts) == 3:
-                    month1 = month_map.get(parts[0], parts[0].capitalize())
-                    month2 = month_map.get(parts[1], parts[1].capitalize())
-                    year = parts[2]
-                    return f"{month1} {year} - {month2} {year}"
-                elif len(parts) == 2:
-                    month = month_map.get(parts[0], parts[0].capitalize())
-                    year = parts[1]
-                    return f"{month} {year}"
-                else:
-                    return month_str
-            except Exception as e:
-                return month_str
-        
-        formatted_month_range = format_month_range(month_range)
-        print(f"📅 Formatted month range: {formatted_month_range}")
-        
-        # Get temp data
-        temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
-        
-        if not temp_doc:
-            raise HTTPException(status_code=404, detail="No temporary data found to submit")
-        
-        entries_to_submit = []
-        data_array = temp_doc.get("Data", [])
-        
-        for data_item in data_array:
-            if formatted_month_range in data_item:
-                entries_to_submit = data_item[formatted_month_range]
-                break
-        
-        if not entries_to_submit:
-            raise HTTPException(status_code=404, detail=f"No entries found for {formatted_month_range}")
-        
-        print(f"📦 Found {len(entries_to_submit)} entries to submit")
-        
-        # Get employee details
-        emp = await db["Employee_details"].find_one({"EmpID": employee_code})
-        if not emp:
-            raise HTTPException(status_code=404, detail="Employee details not found")
-        
-        # 🔥🔥🔥 STEP 1: CHECK IF SUBMITTER IS A REPORTING MANAGER 🔥🔥🔥
-        is_reporting_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": employee_code})
-        
-        # Get basic employee details
-        reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
-        reporting_manager_name = emp.get("ReportingEmpName", "")
-        partner_code = emp.get("PartnerEmpCode", "").strip().upper()
-        partner_name = emp.get("Partner", "")
-        
-        # ✅ CALCULATE TOTAL AMOUNT FOR NEW ENTRIES
-        new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
-        
-        # ✅ CHECK IF STATUS DOCUMENT EXISTS AND GET EXISTING TOTAL
-        status_doc = await db["Status"].find_one({"employeeId": employee_code})
-        
-        existing_total = 0
-        month_exists = False
-        existing_month_index = -1
-        
-        if status_doc:
-            approval_status = status_doc.get("approval_status", [])
-            for i, ps in enumerate(approval_status):
-                if ps.get("payroll_month") == formatted_month_range:
-                    existing_total = ps.get("total_amount", 0)
-                    month_exists = True
-                    existing_month_index = i
-                    print(f"📊 Found existing month entry with total: ₹{existing_total}")
-                    break
-        
-        # ✅ CALCULATE CUMULATIVE TOTAL
-        cumulative_total = existing_total + new_entries_amount
-        
-        current_time = datetime.utcnow().isoformat()
-        
-        # 🔥🔥🔥 APPROVAL FLOW LOGIC BASED ON SUBMITTER TYPE 🔥🔥🔥
-        if is_reporting_manager:
-            # 🔥 REPORTING MANAGER SUBMISSION - ALWAYS 2-LEVEL (Partner → HR)
-            print(f"\n{'='*60}")
-            print(f"👔 SUBMITTER IS A REPORTING MANAGER")
-            print(f"   Employee Code: {employee_code}")
-            print(f"   Partner: {partner_code} ({partner_name})")
-            print(f"{'='*60}\n")
-            
-            if not partner_code:
-                raise HTTPException(status_code=400, detail="No Partner assigned to this Reporting Manager")
-            
-            print(f"💰 RM Submission Amount: ₹{cumulative_total}")
-            print(f"📊 Approval Flow: 2-level (Partner → HR) - Amount doesn't matter for RMs")
-            
-            total_levels = 2
-            ope_label = "Reporting_Manager"
-            
-            # ✅ CREATE PAYROLL ENTRY FOR RM SUBMISSION
-            payroll_entry = {
-                "payroll_month": formatted_month_range,
-                "ope_label": ope_label,
-                "submitter_type": "Reporting_Manager",  # 🔥 KEY FIELD
-                "total_levels": total_levels,
-                "limit": 0,  # No limit for RMs
-                "total_amount": cumulative_total,
-                "L1": {
-                    "status": False,
-                    "approver_name": partner_name,
-                    "approver_code": partner_code,
-                    "approved_date": None,
-                    "level_name": "Partner"
-                },
-                "L2": {
-                    "status": False,
-                    "approver_name": "HR",
-                    "approver_code": "JHS729",
-                    "approved_date": None,
-                    "level_name": "HR"
-                },
-                "current_level": "L1",
-                "overall_status": "pending",
-                "submission_date": current_time
-            }
-            
-            # 🔥 ADD TO PENDING UNDER PARTNER (NOT REPORTING MANAGER)
-            pending_approver_code = partner_code
-            
-        else:
-            # 🔥 REGULAR EMPLOYEE SUBMISSION - 2 or 3 LEVEL BASED ON LIMIT
-            print(f"\n{'='*60}")
-            print(f"👤 SUBMITTER IS A REGULAR EMPLOYEE")
-            print(f"   Employee Code: {employee_code}")
-            print(f"   Reporting Manager: {reporting_manager_code} ({reporting_manager_name})")
-            print(f"{'='*60}\n")
-            
-            if not reporting_manager_code:
-                raise HTTPException(status_code=400, detail="No reporting manager assigned")
-            
-            # ✅ GET OPE LIMIT FROM EMPLOYEE DETAILS COLLECTION
-            ope_limit = emp.get("OPE LIMIT")
-            
-            if ope_limit is None:
-                ope_limit = 1500
-                print(f"⚠️ OPE Limit not found in Employee_details, using default: ₹{ope_limit}")
-            else:
-                ope_limit = float(ope_limit)
-                print(f"✅ OPE Limit from Employee_details: ₹{ope_limit}")
-            
-            print(f"\n{'='*60}")
-            print(f"💰 AMOUNT CALCULATION:")
-            print(f"   Previous Total: ₹{existing_total}")
-            print(f"   New Entries: +₹{new_entries_amount}")
-            print(f"   Cumulative Total: ₹{cumulative_total}")
-            print(f"   OPE Limit: ₹{ope_limit}")
-            print(f"{'='*60}\n")
-            
-            # ✅ DYNAMIC APPROVAL LEVELS BASED ON CUMULATIVE TOTAL VS LIMIT
-            if cumulative_total > ope_limit:
-                ope_label = "Greater"
-                total_levels = 3
-                print(f"📊 Cumulative amount (₹{cumulative_total}) EXCEEDS limit (₹{ope_limit}) → 3-level approval required")
-            else:
-                ope_label = "Less"
-                total_levels = 2
-                print(f"📊 Cumulative amount (₹{cumulative_total}) WITHIN limit (₹{ope_limit}) → 2-level approval required")
-            
-            # ✅ CREATE PAYROLL ENTRY FOR EMPLOYEE SUBMISSION
-            payroll_entry = {
-                "payroll_month": formatted_month_range,
-                "ope_label": ope_label,
-                "submitter_type": "Employee",  # 🔥 KEY FIELD
-                "total_levels": total_levels,
-                "limit": ope_limit,
-                "total_amount": cumulative_total,
-                "L1": {
-                    "status": False,
-                    "approver_name": reporting_manager_name,
-                    "approver_code": reporting_manager_code,
-                    "approved_date": None,
-                    "level_name": "Reporting Manager"
-                },
-                "L2": {
-                    "status": False,
-                    "approver_name": "HR" if total_levels == 2 else partner_name,
-                    "approver_code": "JHS729" if total_levels == 2 else partner_code,
-                    "approved_date": None,
-                    "level_name": "HR" if total_levels == 2 else "Partner"
-                },
-                "current_level": "L1",
-                "overall_status": "pending",
-                "submission_date": current_time
-            }
-            
-            # ✅ ADD L3 ONLY IF TOTAL_LEVELS = 3
-            if total_levels == 3:
-                payroll_entry["L3"] = {
-                    "status": False,
-                    "approver_name": "HR",
-                    "approver_code": "JHS729",
-                    "approved_date": None,
-                    "level_name": "HR"
-                }
-                print(f"✅ Added L3 (HR) level for approval")
-            
-            # 🔥 ADD TO PENDING UNDER REPORTING MANAGER
-            pending_approver_code = reporting_manager_code
-        
-        # ✅ CREATE OR UPDATE STATUS DOCUMENT
-        if not status_doc:
-            # ✅ CREATE NEW STATUS DOCUMENT
-            new_status_doc = {
-                "employeeId": employee_code,
-                "employeeName": emp.get("Emp Name", ""),
-                "ReportingEmpCode": reporting_manager_code, 
-                "PartnerEmpCode": partner_code,  
-                "HREmpCode": "JHS729", 
-                "approval_status": [payroll_entry]
-            }
-            result = await db["Status"].insert_one(new_status_doc)
-            status_doc_id = str(result.inserted_id)
-            
-        else:
-            # ✅ UPDATE EXISTING STATUS DOCUMENT
-            status_doc_id = str(status_doc["_id"])
-            
-            if month_exists:
-                # ✅ UPDATE EXISTING MONTH WITH NEW DATA
-                print(f"🔄 Updating existing month entry at index {existing_month_index}")
-                
-                # Build update fields dynamically
-                update_fields = {
-                    f"approval_status.{existing_month_index}.total_amount": cumulative_total,
-                    f"approval_status.{existing_month_index}.ope_label": ope_label,
-                    f"approval_status.{existing_month_index}.total_levels": total_levels,
-                    f"approval_status.{existing_month_index}.submitter_type": payroll_entry["submitter_type"],
-                    f"approval_status.{existing_month_index}.submission_date": current_time
-                }
-                
-                # Add limit only for Employee submissions
-                if is_reporting_manager:
-                    update_fields[f"approval_status.{existing_month_index}.limit"] = 0
-                else:
-                    update_fields[f"approval_status.{existing_month_index}.limit"] = ope_limit
-                
-                # Update L2 and L3 based on total_levels
-                if total_levels == 3:
-                    update_fields[f"approval_status.{existing_month_index}.L3"] = {
-                        "status": False,
-                        "approver_name": "HR",
-                        "approver_code": "JHS729",
-                        "approved_date": None,
-                        "level_name": "HR"
-                    }
-                    update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = partner_name
-                    update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = partner_code
-                    update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "Partner"
-                else:
-                    # For RM or Employee 2-level
-                    if is_reporting_manager:
-                        update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = "HR"
-                        update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = "JHS729"
-                        update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "HR"
-                    else:
-                        update_fields[f"approval_status.{existing_month_index}.L2.approver_name"] = "HR"
-                        update_fields[f"approval_status.{existing_month_index}.L2.approver_code"] = "JHS729"
-                        update_fields[f"approval_status.{existing_month_index}.L2.level_name"] = "HR"
-                
-                await db["Status"].update_one(
-                    {"employeeId": employee_code},
-                    {"$set": update_fields}
-                )
-                
-                print(f"✅ Updated existing payroll month with cumulative total: ₹{cumulative_total}")
-                
-            else:
-                # ✅ ADD NEW PAYROLL MONTH
-                await db["Status"].update_one(
-                    {"employeeId": employee_code},
-                    {"$push": {"approval_status": payroll_entry}}
-                )
-                print(f"✅ Added new payroll month: {formatted_month_range}")
-        
-        # ✅ UPDATE EACH ENTRY WITH STATUS REFERENCE
-        for entry in entries_to_submit:
-            entry["status"] = "pending"
-            entry["submitted_time"] = current_time
-            entry["status_doc_id"] = status_doc_id
-            entry["payroll_month"] = formatted_month_range
-            entry["approved_by"] = None
-            entry["approved_date"] = None
-            entry["rejected_by"] = None
-            entry["rejected_date"] = None
-            entry["rejection_reason"] = None
-        
-        # ✅ Move to OPE_data collection
-        ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
-        
-        if not ope_doc:
-            new_doc = {
-                "employeeId": employee_code,
-                "employeeName": emp.get("Emp Name", ""),
-                "designation": emp.get("Designation Name", ""),
-                "gender": emp.get("Gender", ""),
-                "partner": emp.get("Partner", ""),
-                "reportingManager": emp.get("ReportingEmpName", ""),
-                "department": "",
-                "Data": [
-                    {
-                        formatted_month_range: entries_to_submit
-                    }
-                ]
-            }
-            await db["OPE_data"].insert_one(new_doc)
-            print(f"✅ Created new OPE_data document")
-        else:
-            month_exists_in_ope = False
-            ope_data_array = ope_doc.get("Data", [])
-            
-            for i, data_item in enumerate(ope_data_array):
-                if formatted_month_range in data_item:
-                    for entry in entries_to_submit:
-                        await db["OPE_data"].update_one(
-                            {"employeeId": employee_code},
-                            {"$push": {f"Data.{i}.{formatted_month_range}": entry}}
-                        )
-                    month_exists_in_ope = True
-                    print(f"✅ Appended to existing month in OPE_data")
-                    break
-            
-            if not month_exists_in_ope:
-                await db["OPE_data"].update_one(
-                    {"employeeId": employee_code},
-                    {"$push": {"Data": {formatted_month_range: entries_to_submit}}}
-                )
-                print(f"✅ Added new month range to OPE_data")
-        
-        # 🔥🔥🔥 ADD TO PENDING COLLECTION - DYNAMIC BASED ON SUBMITTER TYPE 🔥🔥🔥
-        pending_doc = await db["Pending"].find_one({"ReportingEmpCode": pending_approver_code})
-        
-        if not pending_doc:
-            await db["Pending"].insert_one({
-                "ReportingEmpCode": pending_approver_code,
-                "EmployeesCodes": [employee_code]
-            })
-            print(f"✅ Created NEW Pending document for approver {pending_approver_code}")
-        else:
-            if employee_code not in pending_doc.get("EmployeesCodes", []):
-                await db["Pending"].update_one(
-                    {"ReportingEmpCode": pending_approver_code},
-                    {"$addToSet": {"EmployeesCodes": employee_code}}
-                )
-                print(f"✅ Added employee to Pending list under {pending_approver_code}")
-        
-        # ✅ Delete from Temp_OPE_data
-        temp_data_array = temp_doc.get("Data", [])
-        
-        for i, data_item in enumerate(temp_data_array):
-            if formatted_month_range in data_item:
-                await db["Temp_OPE_data"].update_one(
-                    {"employeeId": employee_code},
-                    {"$pull": {"Data": {formatted_month_range: {"$exists": True}}}}
-                )
-                print(f"✅ Removed from Temp_OPE_data")
-                break
-        
-        # If no more temp data, delete document
-        updated_temp = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
-        if updated_temp and len(updated_temp.get("Data", [])) == 0:
-            await db["Temp_OPE_data"].delete_one({"employeeId": employee_code})
-            print(f"✅ Deleted empty Temp_OPE_data document")
-        
-        print(f"\n{'='*60}")
-        print(f"✅✅ SUBMISSION COMPLETE ✅✅")
-        print(f"   Submitter Type: {'REPORTING MANAGER' if is_reporting_manager else 'EMPLOYEE'}")
-        print(f"   Employee: {employee_code}")
-        print(f"   Previous Total: ₹{existing_total}")
-        print(f"   New Entries: +₹{new_entries_amount}")
-        print(f"   Cumulative Total: ₹{cumulative_total}")
-        print(f"   Approval Levels: {total_levels}")
-        print(f"   First Approver: {pending_approver_code}")
-        print(f"{'='*60}\n")
-        
-        return {
-            "message": "Entries submitted successfully for approval",
-            "submitted_count": len(entries_to_submit),
-            "month_range": formatted_month_range,
-            "submitter_type": "Reporting_Manager" if is_reporting_manager else "Employee",
-            "first_approver": pending_approver_code,
-            "previous_total": existing_total,
-            "new_entries_amount": new_entries_amount,
-            "total_amount": cumulative_total,
-            "ope_limit": 0 if is_reporting_manager else ope_limit,
-            "ope_label": ope_label,
-            "total_levels": total_levels,
-            "status": "pending_approval"
-        }
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"❌ Error submitting final: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/ope/partner/reject-single")
 async def partner_reject_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Partner rejects a single approved entry
-    Moves from Approved → Rejected
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         
@@ -5983,16 +4437,12 @@ async def partner_reject_single_entry(
         print(f"Reason: {reason}")
         print(f"{'='*60}\n")
         
-        # Verify partner
         partner = await db["Partner"].find_one({"PartnerEmpCode": partner_emp_code})
         if not partner:
             raise HTTPException(status_code=403, detail="You are not a Partner")
         
         partner_name = partner.get("Partner_Name", partner_emp_code)
         
-        # ============================================
-        # ✅ GET OPE_data DOCUMENT (NESTED STRUCTURE)
-        # ============================================
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         
         if not ope_doc:
@@ -6003,10 +4453,6 @@ async def partner_reject_single_entry(
         current_time = datetime.utcnow().isoformat()
         payroll_month = None
         
-        # ============================================
-        # ✅ FIND AND REJECT THE ENTRY (NESTED)
-        # ============================================
-        
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
@@ -6015,7 +4461,6 @@ async def partner_reject_single_entry(
                         
                         print(f"✅ Found entry: Data.{i}.{month_range}.{j}")
                         
-                        # ✅ UPDATE ENTRY TO REJECTED
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
@@ -6025,7 +4470,6 @@ async def partner_reject_single_entry(
                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.rejection_reason": reason,
                                 f"Data.{i}.{month_range}.{j}.rejected_level": "L2",
-                                # Clear approval data
                                 f"Data.{i}.{month_range}.{j}.partner_approved": False,
                                 f"Data.{i}.{month_range}.{j}.partner_approved_by": None,
                                 f"Data.{i}.{month_range}.{j}.partner_approved_date": None
@@ -6040,10 +4484,6 @@ async def partner_reject_single_entry(
         
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found or not approved")
-        
-        # ============================================
-        # ✅ CHECK IF ALL ENTRIES REJECTED
-        # ============================================
         
         all_rejected = True
         any_approved = False
@@ -6061,10 +4501,6 @@ async def partner_reject_single_entry(
         print(f"\n📊 Status check:")
         print(f"   Any approved remaining: {any_approved}")
         print(f"   All rejected: {all_rejected}")
-        
-        # ============================================
-        # ✅ UPDATE STATUS COLLECTION IF ALL REJECTED
-        # ============================================
         
         if all_rejected and payroll_month:
             print(f"🔄 All entries rejected - updating Status")
@@ -6084,7 +4520,6 @@ async def partner_reject_single_entry(
                         submitter_type = approval_status.get("submitter_type", "Employee")
                         total_levels = approval_status.get("total_levels", 2)
                         
-                        # Determine which level to mark as rejected
                         if submitter_type == "Reporting_Manager":
                             level_key = "L1"
                         elif total_levels == 3:
@@ -6106,21 +4541,15 @@ async def partner_reject_single_entry(
                         print(f"✅ Status updated: {level_key} rejected")
                         break
         
-        # ============================================
-        # ✅ MOVE FROM APPROVED TO REJECTED
-        # ============================================
-        
         if all_rejected:
             print(f"🔄 Moving employee: Approved → Rejected")
             
-            # Remove from Approved
             await db["Partner_Approved"].update_one(
                 {"PartnerEmpCode": partner_emp_code},
                 {"$pull": {"EmployeesCodes": employee_id}}
             )
             print(f"✅ Removed from Partner_Approved")
             
-            # Add to Rejected
             partner_rejected_doc = await db["Partner_Rejected"].find_one(
                 {"PartnerEmpCode": partner_emp_code}
             )
@@ -6155,20 +4584,11 @@ async def partner_reject_single_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================
-# ✅ PARTNER APPROVE SINGLE ENTRY (FROM REJECTED)
-# Add to main.py
-# ============================================
-
 @app.post("/api/ope/partner/approve-single")
 async def partner_approve_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
 ):
-    """
-    Partner approves a single rejected entry
-    Moves from Rejected → Approved
-    """
     try:
         partner_emp_code = current_user["employee_code"].strip().upper()
         
@@ -6183,16 +4603,12 @@ async def partner_approve_single_entry(
         print(f"Entry ID: {entry_id}")
         print(f"{'='*60}\n")
         
-        # Verify partner
         partner = await db["Partner"].find_one({"PartnerEmpCode": partner_emp_code})
         if not partner:
             raise HTTPException(status_code=403, detail="You are not a Partner")
         
         partner_name = partner.get("Partner_Name", partner_emp_code)
         
-        # ============================================
-        # ✅ GET OPE_data DOCUMENT (NESTED STRUCTURE)
-        # ============================================
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         
         if not ope_doc:
@@ -6203,10 +4619,6 @@ async def partner_approve_single_entry(
         current_time = datetime.utcnow().isoformat()
         payroll_month = None
         
-        # ============================================
-        # ✅ FIND AND APPROVE THE ENTRY (NESTED)
-        # ============================================
-        
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
@@ -6215,7 +4627,6 @@ async def partner_approve_single_entry(
                         
                         print(f"✅ Found entry: Data.{i}.{month_range}.{j}")
                         
-                        # ✅ UPDATE ENTRY TO APPROVED
                         await db["OPE_data"].update_one(
                             {"employeeId": employee_id},
                             {"$set": {
@@ -6224,7 +4635,6 @@ async def partner_approve_single_entry(
                                 f"Data.{i}.{month_range}.{j}.partner_approved_by": partner_emp_code,
                                 f"Data.{i}.{month_range}.{j}.partner_approved_date": current_time,
                                 f"Data.{i}.{month_range}.{j}.partner_name": partner_name,
-                                # Clear rejection data
                                 f"Data.{i}.{month_range}.{j}.rejected_by": None,
                                 f"Data.{i}.{month_range}.{j}.rejector_name": None,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": None,
@@ -6242,10 +4652,6 @@ async def partner_approve_single_entry(
         if not updated:
             raise HTTPException(status_code=404, detail="Entry not found or not rejected")
         
-        # ============================================
-        # ✅ CHECK IF NO MORE REJECTED ENTRIES
-        # ============================================
-        
         no_rejected = True
         any_rejected = False
         
@@ -6262,10 +4668,6 @@ async def partner_approve_single_entry(
         print(f"\n📊 Status check:")
         print(f"   Any rejected remaining: {any_rejected}")
         print(f"   No rejected: {no_rejected}")
-        
-        # ============================================
-        # ✅ UPDATE STATUS COLLECTION IF NO REJECTED
-        # ============================================
         
         if no_rejected and payroll_month:
             print(f"🔄 No rejected entries - updating Status")
@@ -6285,7 +4687,6 @@ async def partner_approve_single_entry(
                         submitter_type = approval_status.get("submitter_type", "Employee")
                         total_levels = approval_status.get("total_levels", 2)
                         
-                        # Determine which level to mark as approved
                         if submitter_type == "Reporting_Manager":
                             level_key = "L1"
                             next_level = "L2"
@@ -6314,21 +4715,15 @@ async def partner_approve_single_entry(
                         print(f"✅ Status updated: {level_key} approved → {next_level} pending")
                         break
         
-        # ============================================
-        # ✅ MOVE FROM REJECTED TO APPROVED
-        # ============================================
-        
         if no_rejected:
             print(f"🔄 Moving employee: Rejected → Approved")
             
-            # Remove from Rejected
             await db["Partner_Rejected"].update_one(
                 {"PartnerEmpCode": partner_emp_code},
                 {"$pull": {"EmployeesCodes": employee_id}}
             )
             print(f"✅ Removed from Partner_Rejected")
             
-            # Add to Approved
             partner_approved_doc = await db["Partner_Approved"].find_one(
                 {"PartnerEmpCode": partner_emp_code}
             )
@@ -6363,27 +4758,1057 @@ async def partner_approve_single_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/check-admin/{employee_code}")
-async def check_admin(employee_code: str, token: str = Depends(get_current_user)):
+async def check_admin(employee_code: str, current_user=Depends(get_current_user)):
     """
     Check if an employee is admin
     Returns: { "isAdmin": true/false }
     """
     try:
-        # Verify token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        
-        # Get admin collection
         admin_collection = db["Admin"]
-        admin_doc = admin_collection.find_one({})
+        admin_doc = await admin_collection.find_one({})
+        print(admin_doc)
         
         if not admin_doc:
             return {"isAdmin": False}
         
-        # Check if employee code is in admin list
         is_admin = employee_code.upper() in [code.upper() for code in admin_doc.get("employee_codes", [])]
-        
+        print(f"Is admin: {is_admin}")
         return {"isAdmin": is_admin}
         
     except Exception as e:
         print(f"Error checking admin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# ADMIN APIs - Add these to the END of main.py (before the static mount)
+# ============================================================
+
+from fastapi import Query
+from fastapi.responses import StreamingResponse
+import io
+from collections import defaultdict
+
+# Try to import openpyxl; install if missing
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    import subprocess
+    subprocess.run(["pip", "install", "openpyxl", "--break-system-packages"], capture_output=True)
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+
+# ── Helper: verify admin ──────────────────────────────────────
+async def verify_admin(current_user: dict):
+    emp_code = current_user["employee_code"].strip().upper()
+    admin_collection = db["Admin"]
+    admin_doc = await admin_collection.find_one({})
+    if not admin_doc:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    codes = [c.upper() for c in admin_doc.get("employee_codes", [])]
+    if emp_code not in codes:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return emp_code
+
+
+# ── Helper: get all OPE entries (flat list) ───────────────────
+async def get_all_ope_entries(payroll_month: str = None):
+    """
+    Returns list of dicts with employee + entry info flattened.
+    Optionally filter by payroll_month.
+    """
+    entries = []
+    status_docs = await db["Status"].find({}).to_list(length=None)
+
+    # Build a lookup: employeeId -> list of payroll months
+    emp_months = {}
+    for sdoc in status_docs:
+        eid = sdoc.get("employeeId")
+        emp_name = sdoc.get("employeeName", "")
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range")
+            if payroll_month and pm != payroll_month:
+                continue
+            emp_months.setdefault(eid, []).append({
+                "payroll_month": pm,
+                "total_amount": ps.get("total_amount", 0),
+                "limit": ps.get("limit", 0),
+                "overall_status": ps.get("overall_status", "pending"),
+                "current_level": ps.get("current_level", "L1"),
+                "total_levels": ps.get("total_levels", 2),
+                "employee_name": emp_name,
+            })
+
+    # Fetch OPE_data for each employee
+    all_ope = await db["OPE_data"].find({}).to_list(length=None)
+    ope_map = {doc.get("employeeId"): doc for doc in all_ope}
+
+    for emp_id, month_list in emp_months.items():
+        ope_doc = ope_map.get(emp_id)
+        for month_info in month_list:
+            pm = month_info["payroll_month"]
+            raw_entries = []
+            if ope_doc:
+                for data_item in ope_doc.get("Data", []):
+                    if pm in data_item:
+                        raw_entries = data_item[pm]
+                        break
+
+            for e in raw_entries:
+                entries.append({
+                    "employee_id": emp_id,
+                    "employee_name": month_info["employee_name"] or ope_doc.get("employeeName", ""),
+                    "payroll_month": pm,
+                    "total_amount": month_info["total_amount"],
+                    "limit": month_info["limit"],
+                    "overall_status": month_info["overall_status"],
+                    "current_level": month_info["current_level"],
+                    "total_levels": month_info["total_levels"],
+                    # entry fields
+                    "date": e.get("date"),
+                    "client": e.get("client", ""),
+                    "project_id": e.get("project_id", ""),
+                    "project_name": e.get("project_name", ""),
+                    "project_type": e.get("project_type", ""),
+                    "location_from": e.get("location_from", ""),
+                    "location_to": e.get("location_to", ""),
+                    "travel_mode": e.get("travel_mode", ""),
+                    "amount": safe_float(e.get("amount", 0)),
+                    "remarks": e.get("remarks", ""),
+                    "status": e.get("status", ""),
+                })
+    return entries
+
+
+# ── 1. ADMIN DASHBOARD ────────────────────────────────────────
+@app.get("/api/admin/dashboard")
+async def admin_dashboard(
+    payroll_month: str = Query(None),
+    emp_name: str = Query(None),
+    emp_id: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    # --- All status docs for KPI ---
+    all_status = await db["Status"].find({}).to_list(length=None)
+
+    # Build flat records for table & charts
+    table_rows = []
+    partner_totals = defaultdict(float)
+    payroll_totals = defaultdict(float)
+    all_months = set()
+    total_employees_set = set()
+    total_amount_all = 0.0
+    amount_greater_count = 0
+
+    # Employee details lookup for partner info
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+
+    for sdoc in all_status:
+        emp_id_val = sdoc.get("employeeId", "")
+        emp_name_val = sdoc.get("employeeName", "")
+        partner = emp_partner_map.get(emp_id_val, "Unknown")
+
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range", "")
+            if not pm:
+                continue
+            all_months.add(pm)
+
+            total_amt = safe_float(ps.get("total_amount", 0))
+            limit_val = safe_float(ps.get("limit", 0))
+            ope_label = ps.get("ope_label", "")
+            overall_st = ps.get("overall_status", "pending")
+            curr_level = ps.get("current_level", "L1")
+
+            # Apply filters
+            if payroll_month and pm != payroll_month:
+                continue
+            if emp_name and emp_name.lower() not in emp_name_val.lower():
+                continue
+            if emp_id and emp_id.upper() not in emp_id_val.upper():
+                continue
+
+            total_employees_set.add(emp_id_val)
+            total_amount_all += total_amt
+            partner_totals[partner] += total_amt
+            payroll_totals[pm] += total_amt
+
+            if ope_label == "Greater" or (limit_val > 0 and total_amt > limit_val):
+                amount_greater_count += 1
+
+            table_rows.append({
+                "employee_id": emp_id_val,
+                "employee_name": emp_name_val,
+                "payroll_month": pm,
+                "total_amount": total_amt,
+                "limit": limit_val,
+                "overall_status": overall_st,
+                "current_level": curr_level,
+                "ope_label": ope_label,
+            })
+
+    # Payroll diff (compare last 2 months)
+    sorted_months = sorted(payroll_totals.keys())
+    payroll_diff = {}
+    if len(sorted_months) >= 2:
+        prev_month = sorted_months[-2]
+        curr_month = sorted_months[-1]
+        prev_total = payroll_totals[prev_month]
+        curr_total = payroll_totals[curr_month]
+        diff = abs(curr_total - prev_total)
+        direction = "up" if curr_total > prev_total else ("down" if curr_total < prev_total else "same")
+        payroll_diff = {
+            "current_month": curr_month,
+            "previous_month": prev_month,
+            "difference": round(diff, 2),
+            "direction": direction,
+        }
+
+    # Top 10 client chart — from OPE_data
+    client_totals = defaultdict(float)
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    for odoc in all_ope_docs:
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    client_totals[e.get("client", "Unknown")] += safe_float(e.get("amount", 0))
+
+    top10_clients = sorted(client_totals.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return {
+        "kpis": {
+            "total_employees": len(total_employees_set),
+            "total_amount": round(total_amount_all, 2),
+            "total_amount_greater": amount_greater_count,
+            "payroll_diff": payroll_diff,
+        },
+        "charts": {
+            "partner_wise": [{"_id": k, "total": round(v, 2)} for k, v in sorted(partner_totals.items(), key=lambda x: x[1], reverse=True)],
+            "payroll_wise": [{"_id": k, "total": round(v, 2)} for k, v in sorted(payroll_totals.items())],
+            "client_wise": [{"_id": k, "total": round(v, 2)} for k, v in top10_clients],
+        },
+        "table": table_rows,
+        "all_payroll_months": sorted(all_months),
+    }
+
+
+# ── 2. CLIENT-WISE ANALYSIS ───────────────────────────────────
+@app.get("/api/admin/client-analysis")
+async def admin_client_analysis(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Per-client deep analysis:
+    - How many employees claiming per client (payroll-month wise)
+    - Amount difference between employees for same client (descending)
+    - Flag: if one employee uses 'pass' and another uses 'ticket' for same client
+    """
+    await verify_admin(current_user)
+
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+
+    # client -> { payroll_month -> { employee_id -> {amount, travel_modes, entries} } }
+    client_data = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {
+        "amount": 0.0, "travel_modes": set(), "entries": []
+    })))
+
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    client = e.get("client", "Unknown") or "Unknown"
+                    mode = (e.get("travel_mode") or "").lower()
+                    amt = safe_float(e.get("amount", 0))
+
+                    cd = client_data[client][pm_key][emp_id]
+                    cd["amount"] += amt
+                    cd["travel_modes"].add(mode)
+                    cd["emp_name"] = emp_name
+                    cd["entries"].append({
+                        "date": e.get("date"),
+                        "travel_mode": e.get("travel_mode"),
+                        "amount": amt,
+                        "project_id": e.get("project_id"),
+                        "project_name": e.get("project_name"),
+                    })
+
+    # Build result
+    pass_keywords = {"pass", "metro_pass", "bus_pass", "train_pass 1st", "train_pass 2nd"}
+    ticket_keywords = {"ticket", "metro_tickets", "bus_ticket", "train_ticket"}
+
+    result = []
+
+    for client_name, months in client_data.items():
+        client_summary = {
+            "client": client_name,
+            "payroll_months": [],
+            "total_employees": 0,
+            "total_amount": 0.0,
+        }
+        
+        # Track unique employees across all months for this client
+        unique_employees = set()
+
+        for pm, emps in months.items():
+            emp_list = []
+            pm_total = 0.0
+            has_pass_users = []
+            has_ticket_users = []
+
+            for eid, info in emps.items():
+                unique_employees.add(eid)
+                emp_amt = round(safe_float(info["amount"]), 2)
+                pm_total += emp_amt
+                modes = info["travel_modes"]
+
+                uses_pass = bool(modes & pass_keywords)
+                uses_ticket = bool(modes & ticket_keywords)
+
+                emp_list.append({
+                    "employee_id": eid,
+                    "employee_name": info.get("emp_name", ""),
+                    "amount": emp_amt,
+                    "travel_modes": list(modes),
+                    "uses_pass": uses_pass,
+                    "uses_ticket": uses_ticket,
+                    "entry_count": len(info["entries"]),
+                })
+
+                if uses_pass:
+                    has_pass_users.append(eid)
+                if uses_ticket:
+                    has_ticket_users.append(eid)
+
+            # Sort employees by amount descending
+            emp_list.sort(key=lambda x: x["amount"], reverse=True)
+
+            # Amount difference analysis
+            if len(emp_list) >= 2:
+                max_amt = emp_list[0]["amount"]
+                min_amt = emp_list[-1]["amount"]
+                amount_spread = round(safe_float(max_amt - min_amt), 2)
+
+            else:
+                amount_spread = 0.0
+
+            # Pass vs ticket conflict
+            pass_ticket_conflict = bool(has_pass_users and has_ticket_users)
+            conflicting_pass_emps = [e for e in emp_list if e["uses_pass"]]
+            conflicting_ticket_emps = [e for e in emp_list if e["uses_ticket"]]
+
+            client_summary["payroll_months"].append({
+                "payroll_month": pm,
+                "employee_count": len(emp_list),
+                "total_amount": round(pm_total, 2),
+                "amount_spread": amount_spread,
+                "employees": emp_list,
+                "pass_ticket_conflict": pass_ticket_conflict,
+                "pass_users": conflicting_pass_emps,
+                "ticket_users": conflicting_ticket_emps,
+            })
+
+            client_summary["total_amount"] += pm_total
+
+        # Set total employees to unique count
+        client_summary["total_employees"] = len(unique_employees)
+
+        client_summary["total_amount"] = round(client_summary["total_amount"], 2)
+        result.append(client_summary)
+
+    # Sort clients by total amount descending
+    result.sort(key=lambda x: x["total_amount"], reverse=True)
+
+    return {"clients": result, "total_clients": len(result)}
+
+
+# ── 3. EXCEL EXPORT: CLIENT-WISE ─────────────────────────────
+@app.get("/api/admin/export/client-wise")
+async def export_client_excel(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    all_status = await db["Status"].find({}).to_list(length=None)
+
+    # Build employee → partner map
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+
+    rows = []
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        partner = emp_partner_map.get(emp_id, "Unknown")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    rows.append({
+                        "Employee ID": emp_id,
+                        "Employee Name": emp_name,
+                        "Partner": partner,
+                        "Payroll Month": pm_key,
+                        "Client": e.get("client", ""),
+                        "Project ID": e.get("project_id", ""),
+                        "Project Name": e.get("project_name", ""),
+                        "Project Type": e.get("project_type", ""),
+                        "Date": e.get("date", ""),
+                        "Travel From": e.get("location_from", ""),
+                        "Travel To": e.get("location_to", ""),
+                        "Travel Mode": e.get("travel_mode", ""),
+                        "Amount (₹)": safe_float(e.get("amount", 0)),
+                        "Remarks": e.get("remarks", ""),
+                        "Status": e.get("status", ""),
+                    })
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Client Wise Claims"
+
+    header_fill = PatternFill("solid", fgColor="1E3A5F")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    alt_fill = PatternFill("solid", fgColor="EBF3FF")
+    border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+
+    if rows:
+        headers = list(rows[0].keys())
+        for ci, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=ci, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+
+        for ri, row in enumerate(rows, 2):
+            fill = alt_fill if ri % 2 == 0 else PatternFill("solid", fgColor="FFFFFF")
+            for ci, key in enumerate(headers, 1):
+                cell = ws.cell(row=ri, column=ci, value=row[key])
+                cell.fill = fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border
+
+        # Auto-width
+        for ci, h in enumerate(headers, 1):
+            col_letter = get_column_letter(ci)
+            max_len = max(len(str(h)), max((len(str(r[h])) for r in rows), default=0))
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+        ws.row_dimensions[1].height = 30
+        ws.freeze_panes = "A2"
+    else:
+        ws["A1"] = "No data found"
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"client_wise_claims{'_' + payroll_month if payroll_month else ''}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ── 4. EXCEL EXPORT: PARTNER-WISE ────────────────────────────
+@app.get("/api/admin/export/partner-wise")
+async def export_partner_excel(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    all_status = await db["Status"].find({}).to_list(length=None)
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+    emp_name_map = {e.get("EmpID", ""): e.get("Emp Name", "") for e in emp_details_list}
+
+    rows = []
+    for sdoc in all_status:
+        emp_id = sdoc.get("employeeId", "")
+        emp_name = sdoc.get("employeeName", "") or emp_name_map.get(emp_id, "")
+        partner = emp_partner_map.get(emp_id, "Unknown")
+
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range", "")
+            if payroll_month and pm != payroll_month:
+                continue
+            rows.append({
+                "Partner": partner,
+                "Employee ID": emp_id,
+                "Employee Name": emp_name,
+                "Payroll Month": pm,
+                "Total Amount (₹)": safe_float(ps.get("total_amount", 0)),
+"OPE Limit (₹)": safe_float(ps.get("limit", 0)),
+                "OPE Label": ps.get("ope_label", ""),
+                "Overall Status": ps.get("overall_status", ""),
+                "Current Level": ps.get("current_level", ""),
+                "Total Levels": ps.get("total_levels", ""),
+            })
+
+    rows.sort(key=lambda x: (x["Partner"], x["Employee ID"]))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Partner Wise Claims"
+
+    header_fill = PatternFill("solid", fgColor="1E3A5F")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+
+    # Group by partner for coloring
+    partner_colors = {}
+    color_list = ["EBF3FF", "FFF3E0", "E8F5E9", "FCE4EC", "F3E5F5", "E0F7FA"]
+    for i, r in enumerate(rows):
+        p = r["Partner"]
+        if p not in partner_colors:
+            partner_colors[p] = color_list[len(partner_colors) % len(color_list)]
+
+    if rows:
+        headers = list(rows[0].keys())
+        for ci, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=ci, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+
+        for ri, row in enumerate(rows, 2):
+            color = partner_colors.get(row["Partner"], "FFFFFF")
+            fill = PatternFill("solid", fgColor=color)
+            for ci, key in enumerate(headers, 1):
+                cell = ws.cell(row=ri, column=ci, value=row[key])
+                cell.fill = fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border
+
+        for ci, h in enumerate(headers, 1):
+            col_letter = get_column_letter(ci)
+            max_len = max(len(str(h)), max((len(str(r[h])) for r in rows), default=0))
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+        ws.row_dimensions[1].height = 30
+        ws.freeze_panes = "A2"
+    else:
+        ws["A1"] = "No data found"
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"partner_wise_claims{'_' + payroll_month if payroll_month else ''}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ── 5. DUPLICATE LOCATION TRAVEL CLAIMS DETECTION ───────────────
+@app.get("/api/admin/analysis/duplicate-locations")
+async def detect_duplicate_location_claims(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Detect duplicate location travel claims and short/excess amounts.
+    Groups claims by location_from + location_to and identifies:
+    - Duplicate claims (same route by same employee)
+    - Amount variations (short/excess compared to average)
+    """
+    await verify_admin(current_user)
+    
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    
+    # location_key -> list of claims
+    location_claims = defaultdict(list)
+    
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    loc_from = (e.get("location_from") or "").strip().lower()
+                    loc_to = (e.get("location_to") or "").strip().lower()
+                    if loc_from and loc_to:
+                        location_key = f"{loc_from}->{loc_to}"
+                        location_claims[location_key].append({
+                            "employee_id": emp_id,
+                            "employee_name": emp_name,
+                            "payroll_month": pm_key,
+                            "date": e.get("date"),
+                            "travel_mode": e.get("travel_mode"),
+                            "amount": safe_float(e.get("amount", 0)),
+                            "client": e.get("client"),
+                            "project_name": e.get("project_name"),
+                            "entry_id": str(e.get("_id", ""))
+                        })
+    
+    # Analyze each location for duplicates and amount variations
+    result = []
+    for location_key, claims in location_claims.items():
+        if len(claims) < 2:
+            continue  # Skip if only one claim for this route
+        
+        # Group by employee to find duplicates
+        emp_claims = defaultdict(list)
+        for claim in claims:
+            emp_claims[claim["employee_id"]].append(claim)
+        
+        # Find duplicates (same employee claiming same route multiple times)
+        duplicates = []
+        for emp_id, emp_claim_list in emp_claims.items():
+            if len(emp_claim_list) > 1:
+                duplicates.extend(emp_claim_list)
+        
+        # Calculate amount statistics
+        amounts = [c["amount"] for c in claims]
+        avg_amount = sum(amounts) / len(amounts) if amounts else 0
+        min_amount = min(amounts) if amounts else 0
+        max_amount = max(amounts) if amounts else 0
+        
+        # Identify short/excess claims
+        short_claims = [c for c in claims if c["amount"] < avg_amount * 0.8]
+        excess_claims = [c for c in claims if c["amount"] > avg_amount * 1.2]
+        
+        result.append({
+            "location_route": location_key,
+            "total_claims": len(claims),
+            "unique_employees": len(emp_claims),
+            "duplicate_claims": len(duplicates),
+            "duplicate_details": duplicates,
+            "amount_stats": {
+                "average": round(avg_amount, 2),
+                "minimum": round(min_amount, 2),
+                "maximum": round(max_amount, 2),
+                "spread": round(max_amount - min_amount, 2)
+            },
+            "short_claims": short_claims,
+            "excess_claims": excess_claims,
+            "all_claims": claims
+        })
+    
+    # Sort by duplicate count descending
+    result.sort(key=lambda x: x["duplicate_claims"], reverse=True)
+    
+    return {
+        "location_analysis": result,
+        "total_locations_analyzed": len(result),
+        "total_duplicate_claims": sum(r["duplicate_claims"] for r in result)
+    }
+
+
+# ── 6. BACKDATED OPE CLAIMS ANALYSIS ────────────────────────────
+@app.get("/api/admin/analysis/backdated-claims")
+async def analyze_backdated_claims(
+    days_threshold: int = Query(30, description="Days after payroll month to consider as backdated"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Analyze all backdated OPE claims.
+    Identifies claims submitted after the payroll month end date + threshold days.
+    """
+    await verify_admin(current_user)
+    
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    backdated_claims = []
+    
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                # Parse payroll month (format: "Dec 2025 - Jan 2026" or "Jan 2026")
+                try:
+                    # Extract the end month from payroll month range
+                    if "-" in pm_key:
+                        parts = pm_key.split("-")
+                        end_month_str = parts[-1].strip()
+                    else:
+                        end_month_str = pm_key.strip()
+                    
+                    # Parse the month year (e.g., "Jan 2026")
+                    month_year = end_month_str.split()
+                    if len(month_year) >= 2:
+                        month_name = month_year[0]
+                        year = int(month_year[1])
+                        
+                        # Map month names to numbers
+                        month_map = {
+                            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
+                        }
+                        month_num = month_map.get(month_name.lower(), 1)
+                        
+                        # Calculate end of payroll month (last day of the month)
+                        last_day = calendar.monthrange(year, month_num)[1]
+                        payroll_end_date = datetime(year, month_num, last_day)
+                        threshold_date = payroll_end_date + timedelta(days=days_threshold)
+                    else:
+                        continue
+                except Exception as e:
+                    print(f"Error parsing payroll month {pm_key}: {e}")
+                    continue
+                
+                for e in elist:
+                    submission_date = e.get("submission_date") or e.get("created_time")
+                    if submission_date:
+                        if isinstance(submission_date, str):
+                            try:
+                                submission_date = datetime.fromisoformat(submission_date.replace('Z', '+00:00'))
+                            except:
+                                continue
+                        elif isinstance(submission_date, datetime):
+                            pass
+                        else:
+                            continue
+                        
+                        # Check if submission is after threshold
+                        if submission_date > threshold_date:
+                            backdated_claims.append({
+                                "employee_id": emp_id,
+                                "employee_name": emp_name,
+                                "payroll_month": pm_key,
+                                "payroll_end_date": payroll_end_date.isoformat(),
+                                "threshold_date": threshold_date.isoformat(),
+                                "submission_date": submission_date.isoformat(),
+                                "days_late": (submission_date - threshold_date).days,
+                                "date": e.get("date"),
+                                "client": e.get("client"),
+                                "project_name": e.get("project_name"),
+                                "amount": safe_float(e.get("amount", 0)),
+                                "travel_mode": e.get("travel_mode"),
+                                "location_from": e.get("location_from"),
+                                "location_to": e.get("location_to")
+                            })
+    
+    # Sort by days late descending
+    backdated_claims.sort(key=lambda x: x["days_late"], reverse=True)
+    
+    return {
+        "backdated_claims": backdated_claims,
+        "total_backdated_claims": len(backdated_claims),
+        "threshold_days": days_threshold
+    }
+
+
+# ── 7. PROJECT-WISE CONSOLIDATED OPE REPORTS ─────────────────────
+@app.get("/api/admin/analysis/project-wise")
+async def project_wise_consolidated_reports(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate project-wise and monthly consolidated OPE reports.
+    Aggregates data by project and shows monthly breakdowns.
+    """
+    await verify_admin(current_user)
+    
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    
+    # project -> { payroll_month -> { employee_id -> amount } }
+    project_data = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    project_details = {}
+    
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    project_id = e.get("project_id", "Unknown")
+                    project_name = e.get("project_name", "Unknown")
+                    project_type = e.get("project_type", "Unknown")
+                    client = e.get("client", "Unknown")
+                    amt = safe_float(e.get("amount", 0))
+                    
+                    project_data[project_id][pm_key][emp_id] += amt
+                    
+                    # Store project details
+                    if project_id not in project_details:
+                        project_details[project_id] = {
+                            "project_id": project_id,
+                            "project_name": project_name,
+                            "project_type": project_type,
+                            "client": client
+                        }
+    
+    # Build consolidated report
+    result = []
+    for project_id, months in project_data.items():
+        project_summary = {
+            **project_details[project_id],
+            "payroll_months": [],
+            "total_employees": 0,
+            "total_amount": 0.0
+        }
+        
+        unique_employees = set()
+        
+        for pm, emps in months.items():
+            pm_total = sum(emps.values())
+            unique_employees.update(emps.keys())
+            
+            project_summary["payroll_months"].append({
+                "payroll_month": pm,
+                "employee_count": len(emps),
+                "total_amount": round(pm_total, 2),
+                "employees": [{"employee_id": eid, "amount": round(amt, 2)} for eid, amt in emps.items()]
+            })
+            
+            project_summary["total_amount"] += pm_total
+        
+        project_summary["total_employees"] = len(unique_employees)
+        project_summary["total_amount"] = round(project_summary["total_amount"], 2)
+        result.append(project_summary)
+    
+    # Sort by total amount descending
+    result.sort(key=lambda x: x["total_amount"], reverse=True)
+    
+    return {
+        "projects": result,
+        "total_projects": len(result)
+    }
+
+
+# ── 8. PROJECT-WISE ANALYSIS FOR EACH CLIENT ─────────────────────
+@app.get("/api/admin/analysis/client-project-wise")
+async def client_project_wise_analysis(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Project-wise analysis for each client.
+    Shows which projects are more/less profitable within each client,
+    and relates to employee count.
+    """
+    await verify_admin(current_user)
+    
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    
+    # client -> project -> { payroll_month -> { employee_id -> amount } }
+    client_project_data = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))))
+    project_details = {}
+    
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    client = e.get("client", "Unknown")
+                    project_id = e.get("project_id", "Unknown")
+                    project_name = e.get("project_name", "Unknown")
+                    project_type = e.get("project_type", "Unknown")
+                    amt = safe_float(e.get("amount", 0))
+                    
+                    client_project_data[client][project_id][pm_key][emp_id] += amt
+                    
+                    # Store project details
+                    key = f"{client}_{project_id}"
+                    if key not in project_details:
+                        project_details[key] = {
+                            "project_id": project_id,
+                            "project_name": project_name,
+                            "project_type": project_type,
+                            "client": client
+                        }
+    
+    # Build analysis result
+    result = []
+    
+    # REPLACE this block (around line with "for client, projects in client_project_data.items():")
+    for client, projects in client_project_data.items():
+        client_summary = {
+            "client": client,
+            "projects": [],
+            "total_employees": 0,
+            "total_amount": 0.0,
+            "most_profitable_project": None,
+            "least_profitable_project": None
+        }
+        
+        client_unique_employees = set()
+        project_summaries = []
+        
+        for project_id, months in projects.items():
+            key = f"{client}_{project_id}"
+            project_summary = {
+                **project_details[key],
+                "payroll_months": [],
+                "total_employees": 0,
+                "total_amount": 0.0,
+                "avg_amount_per_employee": 0.0
+            }
+            
+            project_unique_employees = set()
+            
+            for pm, emps in months.items():
+                pm_total = sum(emps.values())
+                project_unique_employees.update(emps.keys())
+                client_unique_employees.update(emps.keys())
+                
+                project_summary["payroll_months"].append({
+                    "payroll_month": pm,
+                    "employee_count": len(emps),
+                    "total_amount": round(pm_total, 2)
+                })
+                
+                project_summary["total_amount"] += pm_total
+            
+            project_summary["total_employees"] = len(project_unique_employees)
+            project_summary["total_amount"] = round(project_summary["total_amount"], 2)
+            
+            if project_summary["total_employees"] > 0:
+                project_summary["avg_amount_per_employee"] = round(
+                    project_summary["total_amount"] / project_summary["total_employees"], 2
+                )
+            
+            client_summary["total_amount"] += project_summary["total_amount"]
+            project_summaries.append(project_summary)
+        
+        client_summary["total_employees"] = len(client_unique_employees)
+        client_summary["total_amount"] = round(client_summary["total_amount"], 2)
+        
+        # Sort projects by amount descending
+        project_summaries.sort(key=lambda x: x["total_amount"], reverse=True)
+        client_summary["projects"] = project_summaries
+        
+        # Identify most and least profitable projects
+        if project_summaries:
+            client_summary["most_profitable_project"] = project_summaries[0]
+            client_summary["least_profitable_project"] = project_summaries[-1]
+        
+        result.append(client_summary)
+    
+    # Sort clients by total amount descending
+    result.sort(key=lambda x: x["total_amount"], reverse=True)
+    
+    # At the end of client_project_wise_analysis, before "return":
+    # Compute globally unique project IDs and employee IDs
+    all_unique_project_ids = set()
+    all_unique_emp_ids = set()
+    for client, projects in client_project_data.items():
+        for project_id, months in projects.items():
+            all_unique_project_ids.add(project_id)
+            for pm, emps in months.items():
+                all_unique_emp_ids.update(emps.keys())
+
+        return {
+            "clients": result,
+            "total_clients": len(result),
+            "global_unique_projects": len(all_unique_project_ids),   # ADD THIS
+            "global_unique_employees": len(all_unique_emp_ids),       # ADD THIS
+        }
+    # return {
+    #     "clients": result,
+    #     "total_clients": len(result)
+    # }
+    
+@app.get("/api/projects/{employee_code}")
+async def get_employee_projects(employee_code: str, current_user=Depends(get_current_user)):
+    """
+    Fetch projects from Timesheets.Projects filtered by the
+    employee's partner_emp_code.
+    Returns a flat project list + a deduplicated client list.
+    """
+    try:
+        emp_code = employee_code.strip().upper()
+ 
+        if current_user["employee_code"].upper() != emp_code:
+            raise HTTPException(status_code=403, detail="Access denied")
+ 
+        # Get employee's partner code from Employee_details
+        emp = await db["Employee_details"].find_one({"EmpID": emp_code})
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found")
+ 
+        partner_emp_code = emp.get("PartnerEmpCode", "").strip().upper()
+        print(f"📂 Projects request — emp: {emp_code}, partner: {partner_emp_code}")
+ 
+        if not partner_emp_code:
+            return {"projects": [], "clients": []}
+ 
+        # Query the Timesheets database (different DB on same cluster)
+        timesheets_db = client["Timesheets"]
+        cursor = timesheets_db["Projects"].find(
+            {"partner_emp_code": partner_emp_code},
+            {"_id": 0}      # exclude ObjectId to keep JSON simple
+        )
+        raw = await cursor.to_list(length=None)
+        print(f"✅ Found {len(raw)} projects for partner {partner_emp_code}")
+ 
+        # Deduplicate by project_code
+        seen = set()
+        projects = []
+        for p in raw:
+            code = (p.get("project_code") or "").strip()
+            if code in seen:
+                continue
+            seen.add(code)
+            projects.append({
+                "project_code": code,
+                "project_name": (p.get("project_name") or "").strip(),
+                "client_code":  (p.get("client_code")  or "").strip(),
+                "client_name":  (p.get("client_name")  or "").strip(),
+            })
+ 
+        # Build sorted unique client list
+        client_map = {}
+        for p in projects:
+            if p["client_code"] and p["client_name"]:
+                client_map[p["client_code"]] = p["client_name"]
+ 
+        clients = [
+            {"client_code": k, "client_name": v}
+            for k, v in sorted(client_map.items(), key=lambda x: x[1].lower())
+        ]
+ 
+        return {
+            "projects": projects,
+            "clients":  clients,
+        }
+ 
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ get_employee_projects error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ---------- Serve static HTML ----------
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+

@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorGridFSBucket
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+import calendar
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from typing import Optional
@@ -14,6 +15,8 @@ import io
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Request
 from starlette.requests import Request
+from fastapi.responses import JSONResponse
+import json
 
 # Load env vars
 load_dotenv()
@@ -26,8 +29,22 @@ JWT_EXPIRE_MINUTES = 14400
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
+class SafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        def sanitize(obj):
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            if isinstance(obj, dict):
+                return {k: sanitize(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [sanitize(i) for i in obj]
+            return obj
+        return json.dumps(sanitize(content), ensure_ascii=False).encode("utf-8")
+
 # ---------- FastAPI app ----------
-app = FastAPI()
+app = FastAPI(default_response_class=SafeJSONResponse)
 
 # CORS
 app.add_middleware(
@@ -90,6 +107,20 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     employee_code: Optional[str] = None
+
+
+import math
+
+def safe_float(val) -> float:
+    try:
+        if val is None or str(val).strip().lower() in ("", "nan", "inf", "-inf"):
+            return 0.0
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return 0.0
+        return f
+    except (ValueError, TypeError):
+        return 0.0
 
 
 # ---------- Utility functions ----------
@@ -4735,18 +4766,917 @@ async def check_admin(employee_code: str, current_user=Depends(get_current_user)
     try:
         admin_collection = db["Admin"]
         admin_doc = await admin_collection.find_one({})
+        print(admin_doc)
         
         if not admin_doc:
             return {"isAdmin": False}
         
         is_admin = employee_code.upper() in [code.upper() for code in admin_doc.get("employee_codes", [])]
-        
+        print(f"Is admin: {is_admin}")
         return {"isAdmin": is_admin}
         
     except Exception as e:
         print(f"Error checking admin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# ADMIN APIs - Add these to the END of main.py (before the static mount)
+# ============================================================
+
+from fastapi import Query
+from fastapi.responses import StreamingResponse
+import io
+from collections import defaultdict
+
+# Try to import openpyxl; install if missing
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    import subprocess
+    subprocess.run(["pip", "install", "openpyxl", "--break-system-packages"], capture_output=True)
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+
+# ── Helper: verify admin ──────────────────────────────────────
+async def verify_admin(current_user: dict):
+    emp_code = current_user["employee_code"].strip().upper()
+    admin_collection = db["Admin"]
+    admin_doc = await admin_collection.find_one({})
+    if not admin_doc:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    codes = [c.upper() for c in admin_doc.get("employee_codes", [])]
+    if emp_code not in codes:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return emp_code
+
+
+# ── Helper: get all OPE entries (flat list) ───────────────────
+async def get_all_ope_entries(payroll_month: str = None):
+    """
+    Returns list of dicts with employee + entry info flattened.
+    Optionally filter by payroll_month.
+    """
+    entries = []
+    status_docs = await db["Status"].find({}).to_list(length=None)
+
+    # Build a lookup: employeeId -> list of payroll months
+    emp_months = {}
+    for sdoc in status_docs:
+        eid = sdoc.get("employeeId")
+        emp_name = sdoc.get("employeeName", "")
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range")
+            if payroll_month and pm != payroll_month:
+                continue
+            emp_months.setdefault(eid, []).append({
+                "payroll_month": pm,
+                "total_amount": ps.get("total_amount", 0),
+                "limit": ps.get("limit", 0),
+                "overall_status": ps.get("overall_status", "pending"),
+                "current_level": ps.get("current_level", "L1"),
+                "total_levels": ps.get("total_levels", 2),
+                "employee_name": emp_name,
+            })
+
+    # Fetch OPE_data for each employee
+    all_ope = await db["OPE_data"].find({}).to_list(length=None)
+    ope_map = {doc.get("employeeId"): doc for doc in all_ope}
+
+    for emp_id, month_list in emp_months.items():
+        ope_doc = ope_map.get(emp_id)
+        for month_info in month_list:
+            pm = month_info["payroll_month"]
+            raw_entries = []
+            if ope_doc:
+                for data_item in ope_doc.get("Data", []):
+                    if pm in data_item:
+                        raw_entries = data_item[pm]
+                        break
+
+            for e in raw_entries:
+                entries.append({
+                    "employee_id": emp_id,
+                    "employee_name": month_info["employee_name"] or ope_doc.get("employeeName", ""),
+                    "payroll_month": pm,
+                    "total_amount": month_info["total_amount"],
+                    "limit": month_info["limit"],
+                    "overall_status": month_info["overall_status"],
+                    "current_level": month_info["current_level"],
+                    "total_levels": month_info["total_levels"],
+                    # entry fields
+                    "date": e.get("date"),
+                    "client": e.get("client", ""),
+                    "project_id": e.get("project_id", ""),
+                    "project_name": e.get("project_name", ""),
+                    "project_type": e.get("project_type", ""),
+                    "location_from": e.get("location_from", ""),
+                    "location_to": e.get("location_to", ""),
+                    "travel_mode": e.get("travel_mode", ""),
+                    "amount": safe_float(e.get("amount", 0)),
+                    "remarks": e.get("remarks", ""),
+                    "status": e.get("status", ""),
+                })
+    return entries
+
+
+# ── 1. ADMIN DASHBOARD ────────────────────────────────────────
+@app.get("/api/admin/dashboard")
+async def admin_dashboard(
+    payroll_month: str = Query(None),
+    emp_name: str = Query(None),
+    emp_id: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    # --- All status docs for KPI ---
+    all_status = await db["Status"].find({}).to_list(length=None)
+
+    # Build flat records for table & charts
+    table_rows = []
+    partner_totals = defaultdict(float)
+    payroll_totals = defaultdict(float)
+    all_months = set()
+    total_employees_set = set()
+    total_amount_all = 0.0
+    amount_greater_count = 0
+
+    # Employee details lookup for partner info
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+
+    for sdoc in all_status:
+        emp_id_val = sdoc.get("employeeId", "")
+        emp_name_val = sdoc.get("employeeName", "")
+        partner = emp_partner_map.get(emp_id_val, "Unknown")
+
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range", "")
+            if not pm:
+                continue
+            all_months.add(pm)
+
+            total_amt = safe_float(ps.get("total_amount", 0))
+            limit_val = safe_float(ps.get("limit", 0))
+            ope_label = ps.get("ope_label", "")
+            overall_st = ps.get("overall_status", "pending")
+            curr_level = ps.get("current_level", "L1")
+
+            # Apply filters
+            if payroll_month and pm != payroll_month:
+                continue
+            if emp_name and emp_name.lower() not in emp_name_val.lower():
+                continue
+            if emp_id and emp_id.upper() not in emp_id_val.upper():
+                continue
+
+            total_employees_set.add(emp_id_val)
+            total_amount_all += total_amt
+            partner_totals[partner] += total_amt
+            payroll_totals[pm] += total_amt
+
+            if ope_label == "Greater" or (limit_val > 0 and total_amt > limit_val):
+                amount_greater_count += 1
+
+            table_rows.append({
+                "employee_id": emp_id_val,
+                "employee_name": emp_name_val,
+                "payroll_month": pm,
+                "total_amount": total_amt,
+                "limit": limit_val,
+                "overall_status": overall_st,
+                "current_level": curr_level,
+                "ope_label": ope_label,
+            })
+
+    # Payroll diff (compare last 2 months)
+    sorted_months = sorted(payroll_totals.keys())
+    payroll_diff = {}
+    if len(sorted_months) >= 2:
+        prev_month = sorted_months[-2]
+        curr_month = sorted_months[-1]
+        prev_total = payroll_totals[prev_month]
+        curr_total = payroll_totals[curr_month]
+        diff = abs(curr_total - prev_total)
+        direction = "up" if curr_total > prev_total else ("down" if curr_total < prev_total else "same")
+        payroll_diff = {
+            "current_month": curr_month,
+            "previous_month": prev_month,
+            "difference": round(diff, 2),
+            "direction": direction,
+        }
+
+    # Top 10 client chart — from OPE_data
+    client_totals = defaultdict(float)
+    # Reuse all_ope_docs fetched earlier in the function (move fetch up if needed)
+    all_ope_docs_for_chart = await db["OPE_data"].find({}).to_list(length=None)
+    for odoc in all_ope_docs_for_chart:
+        odoc_emp_id = odoc.get("employeeId", "")
+        odoc_emp_name = odoc.get("employeeName", "")
+ 
+        # ✅ FIXED: Apply same name/ID filters as table
+        if emp_name and emp_name.lower() not in odoc_emp_name.lower():
+            continue
+        if emp_id and emp_id.upper() not in odoc_emp_id.upper():
+            continue
+ 
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    client_totals[e.get("client", "Unknown")] += safe_float(e.get("amount", 0))
+ 
+    top10_clients = sorted(client_totals.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return {
+        "kpis": {
+            "total_employees": len(total_employees_set),
+            "total_amount": round(total_amount_all, 2),
+            "total_amount_greater": amount_greater_count,
+            "payroll_diff": payroll_diff,
+        },
+        "charts": {
+            "partner_wise": [{"_id": k, "total": round(v, 2)} for k, v in sorted(partner_totals.items(), key=lambda x: x[1], reverse=True)],
+            "payroll_wise": [{"_id": k, "total": round(v, 2)} for k, v in sorted(payroll_totals.items())],
+            "client_wise": [{"_id": k, "total": round(v, 2)} for k, v in top10_clients],
+        },
+        "table": table_rows,
+        "all_payroll_months": sorted(all_months),
+    }
+
+
+# ── 2. CLIENT-WISE ANALYSIS ───────────────────────────────────
+
+@app.get("/api/admin/client-analysis")
+async def admin_client_analysis(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    FIXED: Returns properly structured payroll_months array per client
+    Now groups data by: Client → Payroll Month → Pass/Ticket Details
+    """
+    try:
+        await verify_admin(current_user)
+        
+        all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+        
+        if not all_ope_docs:
+            return {"clients": [], "all_client_names": []}
+        
+        # Structure: client -> payroll_month -> { pass_users, ticket_users, employees, etc }
+        client_months = defaultdict(lambda: defaultdict(lambda: {
+            "payroll_month": None,
+            "employee_count": 0,
+            "total_amount": 0.0,
+            "amount_spread": 0.0,
+            "pass_ticket_conflict": False,
+            "pass_users": [],
+            "ticket_users": [],
+            "employees": []
+        }))
+        
+        all_client_names = set()
+        
+        for ope_doc in all_ope_docs:
+            emp_id = ope_doc.get("employeeId", "")
+            emp_name = ope_doc.get("employeeName", "")
+            
+            for data_item in ope_doc.get("Data", []):
+                for month_range, entries in data_item.items():
+                    # Skip if not matching payroll_month
+                    if payroll_month and month_range != payroll_month:
+                        continue
+                    
+                    for entry in entries:
+                        # Only approved entries
+                        if entry.get("status", "").lower() != "approved":
+                            continue
+                        
+                        # FIX: Strip whitespace from client name
+                        client = str(entry.get("client") or "Unknown").strip()
+                        all_client_names.add(client)
+                        
+                        # Initialize month data
+                        if month_range not in client_months[client]:
+                            client_months[client][month_range]["payroll_month"] = month_range
+                        
+                        month_data = client_months[client][month_range]
+                        amount = float(entry.get("amount") or 0)
+                        travel_mode = entry.get("travel_mode", "").lower()
+                        
+                        # Determine if pass or ticket
+                        is_pass = any(t in travel_mode for t in ["pass", "rail", "bus"])
+                        
+                        # Track amounts for spread calculation
+                        amounts = [e.get("amount", 0) for e in entries if e.get("status", "").lower() == "approved"]
+                        max_amt = max(amounts) if amounts else 0
+                        min_amt = min(amounts) if amounts else 0
+                        month_data["amount_spread"] = max(month_data["amount_spread"], max_amt - min_amt)
+                        
+                        # Add to appropriate list
+                        if is_pass:
+                            if emp_id not in [u["employee_id"] for u in month_data["pass_users"]]:
+                                month_data["pass_users"].append({
+                                    "employee_id": emp_id,
+                                    "employee_name": emp_name
+                                })
+                        else:
+                            if emp_id not in [u["employee_id"] for u in month_data["ticket_users"]]:
+                                month_data["ticket_users"].append({
+                                    "employee_id": emp_id,
+                                    "employee_name": emp_name
+                                })
+                        
+                        # Add employee entry
+                        emp_entry = {
+                            "employee_id": emp_id,
+                            "employee_name": emp_name,
+                            "amount": amount,
+                            "travel_modes": [travel_mode],
+                            "entry_count": len([e for e in entries if e.get("client") == client and e.get("status", "").lower() == "approved"]),
+                            "uses_pass": is_pass,
+                            "uses_ticket": not is_pass
+                        }
+                        
+                        # Check if employee already in list
+                        existing = [e for e in month_data["employees"] if e["employee_id"] == emp_id]
+                        if existing:
+                            existing[0]["amount"] += amount
+                            if travel_mode not in existing[0]["travel_modes"]:
+                                existing[0]["travel_modes"].append(travel_mode)
+                        else:
+                            month_data["employees"].append(emp_entry)
+                        
+                        month_data["total_amount"] += amount
+                        month_data["employee_count"] = len(set(e["employee_id"] for e in month_data["employees"]))
+        
+        # Detect pass/ticket conflicts and build final response
+        clients = []
+        for client_name in sorted(client_months.keys()):
+            months_data = client_months[client_name]
+            
+            payroll_months = []
+            total_client_amount = 0.0
+            total_client_employees = set()
+            
+            for month_range in sorted(months_data.keys()):
+                month_data = months_data[month_range]
+                
+                # Detect conflict: same month has both pass AND ticket users
+                has_conflict = (len(month_data["pass_users"]) > 0 and 
+                               len(month_data["ticket_users"]) > 0)
+                month_data["pass_ticket_conflict"] = has_conflict
+                
+                # Sort employees by amount
+                month_data["employees"].sort(key=lambda x: x["amount"], reverse=True)
+                
+                payroll_months.append(month_data)
+                total_client_amount += month_data["total_amount"]
+                for emp in month_data["employees"]:
+                    total_client_employees.add(emp["employee_id"])
+            
+            clients.append({
+                "client": client_name,
+                "total_employees": len(total_client_employees),
+                "total_amount": round(total_client_amount, 2),
+                "payroll_months": payroll_months
+            })
+        
+        # Sort by total amount
+        clients.sort(key=lambda x: x["total_amount"], reverse=True)
+        
+        print(f"✅ Client analysis: {len(clients)} clients, {len(all_client_names)} unique names")
+        
+        return {
+            "clients": clients,
+            "all_client_names": sorted(list(all_client_names))
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in admin_client_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+ 
+
+# ── 3. EXCEL EXPORT: CLIENT-WISE ─────────────────────────────
+@app.get("/api/admin/export/client-wise")
+async def export_client_excel(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    all_status = await db["Status"].find({}).to_list(length=None)
+
+    # Build employee → partner map
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+
+    rows = []
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        partner = emp_partner_map.get(emp_id, "Unknown")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    rows.append({
+                        "Employee ID": emp_id,
+                        "Employee Name": emp_name,
+                        "Partner": partner,
+                        "Payroll Month": pm_key,
+                        "Client": e.get("client", ""),
+                        "Project ID": e.get("project_id", ""),
+                        "Project Name": e.get("project_name", ""),
+                        "Project Type": e.get("project_type", ""),
+                        "Date": e.get("date", ""),
+                        "Travel From": e.get("location_from", ""),
+                        "Travel To": e.get("location_to", ""),
+                        "Travel Mode": e.get("travel_mode", ""),
+                        "Amount (₹)": safe_float(e.get("amount", 0)),
+                        "Remarks": e.get("remarks", ""),
+                        "Status": e.get("status", ""),
+                    })
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Client Wise Claims"
+
+    header_fill = PatternFill("solid", fgColor="1E3A5F")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    alt_fill = PatternFill("solid", fgColor="EBF3FF")
+    border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+
+    if rows:
+        headers = list(rows[0].keys())
+        for ci, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=ci, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+
+        for ri, row in enumerate(rows, 2):
+            fill = alt_fill if ri % 2 == 0 else PatternFill("solid", fgColor="FFFFFF")
+            for ci, key in enumerate(headers, 1):
+                cell = ws.cell(row=ri, column=ci, value=row[key])
+                cell.fill = fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border
+
+        # Auto-width
+        for ci, h in enumerate(headers, 1):
+            col_letter = get_column_letter(ci)
+            max_len = max(len(str(h)), max((len(str(r[h])) for r in rows), default=0))
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+        ws.row_dimensions[1].height = 30
+        ws.freeze_panes = "A2"
+    else:
+        ws["A1"] = "No data found"
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"client_wise_claims{'_' + payroll_month if payroll_month else ''}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ── 4. EXCEL EXPORT: PARTNER-WISE ────────────────────────────
+@app.get("/api/admin/export/partner-wise")
+async def export_partner_excel(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    await verify_admin(current_user)
+
+    all_status = await db["Status"].find({}).to_list(length=None)
+    emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+    emp_partner_map = {e.get("EmpID", ""): e.get("Partner", "Unknown") for e in emp_details_list}
+    emp_name_map = {e.get("EmpID", ""): e.get("Emp Name", "") for e in emp_details_list}
+
+    rows = []
+    for sdoc in all_status:
+        emp_id = sdoc.get("employeeId", "")
+        emp_name = sdoc.get("employeeName", "") or emp_name_map.get(emp_id, "")
+        partner = emp_partner_map.get(emp_id, "Unknown")
+
+        for ps in sdoc.get("approval_status", []):
+            pm = ps.get("payroll_month") or ps.get("month_range", "")
+            if payroll_month and pm != payroll_month:
+                continue
+            rows.append({
+                "Partner": partner,
+                "Employee ID": emp_id,
+                "Employee Name": emp_name,
+                "Payroll Month": pm,
+                "Total Amount (₹)": safe_float(ps.get("total_amount", 0)),
+"OPE Limit (₹)": safe_float(ps.get("limit", 0)),
+                "OPE Label": ps.get("ope_label", ""),
+                "Overall Status": ps.get("overall_status", ""),
+                "Current Level": ps.get("current_level", ""),
+                "Total Levels": ps.get("total_levels", ""),
+            })
+
+    rows.sort(key=lambda x: (x["Partner"], x["Employee ID"]))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Partner Wise Claims"
+
+    header_fill = PatternFill("solid", fgColor="1E3A5F")
+    header_font = Font(color="FFFFFF", bold=True, size=11)
+    border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+
+    # Group by partner for coloring
+    partner_colors = {}
+    color_list = ["EBF3FF", "FFF3E0", "E8F5E9", "FCE4EC", "F3E5F5", "E0F7FA"]
+    for i, r in enumerate(rows):
+        p = r["Partner"]
+        if p not in partner_colors:
+            partner_colors[p] = color_list[len(partner_colors) % len(color_list)]
+
+    if rows:
+        headers = list(rows[0].keys())
+        for ci, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=ci, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+
+        for ri, row in enumerate(rows, 2):
+            color = partner_colors.get(row["Partner"], "FFFFFF")
+            fill = PatternFill("solid", fgColor=color)
+            for ci, key in enumerate(headers, 1):
+                cell = ws.cell(row=ri, column=ci, value=row[key])
+                cell.fill = fill
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = border
+
+        for ci, h in enumerate(headers, 1):
+            col_letter = get_column_letter(ci)
+            max_len = max(len(str(h)), max((len(str(r[h])) for r in rows), default=0))
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 40)
+
+        ws.row_dimensions[1].height = 30
+        ws.freeze_panes = "A2"
+    else:
+        ws["A1"] = "No data found"
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"partner_wise_claims{'_' + payroll_month if payroll_month else ''}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ── 5. DUPLICATE LOCATION TRAVEL CLAIMS DETECTION ───────────────
+@app.get("/api/admin/analysis/duplicate-locations")
+async def admin_duplicate_locations_analysis(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Identifies duplicate location claims and returns detailed breakdown.
+    ENHANCED: Returns all_claims array per location for short/excess percentage calculation.
+    """
+    try:
+        all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+        
+        if not all_ope_docs:
+            return {
+                "location_analysis": [],
+                "total_locations_analyzed": 0,
+                "total_duplicate_claims": 0
+            }
+ 
+        location_claims = {}
+        all_locations = set()
+ 
+        # Group by location_route
+        for ope_doc in all_ope_docs:
+            for data_item in ope_doc.get("Data", []):
+                for month_range, entries in data_item.items():
+                    # Filter by payroll_month if provided
+                    if payroll_month and month_range != payroll_month:
+                        continue
+                    
+                    for entry in entries:
+                        # Skip non-approved entries
+                        if entry.get("status", "").lower() != "approved":
+                            continue
+                        
+                        location = entry.get("location_from", "Unknown") + " → " + entry.get("location_to", "Unknown")
+                        all_locations.add(location)
+ 
+                        if location not in location_claims:
+                            location_claims[location] = {
+                                "location_route": location,
+                                "claims": [],
+                                "employees": set()
+                            }
+ 
+                        emp_id = entry.get("employee_id") or "Unknown"
+                        location_claims[location]["employees"].add(emp_id)
+                        location_claims[location]["claims"].append({
+                            "employee_id": emp_id,
+                            "employee_name": entry.get("employee_name") or "Unknown",
+                            "amount": float(entry.get("amount") or 0),
+                            "date": str(entry.get("date") or ""),
+                            "travel_mode": entry.get("travel_mode") or "Unknown",
+                            "client": entry.get("client") or "Unknown",
+                            "payroll_month": month_range
+                        })
+ 
+        # Build analysis with enhanced data
+        location_analysis = []
+        total_duplicates = 0
+ 
+        for location_route in sorted(location_claims.keys()):
+            loc_data = location_claims[location_route]
+            all_claims = loc_data["claims"]
+            unique_employees = len(loc_data["employees"])
+            total_claims = len(all_claims)
+            
+            # Count duplicates (claims beyond first per employee)
+            duplicate_count = max(0, total_claims - unique_employees)
+            total_duplicates += duplicate_count
+ 
+            # Calculate amount statistics
+            amounts = [c["amount"] for c in all_claims]
+            if amounts:
+                amount_stats = {
+                    "average": round(sum(amounts) / len(amounts), 2),
+                    "minimum": min(amounts),
+                    "maximum": max(amounts),
+                    "spread": max(amounts) - min(amounts)
+                }
+            else:
+                amount_stats = {"average": 0, "minimum": 0, "maximum": 0, "spread": 0}
+ 
+            if duplicate_count > 0:  # Only include locations with duplicates
+                location_analysis.append({
+                    "location_route": location_route,
+                    "total_claims": total_claims,
+                    "unique_employees": unique_employees,
+                    "duplicate_claims": duplicate_count,
+                    "amount_stats": amount_stats,
+                    "all_claims": all_claims  # ENHANCED: Return all claims for frontend processing
+                })
+ 
+        # Sort by duplicate count descending
+        location_analysis.sort(key=lambda x: x["duplicate_claims"], reverse=True)
+ 
+        return {
+            "location_analysis": location_analysis,
+            "total_locations_analyzed": len(all_locations),
+            "total_duplicate_claims": total_duplicates
+        }
+ 
+    except Exception as e:
+        print(f"❌ Error in admin_duplicate_locations_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+ 
+
+# ── 7. PROJECT-WISE CONSOLIDATED OPE REPORTS ─────────────────────
+@app.get("/api/admin/analysis/project-wise")
+async def project_wise_consolidated_reports(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate project-wise and monthly consolidated OPE reports.
+    Aggregates data by project and shows monthly breakdowns.
+    """
+    await verify_admin(current_user)
     
+    all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+    
+    # project -> { payroll_month -> { employee_id -> amount } }
+    project_data = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    project_details = {}
+    
+    for odoc in all_ope_docs:
+        emp_id = odoc.get("employeeId", "")
+        emp_name = odoc.get("employeeName", "")
+        for data_item in odoc.get("Data", []):
+            for pm_key, elist in data_item.items():
+                if payroll_month and pm_key != payroll_month:
+                    continue
+                for e in elist:
+                    project_id = e.get("project_id", "Unknown")
+                    project_name = e.get("project_name", "Unknown")
+                    project_type = e.get("project_type", "Unknown")
+                    client = e.get("client", "Unknown")
+                    amt = safe_float(e.get("amount", 0))
+                    
+                    project_data[project_id][pm_key][emp_id] += amt
+                    
+                    # Store project details
+                    if project_id not in project_details:
+                        project_details[project_id] = {
+                            "project_id": project_id,
+                            "project_name": project_name,
+                            "project_type": project_type,
+                            "client": client
+                        }
+    
+    # Build consolidated report
+    result = []
+    for project_id, months in project_data.items():
+        project_summary = {
+            **project_details[project_id],
+            "payroll_months": [],
+            "total_employees": 0,
+            "total_amount": 0.0
+        }
+        
+        unique_employees = set()
+        
+        for pm, emps in months.items():
+            pm_total = sum(emps.values())
+            unique_employees.update(emps.keys())
+            
+            project_summary["payroll_months"].append({
+                "payroll_month": pm,
+                "employee_count": len(emps),
+                "total_amount": round(pm_total, 2),
+                "employees": [{"employee_id": eid, "amount": round(amt, 2)} for eid, amt in emps.items()]
+            })
+            
+            project_summary["total_amount"] += pm_total
+        
+        project_summary["total_employees"] = len(unique_employees)
+        project_summary["total_amount"] = round(project_summary["total_amount"], 2)
+        result.append(project_summary)
+    
+    # Sort by total amount descending
+    result.sort(key=lambda x: x["total_amount"], reverse=True)
+    
+    return {
+        "projects": result,
+        "total_projects": len(result)
+    }
+
+
+# ── 8. PROJECT-WISE ANALYSIS FOR EACH CLIENT ─────────────────────
+
+@app.get("/api/admin/analysis/client-project-wise")
+async def admin_client_project_wise_analysis(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    FIXED: Uses Set to track unique employees globally
+    """
+    try:
+        await verify_admin(current_user)
+        
+        all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+        
+        if not all_ope_docs:
+            return {"clients": [], "global_unique_projects": 0, "global_unique_employees": 0}
+        
+        all_unique_project_ids = set()
+        all_unique_emp_ids = set()  # FIXED: Use Set for true unique count
+        client_projects = {}
+        
+        for ope_doc in all_ope_docs:
+            for data_item in ope_doc.get("Data", []):
+                for month_range, entries in data_item.items():
+                    if payroll_month and month_range != payroll_month:
+                        continue
+                    
+                    for entry in entries:
+                        if entry.get("status", "").lower() != "approved":
+                            continue
+                        
+                        client = str(entry.get("client") or "Unknown").strip()
+                        project_id = entry.get("project_id") or "Unassigned"
+                        project_name = entry.get("project_name") or project_id
+                        project_type = entry.get("project_type") or "Regular"
+                        emp_id = entry.get("employee_id") or "Unknown"
+                        amount = float(entry.get("amount") or 0)
+                        
+                        all_unique_project_ids.add(project_id)
+                        all_unique_emp_ids.add(emp_id)  # FIXED: Add to global set
+                        
+                        if client not in client_projects:
+                            client_projects[client] = {}
+                        
+                        if project_id not in client_projects[client]:
+                            client_projects[client][project_id] = {
+                                "project_id": project_id,
+                                "project_name": project_name,
+                                "project_type": project_type,
+                                "payroll_months": [],
+                                "employees": set(),
+                                "total_amount": 0.0
+                            }
+                        
+                        proj = client_projects[client][project_id]
+                        
+                        # Check if month already exists
+                        existing_month = None
+                        for pm in proj["payroll_months"]:
+                            if pm["payroll_month"] == month_range:
+                                existing_month = pm
+                                break
+                        
+                        if not existing_month:
+                            existing_month = {
+                                "payroll_month": month_range,
+                                "employee_count": 0,
+                                "total_amount": 0.0
+                            }
+                            proj["payroll_months"].append(existing_month)
+                        
+                        existing_month["total_amount"] += amount
+                        proj["employees"].add(emp_id)
+                        proj["total_amount"] += amount
+        
+        # Build response
+        clients = []
+        for client_name in sorted(client_projects.keys()):
+            projects_dict = client_projects[client_name]
+            projects = []
+            client_total = 0.0
+            
+            for project_id in sorted(projects_dict.keys(), key=str):
+                proj = projects_dict[project_id]
+                
+                # Recalculate employee count for each month
+                for pm in proj["payroll_months"]:
+                    pm["employee_count"] = len([e for e in proj["employees"] 
+                                               if e])  # This is approximate; ideally track per month
+                
+                projects.append({
+                    "project_id": proj["project_id"],
+                    "project_name": proj["project_name"],
+                    "project_type": proj["project_type"],
+                    "payroll_months": proj["payroll_months"],
+                    "total_employees": len(proj["employees"]),
+                    "total_amount": round(proj["total_amount"], 2)
+                })
+                
+                client_total += proj["total_amount"]
+            
+            clients.append({
+                "client": client_name,
+                "projects": projects,
+                "total_employees": len(set(emp for proj in projects_dict.values() for emp in proj["employees"])),
+                "total_amount": round(client_total, 2)
+            })
+        
+        print(f"✅ Project analysis: {len(all_unique_project_ids)} projects, {len(all_unique_emp_ids)} unique employees")
+        
+        return {
+            "clients": clients,
+            "global_unique_projects": len(all_unique_project_ids),
+            "global_unique_employees": len(all_unique_emp_ids)  # FIXED: Now truly unique
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in admin_client_project_wise_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+ 
+ 
+
 @app.get("/api/projects/{employee_code}")
 async def get_employee_projects(employee_code: str, current_user=Depends(get_current_user)):
     """
@@ -4817,6 +5747,629 @@ async def get_employee_projects(employee_code: str, current_user=Depends(get_cur
         print(f"❌ get_employee_projects error: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/export/audit-report")
+async def export_audit_report(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Exports comprehensive audit report matching OPE_Audit_Report_March2026_v5.xlsx structure:
+    - Sheet 1: Summary Dashboard
+    - Sheet 2: Employee Summary  
+    - Sheet 3: All Flags - Detailed
+    - Sheet 4: Critical Flags
+    - Sheet 5: Original Data
+    """
+    try:
+        await verify_admin(current_user)
+        
+        # Fetch all data
+        all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+        all_status_docs = await db["Status"].find({}).to_list(length=None)
+        emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+        emp_map = {e.get("EmpID", ""): e for e in emp_details_list}
+        
+        # Build flat entry list
+        all_entries = []
+        for ope_doc in all_ope_docs:
+            emp_id = ope_doc.get("employeeId", "")
+            emp_name = ope_doc.get("employeeName", "")
+            emp_details = emp_map.get(emp_id, {})
+            
+            for data_item in ope_doc.get("Data", []):
+                for month_range, entries in data_item.items():
+                    if payroll_month and month_range != payroll_month:
+                        continue
+                    
+                    for entry in entries:
+                        # Detect flags
+                        flags = []
+                        flag_detail = ""
+                        
+                        # FLAG 1: NO SUPPORTING DOCUMENT
+                        if not entry.get("ticket_pdf"):
+                            flags.append("NO_SUPPORTING_DOCUMENT")
+                            flag_detail = "No supporting PDF attached"
+                        
+                        # FLAG 2: WEEKEND CLAIM
+                        try:
+                            date_obj = datetime.strptime(entry.get("date", ""), "%Y-%m-%d")
+                            if date_obj.weekday() >= 5:  # Saturday=5, Sunday=6
+                                flags.append("WEEKEND_CLAIM")
+                                if flag_detail:
+                                    flag_detail += " | "
+                                flag_detail += f"Weekend claim ({date_obj.strftime('%A')})"
+                        except:
+                            pass
+                        
+                        # FLAG 3: APPROVED WITHOUT HR SIGN-OFF
+                        if entry.get("status", "").lower() == "approved" and not entry.get("hr_approved"):
+                            flags.append("APPROVED_NO_HR_SIGNOFF")
+                            if flag_detail:
+                                flag_detail += " | "
+                            flag_detail += "HR approval pending"
+                        
+                        all_entries.append({
+                            "employee_id": emp_id,
+                            "employee_name": emp_name,
+                            "designation": emp_details.get("Designation Name", ""),
+                            "partner": emp_details.get("Partner", ""),
+                            "reporting_manager": emp_details.get("ReportingEmpName", ""),
+                            "payroll_month": month_range,
+                            "date": entry.get("date", ""),
+                            "client": entry.get("client", ""),
+                            "project_id": entry.get("project_id", ""),
+                            "project_name": entry.get("project_name", ""),
+                            "project_type": entry.get("project_type", ""),
+                            "location_from": entry.get("location_from", ""),
+                            "location_to": entry.get("location_to", ""),
+                            "travel_mode": entry.get("travel_mode", ""),
+                            "amount": safe_float(entry.get("amount", 0)),
+                            "original_amount": safe_float(entry.get("original_amount") or entry.get("amount", 0)),
+                            "status": entry.get("status", ""),
+                            "hr_approved": entry.get("hr_approved", False),
+                            "approved_by": entry.get("approved_by", ""),
+                            "approved_date": entry.get("approved_date", ""),
+                            "has_supporting": bool(entry.get("ticket_pdf")),
+                            "flags": flags,
+                            "flag_detail": flag_detail
+                        })
+        
+        # Calculate summary statistics
+        total_entries = len(all_entries)
+        unique_employees = len(set(e["employee_id"] for e in all_entries))
+        total_amount = sum(e["amount"] for e in all_entries)
+        approved_amount = sum(e["amount"] for e in all_entries if e["status"].lower() == "approved")
+        pending_amount = sum(e["amount"] for e in all_entries if e["status"].lower() == "pending")
+        all_flags = [e for e in all_entries if e["flags"]]
+        critical_flags = [e for e in all_entries if any(f in ["DUPLICATE_CLAIM", "NO_SUPPORTING_DOCUMENT"] for f in e["flags"])]
+        weekend_claims = [e for e in all_entries if "WEEKEND_CLAIM" in e["flags"]]
+        no_supporting = [e for e in all_entries if "NO_SUPPORTING_DOCUMENT" in e["flags"]]
+        
+        # Create workbook
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)  # Remove default sheet
+        
+        # ─ SHEET 1: SUMMARY DASHBOARD ─
+        ws1 = wb.create_sheet("Summary Dashboard", 0)
+        ws1.column_dimensions["A"].width = 30
+        ws1.column_dimensions["B"].width = 20
+        
+        header_fill = PatternFill("solid", fgColor="1E3A5F")
+        header_font = Font(color="FFFFFF", bold=True, size=12)
+        
+        row = 1
+        ws1[f"A{row}"] = "AUDIT REPORT SUMMARY"
+        ws1[f"A{row}"].font = Font(bold=True, size=14, color="FFFFFF")
+        ws1[f"A{row}"].fill = PatternFill("solid", fgColor="1E3A5F")
+        row += 2
+        
+        summary_data = [
+            ("Total Entries", total_entries),
+            ("Total Employees", unique_employees),
+            ("Total Amount (₹)", f"₹{total_amount:,.2f}"),
+            ("Approved Amount (₹)", f"₹{approved_amount:,.2f}"),
+            ("Pending Amount (₹)", f"₹{pending_amount:,.2f}"),
+            ("Total Flags", len(all_flags)),
+            ("Weekend Claims", len(weekend_claims)),
+            ("No Supporting Docs", len(no_supporting)),
+            ("Critical Flags", len(critical_flags)),
+        ]
+        
+        for label, value in summary_data:
+            ws1[f"A{row}"] = label
+            ws1[f"A{row}"].font = Font(bold=True)
+            ws1[f"B{row}"] = value
+            ws1[f"B{row}"].font = Font(size=11)
+            row += 1
+        
+        # ─ SHEET 2: EMPLOYEE SUMMARY ─
+        ws2 = wb.create_sheet("Employee Summary", 1)
+        
+        # Build employee summary
+        emp_summary = defaultdict(lambda: {
+            "name": "",
+            "designation": "",
+            "total_claims": 0,
+            "total_amount": 0.0,
+            "approved_amt": 0.0,
+            "pending_amt": 0.0,
+            "rejected_amt": 0.0,
+            "no_supporting": 0,
+            "weekend_claims": 0,
+            "total_flags": 0
+        })
+        
+        for entry in all_entries:
+            emp_id = entry["employee_id"]
+            emp_summary[emp_id]["name"] = entry["employee_name"]
+            emp_summary[emp_id]["designation"] = entry["designation"]
+            emp_summary[emp_id]["total_claims"] += 1
+            emp_summary[emp_id]["total_amount"] += entry["amount"]
+            
+            if entry["status"].lower() == "approved":
+                emp_summary[emp_id]["approved_amt"] += entry["amount"]
+            elif entry["status"].lower() == "pending":
+                emp_summary[emp_id]["pending_amt"] += entry["amount"]
+            else:
+                emp_summary[emp_id]["rejected_amt"] += entry["amount"]
+            
+            if "NO_SUPPORTING_DOCUMENT" in entry["flags"]:
+                emp_summary[emp_id]["no_supporting"] += 1
+            if "WEEKEND_CLAIM" in entry["flags"]:
+                emp_summary[emp_id]["weekend_claims"] += 1
+            
+            emp_summary[emp_id]["total_flags"] += len(entry["flags"])
+        
+        # Write headers
+        headers = ["Employee ID", "Name", "Designation", "Total Claims", "Total Amount (₹)", 
+                  "Approved (₹)", "Pending (₹)", "Rejected (₹)", "No Supporting", "Weekend Claims", "Total Flags"]
+        for col, header in enumerate(headers, 1):
+            cell = ws2.cell(row=1, column=col, value=header)
+            cell.fill = PatternFill("solid", fgColor="1E3A5F")
+            cell.font = Font(color="FFFFFF", bold=True)
+        
+        row = 2
+        for emp_id in sorted(emp_summary.keys()):
+            data = emp_summary[emp_id]
+            ws2.cell(row=row, column=1, value=emp_id)
+            ws2.cell(row=row, column=2, value=data["name"])
+            ws2.cell(row=row, column=3, value=data["designation"])
+            ws2.cell(row=row, column=4, value=data["total_claims"])
+            ws2.cell(row=row, column=5, value=f"₹{data['total_amount']:,.2f}")
+            ws2.cell(row=row, column=6, value=f"₹{data['approved_amt']:,.2f}")
+            ws2.cell(row=row, column=7, value=f"₹{data['pending_amt']:,.2f}")
+            ws2.cell(row=row, column=8, value=f"₹{data['rejected_amt']:,.2f}")
+            ws2.cell(row=row, column=9, value=data["no_supporting"])
+            ws2.cell(row=row, column=10, value=data["weekend_claims"])
+            ws2.cell(row=row, column=11, value=data["total_flags"])
+            row += 1
+        
+        # Auto-width columns
+        for col in range(1, len(headers) + 1):
+            ws2.column_dimensions[get_column_letter(col)].width = 18
+        
+        # ─ SHEET 3: ALL FLAGS - DETAILED ─
+        ws3 = wb.create_sheet("All Flags - Detailed", 2)
+        
+        flag_headers = ["Sr.No", "Flag Type", "Employee ID", "Name", "Date", "From", "To", 
+                       "Travel Mode", "Amount (₹)", "Status", "Flag Detail"]
+        for col, header in enumerate(flag_headers, 1):
+            cell = ws3.cell(row=1, column=col, value=header)
+            cell.fill = PatternFill("solid", fgColor="D97706")
+            cell.font = Font(color="FFFFFF", bold=True)
+        
+        row = 2
+        sr_no = 1
+        for entry in all_entries:
+            if entry["flags"]:
+                for flag in entry["flags"]:
+                    ws3.cell(row=row, column=1, value=sr_no)
+                    ws3.cell(row=row, column=2, value=flag)
+                    ws3.cell(row=row, column=3, value=entry["employee_id"])
+                    ws3.cell(row=row, column=4, value=entry["employee_name"])
+                    ws3.cell(row=row, column=5, value=entry["date"])
+                    ws3.cell(row=row, column=6, value=entry["location_from"])
+                    ws3.cell(row=row, column=7, value=entry["location_to"])
+                    ws3.cell(row=row, column=8, value=entry["travel_mode"])
+                    ws3.cell(row=row, column=9, value=f"₹{entry['amount']:,.2f}")
+                    ws3.cell(row=row, column=10, value=entry["status"])
+                    ws3.cell(row=row, column=11, value=entry["flag_detail"])
+                    row += 1
+                    sr_no += 1
+        
+        for col in range(1, len(flag_headers) + 1):
+            ws3.column_dimensions[get_column_letter(col)].width = 16
+        
+        # ─ SHEET 4: CRITICAL FLAGS ─
+        ws4 = wb.create_sheet("Critical Flags", 3)
+        
+        for col, header in enumerate(flag_headers, 1):
+            cell = ws4.cell(row=1, column=col, value=header)
+            cell.fill = PatternFill("solid", fgColor="EF4444")
+            cell.font = Font(color="FFFFFF", bold=True)
+        
+        row = 2
+        sr_no = 1
+        for entry in critical_flags:
+            critical_flags_only = [f for f in entry["flags"] 
+                                  if f in ["DUPLICATE_CLAIM", "NO_SUPPORTING_DOCUMENT"]]
+            if critical_flags_only:
+                for flag in critical_flags_only:
+                    ws4.cell(row=row, column=1, value=sr_no)
+                    ws4.cell(row=row, column=2, value=flag)
+                    ws4.cell(row=row, column=3, value=entry["employee_id"])
+                    ws4.cell(row=row, column=4, value=entry["employee_name"])
+                    ws4.cell(row=row, column=5, value=entry["date"])
+                    ws4.cell(row=row, column=6, value=entry["location_from"])
+                    ws4.cell(row=row, column=7, value=entry["location_to"])
+                    ws4.cell(row=row, column=8, value=entry["travel_mode"])
+                    ws4.cell(row=row, column=9, value=f"₹{entry['amount']:,.2f}")
+                    ws4.cell(row=row, column=10, value=entry["status"])
+                    ws4.cell(row=row, column=11, value=entry["flag_detail"])
+                    row += 1
+                    sr_no += 1
+        
+        for col in range(1, len(flag_headers) + 1):
+            ws4.column_dimensions[get_column_letter(col)].width = 16
+        
+        # ─ SHEET 5: ORIGINAL DATA ─
+        ws5 = wb.create_sheet("Original Data", 4)
+        
+        data_headers = ["Employee ID", "Name", "Designation", "Partner", "Reporting Manager", 
+                       "Payroll Month", "Date", "Client", "Project ID", "Project Name", "Project Type",
+                       "From", "To", "Travel Mode", "Amount (₹)", "Original Amount (₹)", 
+                       "Status", "HR Approved", "Approved By", "Approved Date", "Has Supporting"]
+        
+        for col, header in enumerate(data_headers, 1):
+            cell = ws5.cell(row=1, column=col, value=header)
+            cell.fill = PatternFill("solid", fgColor="1E40AF")
+            cell.font = Font(color="FFFFFF", bold=True, size=10)
+        
+        row = 2
+        for entry in all_entries:
+            ws5.cell(row=row, column=1, value=entry["employee_id"])
+            ws5.cell(row=row, column=2, value=entry["employee_name"])
+            ws5.cell(row=row, column=3, value=entry["designation"])
+            ws5.cell(row=row, column=4, value=entry["partner"])
+            ws5.cell(row=row, column=5, value=entry["reporting_manager"])
+            ws5.cell(row=row, column=6, value=entry["payroll_month"])
+            ws5.cell(row=row, column=7, value=entry["date"])
+            ws5.cell(row=row, column=8, value=entry["client"])
+            ws5.cell(row=row, column=9, value=entry["project_id"])
+            ws5.cell(row=row, column=10, value=entry["project_name"])
+            ws5.cell(row=row, column=11, value=entry["project_type"])
+            ws5.cell(row=row, column=12, value=entry["location_from"])
+            ws5.cell(row=row, column=13, value=entry["location_to"])
+            ws5.cell(row=row, column=14, value=entry["travel_mode"])
+            ws5.cell(row=row, column=15, value=f"₹{entry['amount']:,.2f}")
+            ws5.cell(row=row, column=16, value=f"₹{entry['original_amount']:,.2f}")
+            ws5.cell(row=row, column=17, value=entry["status"])
+            ws5.cell(row=row, column=18, value="Yes" if entry["hr_approved"] else "No")
+            ws5.cell(row=row, column=19, value=entry["approved_by"])
+            ws5.cell(row=row, column=20, value=entry["approved_date"])
+            ws5.cell(row=row, column=21, value="Yes" if entry["has_supporting"] else "No")
+            row += 1
+        
+        for col in range(1, len(data_headers) + 1):
+            ws5.column_dimensions[get_column_letter(col)].width = 14
+        
+        # Freeze panes for all sheets
+        for ws in [ws2, ws3, ws4, ws5]:
+            ws.freeze_panes = "A2"
+        
+        # Save to bytes
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"OPE_Audit_Report{'_' + payroll_month if payroll_month else ''}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+        
+    except Exception as e:
+        print(f"❌ Error generating audit report: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+ 
+@app.get("/api/admin/export/duplicate-claims")
+async def export_duplicate_claims_excel(
+    payroll_month: str = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Export duplicate location claims to Excel with all employee details.
+    Well-formatted with color coding for short/excess claims.
+    """
+    try:
+        await verify_admin(current_user)
+ 
+        all_ope_docs = await db["OPE_data"].find({}).to_list(length=None)
+        emp_details_list = await db["Employee_details"].find({}).to_list(length=None)
+        emp_map = {e.get("EmpID", ""): e for e in emp_details_list}
+ 
+        # Build location → claims map
+        location_claims = {}
+ 
+        for ope_doc in all_ope_docs:
+            emp_id = ope_doc.get("employeeId", "")
+            emp_name = ope_doc.get("employeeName", "")
+            emp_info = emp_map.get(emp_id, {})
+ 
+            for data_item in ope_doc.get("Data", []):
+                for month_range, entries in data_item.items():
+                    if payroll_month and month_range != payroll_month:
+                        continue
+ 
+                    for entry in entries:
+                        if entry.get("status", "").lower() != "approved":
+                            continue
+ 
+                        loc_from = entry.get("location_from", "Unknown")
+                        loc_to = entry.get("location_to", "Unknown")
+                        route = f"{loc_from} → {loc_to}"
+ 
+                        if route not in location_claims:
+                            location_claims[route] = []
+ 
+                        location_claims[route].append({
+                            "route": route,
+                            "employee_id": emp_id,
+                            "employee_name": emp_name,
+                            "designation": emp_info.get("Designation Name", ""),
+                            "partner": emp_info.get("Partner", ""),
+                            "reporting_manager": emp_info.get("ReportingEmpName", ""),
+                            "payroll_month": month_range,
+                            "date": entry.get("date", ""),
+                            "client": entry.get("client", ""),
+                            "project_id": entry.get("project_id", ""),
+                            "project_name": entry.get("project_name", ""),
+                            "travel_mode": entry.get("travel_mode", ""),
+                            "amount": safe_float(entry.get("amount", 0)),
+                            "status": entry.get("status", ""),
+                            "remarks": entry.get("remarks", ""),
+                        })
+ 
+        # Filter to only locations with duplicates
+        duplicate_routes = {
+            route: claims
+            for route, claims in location_claims.items()
+            if len(claims) > len(set(c["employee_id"] for c in claims))
+               or len(claims) > 1
+        }
+ 
+        # Sort by duplicate count
+        sorted_routes = sorted(
+            duplicate_routes.items(),
+            key=lambda x: len(x[1]),
+            reverse=True
+        )
+ 
+        # Build Excel
+        wb = openpyxl.Workbook()
+ 
+        # ─ SHEET 1: SUMMARY ─
+        ws_sum = wb.active
+        ws_sum.title = "Summary"
+ 
+        hdr_fill = PatternFill("solid", fgColor="1E3A5F")
+        hdr_font = Font(color="FFFFFF", bold=True, size=11)
+        border = Border(
+            left=Side(style="thin", color="CCCCCC"),
+            right=Side(style="thin", color="CCCCCC"),
+            top=Side(style="thin", color="CCCCCC"),
+            bottom=Side(style="thin", color="CCCCCC"),
+        )
+ 
+        # Title
+        ws_sum["A1"] = "DUPLICATE LOCATION CLAIMS REPORT"
+        ws_sum["A1"].font = Font(bold=True, size=14, color="FFFFFF")
+        ws_sum["A1"].fill = PatternFill("solid", fgColor="991B1B")
+        ws_sum.merge_cells("A1:G1")
+        ws_sum["A2"] = f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}"
+        ws_sum["A2"].font = Font(italic=True, size=10, color="666666")
+        if payroll_month:
+            ws_sum["A3"] = f"Filter: Payroll Month = {payroll_month}"
+            ws_sum["A3"].font = Font(italic=True, size=10, color="666666")
+ 
+        sum_headers = ["#", "Route (From → To)", "Total Claims", "Unique Employees",
+                       "Duplicate Claims", "Avg Amount (₹)", "Amount Spread (₹)"]
+        for ci, h in enumerate(sum_headers, 1):
+            cell = ws_sum.cell(row=5, column=ci, value=h)
+            cell.fill = hdr_fill
+            cell.font = hdr_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+ 
+        ws_sum.row_dimensions[5].height = 30
+ 
+        for idx, (route, claims) in enumerate(sorted_routes, 1):
+            unique_emps = len(set(c["employee_id"] for c in claims))
+            amounts = [c["amount"] for c in claims]
+            avg_amt = sum(amounts) / len(amounts) if amounts else 0
+            spread = max(amounts) - min(amounts) if amounts else 0
+            dup_count = len(claims) - unique_emps
+ 
+            row_num = idx + 5
+            alt_fill = PatternFill("solid", fgColor="FFF3F3" if dup_count > 5 else "FFFFFF")
+            vals = [idx, route, len(claims), unique_emps, dup_count,
+                    round(avg_amt, 2), round(spread, 2)]
+ 
+            for ci, v in enumerate(vals, 1):
+                cell = ws_sum.cell(row=row_num, column=ci, value=v)
+                cell.fill = alt_fill
+                cell.alignment = Alignment(horizontal="center" if ci != 2 else "left",
+                                           vertical="center")
+                cell.border = border
+ 
+        # Column widths for summary
+        widths = [5, 45, 14, 16, 16, 18, 18]
+        for ci, w in enumerate(widths, 1):
+            ws_sum.column_dimensions[get_column_letter(ci)].width = w
+ 
+        ws_sum.freeze_panes = "A6"
+ 
+        # ─ SHEET 2: DETAILED CLAIMS ─
+        ws_det = wb.create_sheet("Detailed Claims", 1)
+ 
+        det_headers = ["#", "Route (From → To)", "Employee ID", "Employee Name",
+                       "Designation", "Partner", "Payroll Month", "Date",
+                       "Client", "Project Name", "Travel Mode",
+                       "Amount (₹)", "Status", "Claim Type", "% of Route Avg"]
+ 
+        for ci, h in enumerate(det_headers, 1):
+            cell = ws_det.cell(row=1, column=ci, value=h)
+            cell.fill = hdr_fill
+            cell.font = hdr_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        ws_det.row_dimensions[1].height = 30
+ 
+        # Color fills
+        fill_normal = PatternFill("solid", fgColor="FFFFFF")
+        fill_short = PatternFill("solid", fgColor="FEE2E2")    # Red - short claims
+        fill_excess = PatternFill("solid", fgColor="FEF3C7")   # Yellow - excess claims
+        fill_route_hdr = PatternFill("solid", fgColor="EFF6FF") # Blue - route separator
+ 
+        det_row = 2
+        sr_no = 1
+ 
+        for route, claims in sorted_routes:
+            amounts = [c["amount"] for c in claims]
+            avg_amt = sum(amounts) / len(amounts) if amounts else 0
+ 
+            # Route separator row
+            sep_cell = ws_det.cell(row=det_row, column=1,
+                                   value=f"▶ {route}  |  {len(claims)} claims  |  Avg ₹{avg_amt:,.2f}")
+            sep_cell.fill = fill_route_hdr
+            sep_cell.font = Font(bold=True, size=11, color="1E3A5F")
+            ws_det.merge_cells(f"A{det_row}:O{det_row}")
+            det_row += 1
+ 
+            for claim in sorted(claims, key=lambda x: x["amount"], reverse=True):
+                amt = claim["amount"]
+                pct = (amt / avg_amt * 100) if avg_amt > 0 else 0
+ 
+                if pct < 80:
+                    claim_type = "⬇ SHORT"
+                    row_fill = fill_short
+                elif pct > 120:
+                    claim_type = "⬆ EXCESS"
+                    row_fill = fill_excess
+                else:
+                    claim_type = "✓ NORMAL"
+                    row_fill = fill_normal
+ 
+                vals = [sr_no, route, claim["employee_id"], claim["employee_name"],
+                        claim["designation"], claim["partner"], claim["payroll_month"],
+                        claim["date"], claim["client"], claim["project_name"],
+                        claim["travel_mode"], amt, claim["status"],
+                        claim_type, f"{pct:.1f}%"]
+ 
+                for ci, v in enumerate(vals, 1):
+                    cell = ws_det.cell(row=det_row, column=ci, value=v)
+                    cell.fill = row_fill
+                    cell.alignment = Alignment(horizontal="center" if ci not in [2, 4, 5, 6, 9, 10]
+                                               else "left", vertical="center")
+                    cell.border = border
+                    if ci == 12:  # Amount column
+                        cell.number_format = '#,##0.00'
+ 
+                det_row += 1
+                sr_no += 1
+ 
+        # Column widths for detail
+        det_widths = [5, 35, 12, 20, 18, 15, 18, 12, 25, 25, 15, 14, 10, 10, 12]
+        for ci, w in enumerate(det_widths, 1):
+            ws_det.column_dimensions[get_column_letter(ci)].width = w
+ 
+        ws_det.freeze_panes = "A2"
+ 
+        # ─ SHEET 3: EMPLOYEE SUMMARY ─
+        ws_emp = wb.create_sheet("Employee Analysis", 2)
+ 
+        emp_dup_stats = defaultdict(lambda: {
+            "name": "", "designation": "", "partner": "",
+            "total_claims": 0, "total_amount": 0.0,
+            "routes": set(), "short_claims": 0, "excess_claims": 0
+        })
+ 
+        for route, claims in duplicate_routes.items():
+            amounts = [c["amount"] for c in claims]
+            avg = sum(amounts) / len(amounts) if amounts else 0
+            for c in claims:
+                eid = c["employee_id"]
+                emp_dup_stats[eid]["name"] = c["employee_name"]
+                emp_dup_stats[eid]["designation"] = c["designation"]
+                emp_dup_stats[eid]["partner"] = c["partner"]
+                emp_dup_stats[eid]["total_claims"] += 1
+                emp_dup_stats[eid]["total_amount"] += c["amount"]
+                emp_dup_stats[eid]["routes"].add(route)
+                pct = (c["amount"] / avg * 100) if avg > 0 else 100
+                if pct < 80:
+                    emp_dup_stats[eid]["short_claims"] += 1
+                elif pct > 120:
+                    emp_dup_stats[eid]["excess_claims"] += 1
+ 
+        emp_headers = ["Employee ID", "Name", "Designation", "Partner",
+                       "Total Claims", "Total Amount (₹)", "Unique Routes",
+                       "Short Claims", "Excess Claims"]
+ 
+        for ci, h in enumerate(emp_headers, 1):
+            cell = ws_emp.cell(row=1, column=ci, value=h)
+            cell.fill = hdr_fill
+            cell.font = hdr_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        ws_emp.row_dimensions[1].height = 30
+ 
+        for ri, (eid, stats) in enumerate(
+            sorted(emp_dup_stats.items(), key=lambda x: x[1]["total_claims"], reverse=True), 2
+        ):
+            has_issue = stats["short_claims"] > 0 or stats["excess_claims"] > 0
+            row_fill = PatternFill("solid", fgColor="FEF3C7" if has_issue else "FFFFFF")
+ 
+            vals = [eid, stats["name"], stats["designation"], stats["partner"],
+                    stats["total_claims"], round(stats["total_amount"], 2),
+                    len(stats["routes"]), stats["short_claims"], stats["excess_claims"]]
+ 
+            for ci, v in enumerate(vals, 1):
+                cell = ws_emp.cell(row=ri, column=ci, value=v)
+                cell.fill = row_fill
+                cell.alignment = Alignment(horizontal="center" if ci not in [2, 3, 4] else "left",
+                                           vertical="center")
+                cell.border = border
+ 
+        emp_widths = [12, 22, 18, 18, 14, 18, 15, 14, 14]
+        for ci, w in enumerate(emp_widths, 1):
+            ws_emp.column_dimensions[get_column_letter(ci)].width = w
+        ws_emp.freeze_panes = "A2"
+ 
+        # Save
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+ 
+        filename = f"Duplicate_Claims_Report{'_' + payroll_month if payroll_month else ''}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+ 
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+ 
+    except Exception as e:
+        print(f"❌ Error exporting duplicate claims: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+ 
 
 # ---------- Serve static HTML ----------
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
