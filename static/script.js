@@ -13,7 +13,7 @@ API_URL = "";
 const style = document.createElement('style');
 style.textContent = `
   @keyframes slideUp {
-    from {
+    from {  
       transform: translateY(30px);
       opacity: 0;
     }
@@ -7740,56 +7740,163 @@ function showRejectNoData() {
 //     }
 
 
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
+    
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
+    
+//     console.log("🔍 Checking user role for:", empCode);
+    
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
+    
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
+    
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
+    
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+    
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
+
+//     // ✅ ADMIN CHECK
+//     try {
+//       const adminRes = await fetch(`${API_URL}/api/check-admin/${empCode}`, {
+//         headers: { Authorization: `Bearer ${token}` }
+//       });
+//       if (adminRes.ok) {
+//         const adminData = await adminRes.json();
+//         if (adminData.isAdmin) {
+//           const adminBtn = document.getElementById('btnSwitchToAdmin');
+//           if (adminBtn) adminBtn.style.display = 'flex';
+//         }
+//       }
+//     } catch (err) {
+//       console.warn('Admin check failed:', err);
+//     }
+    
+//     return data.isManager;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
+
 async function checkUserRole() {
   try {
     const token = localStorage.getItem("access_token");
     const empCode = localStorage.getItem("employee_code");
-    
+
     if (!token || !empCode) {
       console.log("❌ No token or empCode, skipping role check");
       return false;
     }
-    
-    console.log("🔍 Checking user role for:", empCode);
-    
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-    
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
-    }
-    
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
-    
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
-    
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
 
-    // ✅ ADMIN CHECK
+    console.log("🔍 Checking user role for:", empCode);
+
+    // ─── STEP 1: Check Admin (runs for every user) ───────────────────────
+    let isAdmin = false;
     try {
       const adminRes = await fetch(`${API_URL}/api/check-admin/${empCode}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (adminRes.ok) {
         const adminData = await adminRes.json();
-        if (adminData.isAdmin) {
-          const adminBtn = document.getElementById('btnSwitchToAdmin');
-          if (adminBtn) adminBtn.style.display = 'flex';
+        isAdmin = !!adminData.isAdmin;
+      }
+    } catch (err) {
+      console.warn("⚠️ Admin check failed:", err);
+    }
+
+    // Show/hide admin button based on result
+    const adminBtn = document.getElementById("btnSwitchToAdmin");
+    if (adminBtn) adminBtn.style.display = isAdmin ? "flex" : "none";
+
+    localStorage.setItem("is_admin", isAdmin ? "true" : "false");
+    console.log(isAdmin ? "🛡️ User is ADMIN" : "👤 User is NOT admin");
+
+    // ─── STEP 2: Check HR (hardcoded) ────────────────────────────────────
+    const isHR = empCode.trim().toUpperCase() === "JHS729";
+
+    if (isHR) {
+      console.log("🏢 User is HR");
+      localStorage.setItem("is_hr", "true");
+      localStorage.setItem("is_partner", "false");
+      localStorage.setItem("is_manager", "false");
+      toggleManagerButtons(true); // pending / approve / reject → visible
+      return true;
+    }
+
+    localStorage.setItem("is_hr", "false");
+
+    // ─── STEP 3: Check Partner ────────────────────────────────────────────
+    try {
+      const partnerRes = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (partnerRes.ok) {
+        const partnerData = await partnerRes.json();
+
+        if (partnerData.isPartner) {
+          console.log("👔 User is PARTNER");
+          localStorage.setItem("is_partner", "true");
+          localStorage.setItem("is_manager", "false");
+          // Partner (with or without admin) → show pending/approve/reject
+          toggleManagerButtons(true);
+          return true;
         }
       }
     } catch (err) {
-      console.warn('Admin check failed:', err);
+      console.warn("⚠️ Partner check failed:", err);
     }
-    
-    return data.isManager;
-    
+
+    localStorage.setItem("is_partner", "false");
+
+    // ─── STEP 4: Check Reporting Manager ─────────────────────────────────
+    try {
+      const managerRes = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (managerRes.ok) {
+        const managerData = await managerRes.json();
+
+        if (managerData.isManager) {
+          console.log("👔 User is REPORTING MANAGER");
+          localStorage.setItem("is_manager", "true");
+          // Manager (with or without admin) → show pending/approve/reject
+          toggleManagerButtons(true);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("⚠️ Manager check failed:", err);
+    }
+
+    localStorage.setItem("is_manager", "false");
+
+    // ─── STEP 5: Plain Employee ───────────────────────────────────────────
+    console.log("👤 User is EMPLOYEE");
+    // Employee → never show pending/approve/reject,
+    // admin button already handled in Step 1
+    toggleManagerButtons(false);
+    return false;
+
   } catch (error) {
     console.error("❌ Error checking role:", error);
     return false;
