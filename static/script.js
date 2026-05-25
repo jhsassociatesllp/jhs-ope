@@ -2213,6 +2213,8 @@ function showSuccessPopup(message) {
     }
   }, 2500);
 
+
+  
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) {
       overlay.style.opacity = '0';
