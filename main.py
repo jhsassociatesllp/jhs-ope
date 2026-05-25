@@ -461,38 +461,11 @@ async def submit_ope_entry(
                 }
             }
             
-            # ✅ Handle Status Document - Accumulate amounts for same month
-            existing_status = await db["Status"].find_one({"employeeId": emp_code, "month_range": month_range})
-            
-            if existing_status:
-                # Status exists - accumulate the amount
-                current_total = existing_status.get("total_amount", 0)
-                new_total = current_total + amount
-                
-                print(f"📊 Existing status found - updating total amount:")
-                print(f"   Current Total: ₹{current_total}")
-                print(f"   New Entry: ₹{amount}")
-                print(f"   Updated Total: ₹{new_total}")
-                
-                await db["Status"].update_one(
-                    {"employeeId": emp_code, "month_range": month_range},
-                    {"$set": {"total_amount": new_total}}
-                )
-            else:
-                # No existing status - create new one
-                print(f"📊 Creating new status document with amount: ₹{amount}")
-                await db["Status"].update_one(
-                    {"employeeId": emp_code, "month_range": month_range},
-                    {"$set": status_doc},
-                    upsert=True
-                )
-
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
                 upsert=True
             )
-
             
             await db["Pending"].update_one(
                 {"ReportingEmpCode": pending_queue_code},
@@ -629,38 +602,11 @@ async def submit_ope_entry(
                 
                 scenario_name = "Employee_Amount_Within_Limit"
             
-            # ✅ Handle Status Document - Accumulate amounts for same month
-            existing_status = await db["Status"].find_one({"employeeId": emp_code, "month_range": month_range})
-            
-            if existing_status:
-                # Status exists - accumulate the amount
-                current_total = existing_status.get("total_amount", 0)
-                new_total = current_total + amount
-                
-                print(f"📊 Existing status found - updating total amount:")
-                print(f"   Current Total: ₹{current_total}")
-                print(f"   New Entry: ₹{amount}")
-                print(f"   Updated Total: ₹{new_total}")
-                
-                await db["Status"].update_one(
-                    {"employeeId": emp_code, "month_range": month_range},
-                    {"$set": {"total_amount": new_total}}
-                )
-            else:
-                # No existing status - create new one
-                print(f"📊 Creating new status document with amount: ₹{amount}")
-                await db["Status"].update_one(
-                    {"employeeId": emp_code, "month_range": month_range},
-                    {"$set": status_doc},
-                    upsert=True
-                )
-
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
                 upsert=True
             )
-
             
             print(f"\n{'='*60}")
             print(f"✅ EMPLOYEE SUBMISSION COMPLETE")
@@ -803,11 +749,7 @@ async def delete_ope_entry(
 ):
     try:
         employee_code = current_user["employee_code"]
-        print(f"\n{'='*60}")
-        print(f"🗑️ DELETE ENTRY REQUEST")
-        print(f"Employee: {employee_code}")
-        print(f"Entry ID: {entry_id}")
-        print(f"{'='*60}\n")
+        print(f"📌 Deleting entry {entry_id} for: {employee_code}")
         
         if not entry_id or entry_id == "dummy":
             raise HTTPException(status_code=400, detail="Invalid entry ID")
@@ -825,27 +767,14 @@ async def delete_ope_entry(
         
         data_array = ope_doc.get("Data", [])
         deleted = False
-        deleted_entry_amount = 0
-        entry_found = False
-        
-        print(f"📦 Searching through {len(data_array)} data items...")
         
         for i, data_item in enumerate(data_array):
             if month_range in data_item:
                 entries = data_item[month_range]
-                print(f"📅 Found month {month_range} with {len(entries)} entries")
                 
                 for j, entry in enumerate(entries):
-                    entry_id_str = str(entry.get("_id", ""))
-                    print(f"   Checking entry {j}: ID = {entry_id_str}, Amount = ₹{entry.get('amount', 0)}")
-                    
-                    if entry_id_str == entry_id:
-                        print(f"✅ Found matching entry at Data.{i}.{month_range}.{j}")
-                        entry_found = True
-                        
-                        # Store the amount before deletion for status update
-                        deleted_entry_amount = float(entry.get("amount", 0))
-                        print(f"💰 Entry amount to be deleted: ₹{deleted_entry_amount}")
+                    if str(entry.get("_id")) == entry_id:
+                        print(f"✅ Found entry at Data.{i}.{month_range}.{j}")
                         
                         # Delete PDF from GridFS if exists
                         pdf_id = entry.get("ticket_pdf")
@@ -854,109 +783,32 @@ async def delete_ope_entry(
                             print(f"✅ PDF deleted from GridFS: {pdf_id}")
                         
                         if len(entries) == 1:
-                            print(f"🗑️ This is the ONLY entry - removing entire month range: {month_range}")
-                            
-                            # Remove the entire month data
+                            print(f"🗑️ Removing entire month range: {month_range}")
                             await db["OPE_data"].update_one(
                                 {"employeeId": employee_code},
                                 {"$pull": {"Data": {month_range: {"$exists": True}}}}
                             )
-                            print(f"✅ Removed month data from OPE_data")
-                            
-                            # Also remove the entire status document for this month
-                            status_result = await db["Status"].delete_one({
-                                "employeeId": employee_code, 
-                                "month_range": month_range
-                            })
-                            print(f"✅ Removed status document (deleted count: {status_result.deleted_count})")
-                            
                         else:
-                            print(f"🗑️ Multiple entries exist - removing single entry from month range")
-                            
-                            # Create a more specific filter to remove the exact entry
-                            try:
-                                # Try with ObjectId first
-                                from bson import ObjectId
-                                oid = ObjectId(entry_id)
-                                delete_result = await db["OPE_data"].update_one(
-                                    {"employeeId": employee_code},
-                                    {"$pull": {f"Data.{i}.{month_range}": {"_id": oid}}}
-                                )
-                                print(f"✅ ObjectId delete result: {delete_result.modified_count} documents modified")
-                            except:
-                                # If ObjectId fails, try with string
-                                delete_result = await db["OPE_data"].update_one(
-                                    {"employeeId": employee_code},
-                                    {"$pull": {f"Data.{i}.{month_range}": {"_id": entry_id}}}
-                                )
-                                print(f"✅ String ID delete result: {delete_result.modified_count} documents modified")
-                            
-                            # Update status amount by subtracting the deleted entry amount
-                            print(f"\n📊 Updating status amount...")
-                            status_doc = await db["Status"].find_one({
-                                "employeeId": employee_code, 
-                                "month_range": month_range
-                            })
-                            
-                            if status_doc:
-                                current_total = float(status_doc.get("total_amount", 0))
-                                new_total = max(0, current_total - deleted_entry_amount)  # Ensure non-negative
-                                
-                                print(f"📊 Status Update Details:")
-                                print(f"   Current Total: ₹{current_total}")
-                                print(f"   Deleted Entry: ₹{deleted_entry_amount}")
-                                print(f"   New Total: ₹{new_total}")
-                                
-                                status_update_result = await db["Status"].update_one(
-                                    {"employeeId": employee_code, "month_range": month_range},
-                                    {"$set": {"total_amount": new_total}}
-                                )
-                                print(f"✅ Status update result: {status_update_result.modified_count} documents modified")
-                                
-                                # Verify the update
-                                updated_status = await db["Status"].find_one({
-                                    "employeeId": employee_code, 
-                                    "month_range": month_range
-                                })
-                                if updated_status:
-                                    print(f"🔍 Verification: Status now shows ₹{updated_status.get('total_amount', 0)}")
-                                else:
-                                    print(f"⚠️ Warning: Could not find status document after update")
-                            else:
-                                print(f"⚠️ Warning: No status document found for {employee_code} - {month_range}")
-
                             print(f"🗑️ Removing single entry from month range")
                             await db["OPE_data"].update_one(
                                 {"employeeId": employee_code},
                                 {"$pull": {f"Data.{i}.{month_range}": {"_id": ObjectId(entry_id)}}}
                             )
-
                         
                         deleted = True
                         break
-                
-                if deleted:
-                    break
-        
-        if not entry_found:
-            print(f"❌ Entry with ID {entry_id} not found in month {month_range}")
-            raise HTTPException(status_code=404, detail="Entry not found")
+            
+            if deleted:
+                break
         
         if not deleted:
-            print(f"❌ Failed to delete entry")
-            raise HTTPException(status_code=500, detail="Failed to delete entry")
+            raise HTTPException(status_code=404, detail="Entry not found")
         
-        print(f"\n✅ Entry deleted successfully")
-        print(f"   Entry ID: {entry_id}")
-        print(f"   Month: {month_range}")
-        print(f"   Amount: ₹{deleted_entry_amount}")
-        print(f"{'='*60}\n")
-        
+        print(f"✅ Entry deleted successfully")
         return {
             "message": "Entry deleted successfully",
             "entry_id": entry_id,
-            "month_range": month_range,
-            "deleted_amount": deleted_entry_amount
+            "month_range": month_range
         }
         
     except HTTPException as he:
@@ -967,74 +819,6 @@ async def delete_ope_entry(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-    
-@app.get("/api/debug/status/{employee_code}/{month_range}")
-async def debug_status(employee_code: str, month_range: str, current_user=Depends(get_current_user)):
-    """
-    Debug endpoint to check status and OPE data for troubleshooting
-    """
-    try:
-        emp_code = employee_code.strip().upper()
-        
-        # Verify user can only access their own data
-        if current_user["employee_code"].upper() != emp_code:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        print(f"\n{'='*60}")
-        print(f"🔍 DEBUG STATUS REQUEST")
-        print(f"Employee: {emp_code}")
-        print(f"Month: {month_range}")
-        print(f"{'='*60}\n")
-        
-        # Get OPE data
-        ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
-        ope_entries = []
-        total_from_entries = 0
-        
-        if ope_doc:
-            data_array = ope_doc.get("Data", [])
-            for data_item in data_array:
-                if month_range in data_item:
-                    entries = data_item[month_range]
-                    for entry in entries:
-                        amount = float(entry.get("amount", 0))
-                        ope_entries.append({
-                            "_id": str(entry.get("_id")),
-                            "date": entry.get("date"),
-                            "amount": amount,
-                            "client": entry.get("client")
-                        })
-                        total_from_entries += amount
-        
-        # Get Status data
-        status_doc = await db["Status"].find_one({
-            "employeeId": emp_code, 
-            "month_range": month_range
-        })
-        
-        status_amount = status_doc.get("total_amount", 0) if status_doc else 0
-        
-        print(f"📊 Debug Results:")
-        print(f"   OPE Entries Count: {len(ope_entries)}")
-        print(f"   Total from Entries: ₹{total_from_entries}")
-        print(f"   Status Amount: ₹{status_amount}")
-        print(f"   Match: {'✅' if total_from_entries == status_amount else '❌'}")
-        
-        return {
-            "employee_code": emp_code,
-            "month_range": month_range,
-            "ope_entries": ope_entries,
-            "ope_entries_count": len(ope_entries),
-            "total_from_entries": total_from_entries,
-            "status_amount": status_amount,
-            "amounts_match": total_from_entries == status_amount,
-            "status_document_exists": status_doc is not None
-        }
-        
-    except Exception as e:
-        print(f"❌ Debug error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/check-role/{employee_code}")
 async def check_user_role(employee_code: str, current_user=Depends(get_current_user)):
     try:
@@ -2981,8 +2765,7 @@ async def approve_employee_entries(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
                 print(f"✅ Added to Manager's Approved collection")
-    
-        # Route to Partner's Pending if 3-level, otherwise to HR_Pending
+        
         if partner_code:
             print(f"\n🔥 ROUTING TO PARTNER: {partner_code}")
             
@@ -3001,29 +2784,6 @@ async def approve_employee_entries(
                         {"$addToSet": {"EmployeesCodes": employee_code}}
                     )
                     print(f"   ✅ Added to Partner's Pending collection")
-        else:
-            # 2-level approval: RM approved → Add to HR_Pending
-            print(f"\n🏥 ROUTING TO HR PENDING")
-            
-            hr_pending_doc = await db["HR_Pending"].find_one({"HR_Code": "JHS729"})
-            
-            if not hr_pending_doc:
-                await db["HR_Pending"].insert_one({
-                    "HR_Code": "JHS729",
-                    "EmployeesCodes": [employee_code],
-                    "last_updated": datetime.utcnow()
-                })
-                print(f"   ✅ Created NEW HR_Pending document")
-            else:
-                if employee_code not in hr_pending_doc.get("EmployeesCodes", []):
-                    await db["HR_Pending"].update_one(
-                        {"HR_Code": "JHS729"},
-                        {
-                            "$addToSet": {"EmployeesCodes": employee_code},
-                            "$set": {"last_updated": datetime.utcnow()}
-                        }
-                    )
-                    print(f"   ✅ Added to HR_Pending collection")
         
         print(f"\n✅✅ APPROVAL COMPLETE")
         print(f"   Total approved: {approved_count}")
@@ -3625,17 +3385,6 @@ async def hr_approve_employee(
                             }}
                         )
         
-
-        # Update collections
-        # Remove from HR_Pending
-        await db["HR_Pending"].update_one(
-            {"HR_Code": "JHS729"},
-            {"$pull": {"EmployeesCodes": employee_code}}
-        )
-        print(f"✅ Removed from HR_Pending")
-        
-        # Add to HR_Approved
-
         hr_approved_doc = await db["HR_Approved"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_approved_doc:
@@ -3764,17 +3513,6 @@ async def hr_reject_employee(
                             }}
                         )
         
-
-        # ✅ UPDATE COLLECTIONS
-        # Remove from HR_Pending
-        await db["HR_Pending"].update_one(
-            {"HR_Code": "JHS729"},
-            {"$pull": {"EmployeesCodes": employee_code}}
-        )
-        print(f"✅ Removed from HR_Pending")
-        
-        # Add to HR_Rejected
-
         hr_rejected_doc = await db["HR_Rejected"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_rejected_doc:
@@ -3824,198 +3562,6 @@ async def check_if_hr(current_user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.get("/api/ope/hr/pending")
-async def get_hr_pending_detailed(current_user=Depends(get_current_user)):
-    """
-    Get detailed pending employees for HR approval from HR_Pending collection
-    """
-    try:
-        current_emp_code = current_user["employee_code"].strip().upper()
-        
-        print(f"\n{'='*60}")
-        print(f"🏥 HR PENDING REQUEST FROM: {current_emp_code}")
-        print(f"{'='*60}\n")
-        
-        # Verify user is HR
-        if current_emp_code != "JHS729":
-            raise HTTPException(status_code=403, detail="Only HR can access this")
-        
-        # Get employees from HR_Pending collection
-        hr_pending_doc = await db["HR_Pending"].find_one({"HR_Code": "JHS729"})
-        
-        if not hr_pending_doc or not hr_pending_doc.get("EmployeesCodes"):
-            print(f"✅ No pending employees found for HR")
-            return {
-                "reporting_manager": current_emp_code,
-                "is_hr": True,
-                "total_employees": 0,
-                "employees": []
-            }
-        
-        pending_emp_codes = hr_pending_doc.get("EmployeesCodes", [])
-        print(f"👥 Found {len(pending_emp_codes)} employees in HR_Pending")
-        
-        pending_employees = []
-        
-        for emp_code in pending_emp_codes:
-            print(f"\n📋 Processing Employee: {emp_code}")
-            
-            # Get employee details
-            emp_details = await db["Employee_details"].find_one({"EmpID": emp_code})
-            employee_name = emp_details.get("Emp Name", "Unknown") if emp_details else "Unknown"
-            designation = emp_details.get("Designation Name", "") if emp_details else ""
-            
-            # Get OPE data
-            ope_doc = await db["OPE_data"].find_one({"employeeId": emp_code})
-            if not ope_doc:
-                print(f"   ⚠️ No OPE_data found - skipping")
-                continue
-            
-            # Get Status data
-            status_docs = await db["Status"].find({"employeeId": emp_code}).to_list(length=None)
-            if not status_docs:
-                print(f"   ⚠️ No Status found - skipping")
-                continue
-            
-            pending_entries = []
-            
-            for status_doc in status_docs:
-                approval_status_array = status_doc.get("approval_status", [])
-                
-                # Handle both array and dict formats
-                if isinstance(approval_status_array, dict):
-                    approval_status_array = [approval_status_array]
-                
-                for approval_status in approval_status_array:
-                    payroll_month = approval_status.get("payroll_month") or approval_status.get("month_range")
-                    total_levels = approval_status.get("total_levels", 2)
-                    current_level = approval_status.get("current_level", "L1")
-                    overall_status = approval_status.get("overall_status", "pending")
-                    
-                    print(f"   📅 Payroll: {payroll_month}")
-                    print(f"      Total Levels: {total_levels}, Current: {current_level}, Status: {overall_status}")
-                    
-                    # Check if this entry should be pending for HR
-                    should_show_to_hr = False
-                    
-                    if overall_status == "pending":
-                        if total_levels == 2 and current_level == "L2":
-                            # 2-level: RM approved → HR pending
-                            L1 = approval_status.get("L1", {})
-                            if L1.get("status") == True:
-                                should_show_to_hr = True
-                                print(f"      ✅ 2-level: L1 approved → HR pending")
-                        
-                        elif total_levels == 3 and current_level == "L3":
-                            # 3-level: RM + Partner approved → HR pending
-                            L1 = approval_status.get("L1", {})
-                            L2 = approval_status.get("L2", {})
-                            if L1.get("status") == True and L2.get("status") == True:
-                                should_show_to_hr = True
-                                print(f"      ✅ 3-level: L1+L2 approved → HR pending")
-                    
-                    if not should_show_to_hr:
-                        print(f"      ❌ Not for HR - skipping")
-                        continue
-                    
-                    # Get entries from OPE_data
-                    data_array = ope_doc.get("Data", [])
-                    for data_item in data_array:
-                        if payroll_month in data_item:
-                            entries = data_item[payroll_month]
-                            print(f"      📦 Found {len(entries)} entries in OPE_data")
-                            
-                            for entry in entries:
-                                entry_status = entry.get("status", "").lower()
-                                if entry_status == "approved":  # Approved by previous levels, pending HR
-                                    pending_entries.append({
-                                        "_id": str(entry.get("_id", "")),
-                                        "month_range": payroll_month,
-                                        "date": entry.get("date"),
-                                        "client": entry.get("client"),
-                                        "project_id": entry.get("project_id"),
-                                        "project_name": entry.get("project_name"),
-                                        "project_type": entry.get("project_type", "N/A"),
-                                        "location_from": entry.get("location_from"),
-                                        "location_to": entry.get("location_to"),
-                                        "travel_mode": entry.get("travel_mode"),
-                                        "amount": entry.get("amount"),
-                                        "remarks": entry.get("remarks"),
-                                        "ticket_pdf": entry.get("ticket_pdf"),
-                                        "total_levels": total_levels,
-                                        "current_level": current_level
-                                    })
-                                    print(f"         ✅ Entry added: {entry.get('date')} - ₹{entry.get('amount')}")
-                            break
-            
-            if pending_entries:
-                pending_employees.append({
-                    "employeeId": emp_code,
-                    "employeeName": employee_name,
-                    "designation": designation,
-                    "pendingCount": len(pending_entries),
-                    "entries": pending_entries
-                })
-                print(f"   ✅ ADDED: {employee_name} with {len(pending_entries)} pending entries")
-            else:
-                print(f"   ❌ No pending entries found")
-        
-        print(f"\n{'='*60}")
-        print(f"✅ FINAL RESULT: {len(pending_employees)} employees pending for HR")
-        print(f"{'='*60}\n")
-        
-        return {
-            "reporting_manager": current_emp_code,
-            "is_hr": True,
-            "total_employees": len(pending_employees),
-            "employees": pending_employees
-        }
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"❌ Error fetching HR pending: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/ope/hr/pending-employees")
-async def get_hr_pending_employees(current_user=Depends(get_current_user)):
-    """
-    Get list of employees with entries pending HR approval
-    """
-    try:
-        current_emp_code = current_user["employee_code"].strip().upper()
-        
-        # Check if user is HR
-        if current_emp_code != "JHS729":
-            raise HTTPException(status_code=403, detail="Only HR can access this")
-        
-        print(f"📋 Fetching HR pending employees")
-        
-        # Get from HR_Pending collection
-        hr_pending_doc = await db["HR_Pending"].find_one({"HR_Code": "JHS729"})
-        
-        employee_codes = []
-        if hr_pending_doc:
-            employee_codes = hr_pending_doc.get("EmployeesCodes", [])
-        
-        print(f"✅ Found {len(employee_codes)} HR pending employees")
-        
-        return {
-            "message": "HR pending employees fetched successfully",
-            "employee_codes": employee_codes,
-            "total_count": len(employee_codes)
-        }
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print(f"❌ Error fetching HR pending employees: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.get("/api/ope/hr/approved-employees")
 async def get_hr_approved_employees(current_user=Depends(get_current_user)):
     try:
@@ -4483,29 +4029,6 @@ async def partner_approve_employee(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
                 print(f"✅ Added to Partner_Approved collection")
-        
-        # Add to HR_Pending for final approval
-        print(f"\n🏥 ROUTING TO HR PENDING")
-        
-        hr_pending_doc = await db["HR_Pending"].find_one({"HR_Code": "JHS729"})
-        
-        if not hr_pending_doc:
-            await db["HR_Pending"].insert_one({
-                "HR_Code": "JHS729",
-                "EmployeesCodes": [employee_code],
-                "last_updated": datetime.utcnow()
-            })
-            print(f"   ✅ Created NEW HR_Pending document")
-        else:
-            if employee_code not in hr_pending_doc.get("EmployeesCodes", []):
-                await db["HR_Pending"].update_one(
-                    {"HR_Code": "JHS729"},
-                    {
-                        "$addToSet": {"EmployeesCodes": employee_code},
-                        "$set": {"last_updated": datetime.utcnow()}
-                    }
-                )
-                print(f"   ✅ Added to HR_Pending collection")
         
         print(f"\n{'='*60}")
         print(f"✅ Partner approved {approved_count} entries for {employee_code}")
