@@ -461,7 +461,6 @@ async def submit_ope_entry(
                 }
             }
             
-<<<<<<< HEAD
             # ✅ Handle Status Document - Accumulate amounts for same month
             existing_status = await db["Status"].find_one({"employeeId": emp_code, "month_range": month_range})
             
@@ -487,13 +486,13 @@ async def submit_ope_entry(
                     {"$set": status_doc},
                     upsert=True
                 )
-=======
+
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
                 upsert=True
             )
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
+
             
             await db["Pending"].update_one(
                 {"ReportingEmpCode": pending_queue_code},
@@ -630,7 +629,6 @@ async def submit_ope_entry(
                 
                 scenario_name = "Employee_Amount_Within_Limit"
             
-<<<<<<< HEAD
             # ✅ Handle Status Document - Accumulate amounts for same month
             existing_status = await db["Status"].find_one({"employeeId": emp_code, "month_range": month_range})
             
@@ -656,13 +654,13 @@ async def submit_ope_entry(
                     {"$set": status_doc},
                     upsert=True
                 )
-=======
+
             await db["Status"].update_one(
                 {"employeeId": emp_code, "month_range": month_range},
                 {"$set": status_doc},
                 upsert=True
             )
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
+
             
             print(f"\n{'='*60}")
             print(f"✅ EMPLOYEE SUBMISSION COMPLETE")
@@ -873,7 +871,6 @@ async def delete_ope_entry(
                             print(f"✅ Removed status document (deleted count: {status_result.deleted_count})")
                             
                         else:
-<<<<<<< HEAD
                             print(f"🗑️ Multiple entries exist - removing single entry from month range")
                             
                             # Create a more specific filter to remove the exact entry
@@ -927,13 +924,13 @@ async def delete_ope_entry(
                                     print(f"⚠️ Warning: Could not find status document after update")
                             else:
                                 print(f"⚠️ Warning: No status document found for {employee_code} - {month_range}")
-=======
+
                             print(f"🗑️ Removing single entry from month range")
                             await db["OPE_data"].update_one(
                                 {"employeeId": employee_code},
                                 {"$pull": {f"Data.{i}.{month_range}": {"_id": ObjectId(entry_id)}}}
                             )
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
+
                         
                         deleted = True
                         break
@@ -2984,11 +2981,8 @@ async def approve_employee_entries(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
                 print(f"✅ Added to Manager's Approved collection")
-        
-<<<<<<< HEAD
+    
         # Route to Partner's Pending if 3-level, otherwise to HR_Pending
-=======
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
         if partner_code:
             print(f"\n🔥 ROUTING TO PARTNER: {partner_code}")
             
@@ -3631,7 +3625,7 @@ async def hr_approve_employee(
                             }}
                         )
         
-<<<<<<< HEAD
+
         # Update collections
         # Remove from HR_Pending
         await db["HR_Pending"].update_one(
@@ -3641,8 +3635,7 @@ async def hr_approve_employee(
         print(f"✅ Removed from HR_Pending")
         
         # Add to HR_Approved
-=======
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
+
         hr_approved_doc = await db["HR_Approved"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_approved_doc:
@@ -3771,7 +3764,7 @@ async def hr_reject_employee(
                             }}
                         )
         
-<<<<<<< HEAD
+
         # ✅ UPDATE COLLECTIONS
         # Remove from HR_Pending
         await db["HR_Pending"].update_one(
@@ -3781,8 +3774,7 @@ async def hr_reject_employee(
         print(f"✅ Removed from HR_Pending")
         
         # Add to HR_Rejected
-=======
->>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
+
         hr_rejected_doc = await db["HR_Rejected"].find_one({"HR_Code": hr_emp_code})
         
         if not hr_rejected_doc:
