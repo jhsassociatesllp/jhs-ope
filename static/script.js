@@ -4,7 +4,7 @@ let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
 // API_URL = "http://127.0.0.1:8000";
 API_URL = "";
-
+  
  
 // Add CSS animations for popups
 const style = document.createElement('style');
@@ -42,20 +42,25 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'jan-feb-2026': {
-    start: '2026-01-21', 
-    end: '2026-02-20', 
-    display: 'Jan 2026 - Feb 2026' 
-  },
-  'feb-mar-2026': {
-    start: '2026-02-21', 
-    end: '2026-03-20', 
-    display: 'Feb 2026 - Mar 2026' 
-  },
+  // 'jan-feb-2026': {
+  //   start: '2026-01-21', 
+  //   end: '2026-02-20', 
+  //   display: 'Jan 2026 - Feb 2026' 
+  // },
+  // 'feb-mar-2026': {
+  //   start: '2026-02-21', 
+  //   end: '2026-03-20', 
+  //   display: 'Feb 2026 - Mar 2026' 
+  // },
     'mar-april-2026': {
     start: '2026-03-21', 
     end: '2026-04-20', 
     display: 'Mar 2026 - April 2026' 
+  },
+  'april-may-2026': {
+    start: '2026-04-21', 
+    end: '2026-05-20', 
+    display: 'April 2026 - May 2026' 
   }
 };
 
@@ -1100,6 +1105,11 @@ function displayHistoryTable(data) {
              </button>` 
           : '-'}
       </td>
+      <td class="action-btns">
+        <button class="delete-btn" onclick="deleteHistoryEntry('${entry._id}', '${entry.month_range}', ${entry.amount})">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </td>
     `;
 
     tbody.appendChild(row);
@@ -1547,6 +1557,166 @@ window.deleteRow = async function(entryId, monthRange) {
     showErrorPopup(error.message || 'Failed to delete entry');
   }
 };
+
+// ✅ NEW: Delete history entry and update status amount
+window.deleteHistoryEntry = async function(entryId, monthRange, entryAmount) {
+    try {
+        // Show confirmation popup
+        const confirmed = await showConfirmPopup(
+            'Delete Entry',
+            `Are you sure you want to delete this entry of ₹${entryAmount}? This action cannot be undone and will update your status amount.`,
+            'Delete',
+            'Cancel'
+        );
+        
+        if (!confirmed) return;
+        
+        const token = localStorage.getItem('access_token');
+        const empCode = localStorage.getItem('employee_code');
+        
+        console.log(`🗑️ Deleting entry: ${entryId} from month: ${monthRange}, amount: ₹${entryAmount}`);
+        
+        const response = await fetch(`${API_URL}/api/ope/delete/${entryId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                month_range: monthRange
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Failed to delete entry');
+        }
+        
+        const result = await response.json();
+        console.log('✅ Delete successful:', result);
+        
+        showSuccessPopup(`Entry deleted successfully! Status amount updated by -₹${entryAmount}`);
+        
+        // Reload history data to refresh the modal
+        await loadHistoryData(token, empCode);
+        
+        // Close current modal and reopen with updated data
+        const currentModal = document.querySelector('.history-modal');
+        if (currentModal) {
+            document.body.removeChild(currentModal);
+        }
+        
+        // Reopen the modal for the same month with updated data
+        setTimeout(() => {
+            showMonthHistory(monthRange);
+        }, 500);
+        
+    } catch (error) {
+        console.error('❌ Delete error:', error);
+        showErrorPopup(error.message || 'Failed to delete entry');
+    }
+};
+
+// Helper function for confirmation popup
+function showConfirmPopup(title, message, confirmText, cancelText) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        `;
+
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            background: white;
+            padding: 30px 25px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            animation: slideUp 0.3s ease;
+        `;
+
+        popup.innerHTML = `
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 18px;
+                animation: scaleIn 0.4s ease;
+            ">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+            </div>
+            <h2 style="font-size: 21px; color: #1f2937; margin-bottom: 10px; font-weight: 600;">${title}</h2>
+            <p style="color: #6b7280; margin-bottom: 25px; font-size: 14.5px; line-height: 1.5;">${message}</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button id="cancelBtn" style="
+                    padding: 12px 24px;
+                    background: #f1f5f9;
+                    color: #4a5568;
+                    border: 2px solid #e2e8f0;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                ">${cancelText}</button>
+                <button id="confirmBtn" style="
+                    padding: 12px 24px;
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    color: white;
+                    border: none;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                ">${confirmText}</button>
+            </div>
+        `;
+
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+
+        const confirmBtn = popup.querySelector('#confirmBtn');
+        const cancelBtn = popup.querySelector('#cancelBtn');
+
+        confirmBtn.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(true);
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            document.body.removeChild(overlay);
+            resolve(false);
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                document.body.removeChild(overlay);
+                resolve(false);
+            }
+        });
+    });
+}
 
 // 12. Loading Hide karne ka function
 function hideLoading() {
@@ -3816,10 +3986,10 @@ async function loadPendingData(token, empCode) {
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
         
         if (isHR) {
-            console.log("👔 USER IS HR - Fetching L1/L2 approved entries");
+            console.log("👔 USER IS HR - Fetching HR pending entries");
             
-            // ✅ FOR HR: Get entries where L1 (and L2 for 3-level) are approved
-            const response = await fetch(`${API_URL}/api/ope/manager/pending`, {
+            // ✅ FOR HR: Use dedicated HR pending endpoint
+            const response = await fetch(`${API_URL}/api/ope/hr/pending`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -9605,6 +9775,7 @@ window.showMonthDetails = function(month) {
                                 <th>Amount</th>
                                 <th>Remarks</th>
                                 <th>PDF</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -9629,6 +9800,11 @@ window.showMonthDetails = function(month) {
                                 <i class="fas fa-file-pdf"></i>
                                </button>` 
                             : '-'}
+                    </td>
+                    <td>
+                        <button class="delete-btn" onclick="deleteHistoryEntry('${entry._id}', '${entry.month_range}', ${entry.amount})">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
                     </td>
                 </tr>
             `;
