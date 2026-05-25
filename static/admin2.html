@@ -1150,9 +1150,9 @@
             <button class="tab-btn" data-tab="client-analysis">
                 <i class="fas fa-building"></i> Client-wise OPE Analysis
             </button>
-            <!-- <button class="tab-btn" data-tab="project-analysis">
+            <button class="tab-btn" data-tab="project-analysis">
                 <i class="fas fa-project-diagram"></i> Project-wise Analysis
-            </button> -->
+            </button>
             <button class="tab-btn" data-tab="advanced-analysis">
                 <i class="fas fa-magnifying-glass-chart"></i> Advanced Analysis
             </button>
@@ -1369,15 +1369,13 @@
                 </div>
                 <div class="filter-group">
                     <label><i class="fas fa-search"></i> Search Project</label>
-                    <select id="projectSearchDropdown" onchange="filterProjectCards()">
-                        <option value="">All Projects</option>
-                    </select>
+                    <input type="text" id="projectSearchInput" class="search-box" placeholder="Type project name..."
+                        oninput="filterProjectCards()">
                 </div>
                 <div class="filter-group">
                     <label><i class="fas fa-building"></i> Search Client</label>
-                    <select id="projectClientSearchDropdown" onchange="filterProjectCards()">
-                        <option value="">All Clients</option>
-                    </select>
+                    <input type="text" id="projectClientSearchInput" class="search-box"
+                        placeholder="Type client name..." oninput="filterProjectCards()">
                 </div>
                 <button class="filter-btn" onclick="loadProjectAnalysis()">
                     <i class="fas fa-chart-bar"></i> Analyse
@@ -1394,8 +1392,8 @@
                     <div class="lbl">Total Projects</div>
                 </div>
                 <div class="summary-card">
-                    <div class="num" id="sumConflictProjects" style="color:#f59e0b;">—</div>
-                    <div class="lbl">Projects with Conflicts</div>
+                    <div class="num" id="sumTotalProjectEmps" style="color:#8b5cf6;">—</div>
+                    <div class="lbl">Total Employees</div>
                 </div>
                 <div class="summary-card">
                     <div class="num" id="sumTotalProjectAmt" style="color:#10b981;">—</div>
@@ -1427,6 +1425,11 @@
                         <option value="">All Months</option>
                     </select>
                 </div>
+                <div class="filter-group">
+                    <label><i class="fas fa-clock"></i> Backdated Threshold (Days)</label>
+                    <input type="number" id="backdatedThreshold" class="search-box" value="30" min="1"
+                        style="width: 150px;">
+                </div>
                 <button class="filter-btn" onclick="loadAdvancedAnalysis()">
                     <i class="fas fa-magnifying-glass-chart"></i> Run Analysis
                 </button>
@@ -1443,8 +1446,7 @@
                     </div>
                     <div class="report-title">Duplicate Location Claims</div>
                     <div class="report-desc">
-                        Detect duplicate travel claims for the same location route and identify employees claiming
-                        short/excess amounts.
+                        Detect duplicate travel claims for the same location route and identify short/excess amounts.
                     </div>
                     <div class="analysis-summary-cards" id="duplicateSummary"
                         style="display:none;grid-template-columns:repeat(2,1fr);">
@@ -1457,17 +1459,37 @@
                             <div class="lbl">Total Duplicate Claims</div>
                         </div>
                     </div>
-                    <div id="duplicateClaimsContainer" style="max-height:500px;overflow-y:auto;margin-top:16px;">
+                    <div id="duplicateClaimsContainer" style="max-height:300px;overflow-y:auto;margin-top:16px;">
                         <div class="no-data">
                             <p>Run analysis to see duplicate claims</p>
                         </div>
                     </div>
-                    <div style="margin-top:16px;">
-                        <button class="download-btn" id="btnDuplicateExport"
-                            style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;"
-                            onclick="downloadDuplicateClaimsExcel()">
-                            <i class="fas fa-file-excel"></i> Export Duplicate Claims Excel
-                        </button>
+                </div>
+
+                <!-- Backdated Claims -->
+                <div class="report-card">
+                    <div class="report-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:white;">
+                        <i class="fas fa-clock-rotate-left"></i>
+                    </div>
+                    <div class="report-title">Backdated OPE Claims</div>
+                    <div class="report-desc">
+                        Identify claims submitted after the payroll month end date + threshold days.
+                    </div>
+                    <div class="analysis-summary-cards" id="backdatedSummary"
+                        style="display:none;grid-template-columns:repeat(2,1fr);">
+                        <div class="summary-card">
+                            <div class="num" id="backdatedCount" style="color:#f59e0b;">—</div>
+                            <div class="lbl">Backdated Claims</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="num" id="avgDaysLate" style="color:#ef4444;">—</div>
+                            <div class="lbl">Avg Days Late</div>
+                        </div>
+                    </div>
+                    <div id="backdatedClaimsContainer" style="max-height:300px;overflow-y:auto;margin-top:16px;">
+                        <div class="no-data">
+                            <p>Run analysis to see backdated claims</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1529,38 +1551,7 @@
                     </button>
                 </div>
 
-                <div class="report-card">
-                    <div class="report-icon" style="background:linear-gradient(135deg,#dc2626,#991b1b);color:white;">
-                        <i class="fas fa-file-pdf"></i>
-                    </div>
-                    <div class="report-title">Comprehensive Audit Report</div>
-                    <div class="report-desc">
-                        Complete audit analysis with 5 sheets: Summary Dashboard, Employee Summary, All Flags, Critical
-                        Flags, and Original Data. Includes KPIs, flag detection, and comprehensive compliance review.
-                    </div>
-                    <ul class="report-features">
-                        <li><i class="fas fa-check-circle"></i> Summary Dashboard with key metrics</li>
-                        <li><i class="fas fa-check-circle"></i> Employee-wise claim summary</li>
-                        <li><i class="fas fa-check-circle"></i> All flags with detailed information</li>
-                        <li><i class="fas fa-check-circle"></i> Critical flags (No Supporting Docs, Duplicates)</li>
-                        <li><i class="fas fa-check-circle"></i> Complete original data export</li>
-                        <li><i class="fas fa-check-circle"></i> Weekend claims detection</li>
-                        <li><i class="fas fa-check-circle"></i> HR approval status tracking</li>
-                    </ul>
-                    <div class="report-month-filter">
-                        <label>Filter by Payroll Month (optional)</label>
-                        <select id="auditReportMonth">
-                            <option value="">All Months</option>
-                        </select>
-                    </div>
-                    <button class="download-btn" id="btnAuditReport"
-                        style="background:linear-gradient(135deg,#dc2626,#991b1b);color:white;"
-                        onclick="downloadAuditReport()">
-                        <i class="fas fa-file-excel"></i> Download Audit Report
-                    </button>
-                </div>
             </div>
-        </div>
         </div>
     </main>
 
@@ -1675,7 +1666,7 @@
         }
 
         function populateAllMonthDropdowns(months) {
-            ['filterPayrollMonth', 'clientFilterMonth', 'clientReportMonth', 'partnerReportMonth', 'projectFilterMonth', 'advancedFilterMonth', 'auditReportMonth'].forEach(id => {
+            ['filterPayrollMonth', 'clientFilterMonth', 'clientReportMonth', 'partnerReportMonth', 'projectFilterMonth', 'advancedFilterMonth'].forEach(id => {
                 const sel = document.getElementById(id);
                 if (!sel) return;
                 months.forEach(m => {
@@ -1801,36 +1792,17 @@
             try {
                 const params = new URLSearchParams();
                 if (month) params.append('payroll_month', month);
-
                 const res = await fetch(`${API_URL}/api/admin/client-analysis?${params}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
                 const data = await res.json();
-
-                console.log('✅ Client analysis response:', data);
-
-                // ✅ FIXED: Validate response structure
-                if (!data.clients || !Array.isArray(data.clients)) {
-                    throw new Error('Invalid response structure: missing clients array');
-                }
-
                 allClientData = data.clients || [];
-
-                // ✅ FIXED: Populate dropdown with client names
-                populateClientDropdown(data);
-
-                // Render cards with fixed function
                 renderClientCards(allClientData);
-
             } catch (err) {
-                console.error('❌ Client analysis error:', err);
                 container.innerHTML = `<div class="no-data"><i class="fas fa-exclamation-triangle"></i><p>Failed to load: ${err.message}</p></div>`;
             }
         }
-
 
         function renderClientCards(clients) {
             const container = document.getElementById('clientCardsContainer');
@@ -1838,25 +1810,10 @@
             const searchVal = document.getElementById('clientSearchInput').value.toLowerCase();
 
             let filtered = clients;
-
-            // Apply search filter
-            if (searchVal) {
-                filtered = filtered.filter(c =>
-                    (c.client || '').toString().toLowerCase().includes(searchVal)
-                );
-            }
-
-            // Apply conflict filter
-            if (conflictFilter === 'conflict') {
-                filtered = filtered.filter(c =>
-                    c.payroll_months.some(pm => pm.pass_ticket_conflict)
-                );
-            }
-            if (conflictFilter === 'multi') {
-                filtered = filtered.filter(c =>
-                    c.payroll_months.some(pm => pm.employee_count > 1)
-                );
-            }
+            // if (searchVal) filtered = filtered.filter(c => c.client.toLowerCase().includes(searchVal));
+            if (searchVal) filtered = filtered.filter(c => (c.client || '').toString().toLowerCase().includes(searchVal));
+            if (conflictFilter === 'conflict') filtered = filtered.filter(c => c.payroll_months.some(pm => pm.pass_ticket_conflict));
+            if (conflictFilter === 'multi') filtered = filtered.filter(c => c.payroll_months.some(pm => pm.employee_count > 1));
 
             // Update summary
             let totalConflicts = 0, totalMulti = 0, totalAmt = 0;
@@ -1867,7 +1824,6 @@
                 });
                 totalAmt += c.total_amount;
             });
-
             document.getElementById('sumTotalClients').textContent = filtered.length;
             document.getElementById('sumConflictClients').textContent = totalConflicts;
             document.getElementById('sumMultiEmpClients').textContent = totalMulti;
@@ -1879,15 +1835,10 @@
                 return;
             }
 
-            // ✅ FIXED: Now properly iterates through payroll_months array
             container.innerHTML = filtered.map((client, ci) => {
                 const hasConflict = client.payroll_months.some(pm => pm.pass_ticket_conflict);
-
-                // Build months HTML
                 const monthsHTML = client.payroll_months.map(pm => {
                     const maxAmt = Math.max(...pm.employees.map(e => e.amount), 1);
-
-                    // Conflict alert
                     const conflictHTML = pm.pass_ticket_conflict ? `
                 <div class="conflict-alert">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -1899,7 +1850,6 @@
                 </div>
             ` : '';
 
-                    // Employee rows
                     const empRows = pm.employees.map((emp, ei) => {
                         const modeHTML = emp.travel_modes.map(m => {
                             const isPass = ['pass', 'metro_pass', 'bus_pass', 'train_pass 1st', 'train_pass 2nd'].some(p => m.includes(p));
@@ -1907,11 +1857,8 @@
                             const cls = isPass ? 'pass-badge' : isTicket ? 'ticket-badge' : 'mode-badge';
                             return `<span class="${cls}">${m.replace(/_/g, ' ')}</span>`;
                         }).join('');
-
                         const barPct = Math.round((emp.amount / maxAmt) * 100);
-                        const isConflictRow = (emp.uses_pass && pm.ticket_users.length > 0) ||
-                            (emp.uses_ticket && pm.pass_users.length > 0);
-
+                        const isConflictRow = (emp.uses_pass && pm.ticket_users.length > 0) || (emp.uses_ticket && pm.pass_users.length > 0);
                         return `<tr class="${isConflictRow ? 'conflict-row' : ''}">
                     <td><strong style="color:${ei === 0 ? '#d97706' : '#475569'}">#${ei + 1}</strong></td>
                     <td><strong>${emp.employee_name || emp.employee_id}</strong><br><span style="font-size:11px;color:#94a3b8;">${emp.employee_id}</span></td>
@@ -1954,6 +1901,7 @@
                 <div class="client-name">
                     <i class="fas fa-building" style="color:#fbbf24;"></i>
                     ${client.client || 'Unknown Client'}
+
                     ${hasConflict ? '<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">⚠️ CONFLICT</span>' : ''}
                 </div>
                 <div class="client-meta">
@@ -1981,52 +1929,6 @@
             document.getElementById('clientConflictFilter').value = '';
             document.getElementById('clientCardsContainer').innerHTML = '<div class="no-data"><i class="fas fa-building"></i><p>Select a payroll month and click Analyse to see client-wise OPE data</p></div>';
             document.getElementById('clientSummaryCards').style.display = 'none';
-        }
-
-        async function downloadAuditReport() {
-            const btn = document.getElementById('btnAuditReport');
-            const token = localStorage.getItem('access_token');
-            const month = document.getElementById('auditReportMonth').value.trim();
-
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generating...';
-
-            try {
-                const params = new URLSearchParams();
-                if (month) params.append('payroll_month', month);
-
-                const res = await fetch(`${API_URL}/api/admin/export/audit-report?${params}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                if (!res.ok) {
-                    const error = await res.json().catch(() => ({}));
-                    throw new Error(error.detail || `HTTP ${res.status}`);
-                }
-
-                const disposition = res.headers.get('Content-Disposition') || '';
-                const match = disposition.match(/filename="?([^"]+)"?/);
-                const filename = match ? match[1] : 'audit_report.xlsx';
-
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                console.log('✅ Audit report downloaded:', filename);
-
-            } catch (err) {
-                alert('❌ Download failed: ' + err.message);
-                console.error('Download error:', err);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-file-excel"></i> Download Audit Report';
-            }
         }
 
         // ── EXCEL DOWNLOADS ───────────────────────────────────────────
@@ -2102,273 +2004,6 @@
         function confirmSwitchToPortal() { closeConfirmModal(); window.location.href = '/'; }
 
         // ── PROJECT ANALYSIS ───────────────────────────────────────────
-        // let allProjectData = [];
-
-        // async function loadProjectAnalysis() {
-        //     const token = localStorage.getItem('access_token');
-        //     const month = document.getElementById('projectFilterMonth').value;
-        //     const container = document.getElementById('projectCardsContainer');
-        //     container.innerHTML = '<div class="no-data"><i class="fas fa-circle-notch fa-spin"></i><p>Analysing project data...</p></div>';
-        //     document.getElementById('projectSummaryCards').style.display = 'none';
-
-        //     try {
-        //         const params = new URLSearchParams();
-        //         if (month) params.append('payroll_month', month);
-        //         const res = await fetch(`${API_URL}/api/admin/analysis/client-project-wise?${params}`, {
-        //             headers: { 'Authorization': `Bearer ${token}` }
-        //         });
-        //         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        //         const data = await res.json();
-        //         // REPLACE the summary update inside loadProjectAnalysis (after allProjectData = data.clients):
-        //         allProjectData = data.clients || [];
-
-        //         // Compute truly unique project IDs and employees across all clients
-        //         const allUniqueProjects = new Set();
-        //         const allUniqueEmps = new Set();
-        //         let grandTotal = 0;
-        //         allProjectData.forEach(c => {
-        //             c.projects.forEach(p => {
-        //                 allUniqueProjects.add(p.project_id);
-        //                 grandTotal += p.total_amount || 0;
-        //                 // total_employees per project is unique within that project
-        //                 // We can't deduplicate globally without IDs, use sum
-        //                 allUniqueEmps.add(...Array.from({ length: p.total_employees }, (_, i) => `${p.project_id}_${i}`));
-        //             });
-        //         });
-
-        //         // Use backend-provided global unique counts
-        //         const globalProjects = data.global_unique_projects || 0;
-        //         const globalEmps = data.global_unique_employees || 0;
-        //         const globalAmt = (data.clients || []).reduce((s, c) => s + (c.total_amount || 0), 0);
-
-        //         document.getElementById('sumTotalProjects').textContent = globalProjects;
-        //         document.getElementById('sumTotalProjectEmps').textContent = globalEmps;
-        //         document.getElementById('sumTotalProjectAmt').textContent = formatCurrency(globalAmt);
-        //         document.getElementById('sumAvgPerEmp').textContent = globalEmps > 0 ? formatCurrency(globalAmt / globalEmps) : '₹0';
-        //         document.getElementById('projectSummaryCards').style.display = 'grid';
-
-
-        //         renderProjectCards(allProjectData);
-        //     } catch (err) {
-        //         container.innerHTML = `<div class="no-data"><i class="fas fa-exclamation-triangle"></i><p>Failed to load: ${err.message}</p></div>`;
-        //     }
-        // }
-
-        // // REPLACE renderProjectCards function entirely
-        // function renderProjectCards(clients) {
-        //     const container = document.getElementById('projectCardsContainer');
-        //     const searchVal = document.getElementById('projectSearchInput').value.toLowerCase();
-        //     const clientSearchVal = document.getElementById('projectClientSearchInput').value.toLowerCase();
-
-        //     // Flatten all projects from all clients
-        //     let allProjects = [];
-        //     clients.forEach(c => {
-        //         c.projects.forEach(p => {
-        //             allProjects.push({ ...p, client: c.client });
-        //         });
-        //     });
-
-        //     // Apply filters
-        //     if (searchVal) allProjects = allProjects.filter(p => (p.project_name || '').toLowerCase().includes(searchVal));
-        //     if (clientSearchVal) allProjects = allProjects.filter(p => (p.client || '').toLowerCase().includes(clientSearchVal));
-
-        //     // Unique counts for summary
-        //     const uniqueProjectIds = new Set(allProjects.map(p => p.project_id));
-        //     const uniqueEmpIds = new Set();
-        //     allProjects.forEach(p => {
-        //         p.payroll_months && p.payroll_months.forEach(pm => {
-        //             // employees aren't stored per-project in response, use total_employees approximation
-        //         });
-        //     });
-        //     let totalAmt = allProjects.reduce((s, p) => s + (p.total_amount || 0), 0);
-        //     // Use global unique employee count from original clients data
-        //     const globalUniqueEmps = new Set();
-        //     clients.forEach(c => {
-        //         // We don't have individual emp IDs here, use the per-project counts as best effort
-        //     });
-        //     let totalEmps = allProjects.reduce((s, p) => s + (p.total_employees || 0), 0);
-
-        //     document.getElementById('sumTotalProjects').textContent = uniqueProjectIds.size;
-        //     document.getElementById('sumTotalProjectEmps').textContent = totalEmps;
-        //     document.getElementById('sumTotalProjectAmt').textContent = formatCurrency(totalAmt);
-        //     document.getElementById('sumAvgPerEmp').textContent = totalEmps > 0 ? formatCurrency(totalAmt / totalEmps) : '₹0';
-        //     document.getElementById('projectSummaryCards').style.display = allProjects.length ? 'grid' : 'none';
-
-        //     if (!allProjects.length) {
-        //         container.innerHTML = '<div class="no-data"><i class="fas fa-project-diagram"></i><p>No projects found for the selected filters.</p></div>';
-        //         return;
-        //     }
-
-        //     // Sort projects by total amount descending
-        //     allProjects.sort((a, b) => (b.total_amount || 0) - (a.total_amount || 0));
-
-        //     container.innerHTML = allProjects.map((project, pi) => {
-        //         const monthsHTML = (project.payroll_months || []).map(pm => `
-        //             <tr>
-        //                 <td>${pm.payroll_month}</td>
-        //                 <td style="text-align:right;">${pm.employee_count}</td>
-        //                 <td style="text-align:right;font-weight:700;">₹${pm.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        //             </tr>
-        //         `).join('');
-
-        //         return `<div class="client-card" id="proj-card-${pi}">
-        //             <div class="client-card-header" onclick="toggleProjCard(${pi})">
-        //                 <div class="client-name">
-        //                     <i class="fas fa-folder" style="color:#fbbf24;"></i>
-        //                     ${project.project_name || 'Unknown Project'}
-        //                     <span style="background:rgba(255,255,255,.12);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:500;margin-left:6px;">${project.project_type || ''}</span>
-        //                 </div>
-        //                 <div class="client-meta">
-        //                     <span class="client-badge"><i class="fas fa-building"></i> ${project.client}</span>
-        //                     <span class="client-badge"><i class="fas fa-users"></i> ${project.total_employees} emp</span>
-        //                     <span class="client-badge">₹${formatCurrencyShort(project.total_amount)}</span>
-        //                     <i class="fas fa-chevron-down" id="proj-chevron-${pi}" style="transition:transform .3s;"></i>
-        //                 </div>
-        //             </div>
-        //             <div class="client-body" id="proj-body-${pi}">
-        //                 <div style="overflow-x:auto;padding:16px;">
-        //                     <table class="emp-table">
-        //                         <thead><tr><th>Payroll Month</th><th style="text-align:right;">Employees</th><th style="text-align:right;">Amount</th></tr></thead>
-        //                         <tbody>${monthsHTML}</tbody>
-        //                     </table>
-        //                 </div>
-        //             </div>
-        //         </div>`;
-        //     }).join('');
-        // }
-
-        // function toggleProjCard(pi) {
-        //     const body = document.getElementById('proj-body-' + pi);
-        //     const chevron = document.getElementById('proj-chevron-' + pi);
-        //     body.classList.toggle('open');
-        //     chevron.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
-        // }
-
-        // function filterProjectCards() { renderProjectCards(allProjectData); }
-        // function resetProjectFilters() {
-        //     document.getElementById('projectFilterMonth').value = '';
-        //     document.getElementById('projectSearchInput').value = '';
-        //     document.getElementById('projectClientSearchInput').value = '';
-        //     document.getElementById('projectCardsContainer').innerHTML = '<div class="no-data"><i class="fas fa-project-diagram"></i><p>Select a payroll month and click Analyse to see project-wise OPE data</p></div>';
-        //     document.getElementById('projectSummaryCards').style.display = 'none';
-        // }
-
-        // // ── ADVANCED ANALYSIS ───────────────────────────────────────────
-        // async function loadAdvancedAnalysis() {
-        //     const token = localStorage.getItem('access_token');
-        //     const month = document.getElementById('advancedFilterMonth').value;
-        //     const threshold = document.getElementById('backdatedThreshold').value || 30;
-
-        //     showLoading(true);
-
-        //     try {
-        //         // Load duplicate location analysis
-        //         const dupParams = new URLSearchParams();
-        //         if (month) dupParams.append('payroll_month', month);
-        //         const dupRes = await fetch(`${API_URL}/api/admin/analysis/duplicate-locations?${dupParams}`, {
-        //             headers: { 'Authorization': `Bearer ${token}` }
-        //         });
-        //         if (dupRes.ok) {
-        //             const dupData = await dupRes.json();
-        //             renderDuplicateAnalysis(dupData);
-        //         }
-
-        //         // Load backdated claims analysis
-        //         const backParams = new URLSearchParams();
-        //         if (month) backParams.append('payroll_month', month);
-        //         backParams.append('days_threshold', threshold);
-        //         const backRes = await fetch(`${API_URL}/api/admin/analysis/backdated-claims?${backParams}`, {
-        //             headers: { 'Authorization': `Bearer ${token}` }
-        //         });
-        //         if (backRes.ok) {
-        //             const backData = await backRes.json();
-        //             renderBackdatedAnalysis(backData);
-        //         }
-        //     } catch (err) {
-        //         console.error('Advanced analysis error:', err);
-        //     } finally {
-        //         showLoading(false);
-        //     }
-        // }
-
-        // function renderDuplicateAnalysis(data) {
-        //     document.getElementById('duplicateSummary').style.display = 'grid';
-        //     document.getElementById('dupLocations').textContent = data.total_locations_analyzed || 0;
-        //     document.getElementById('dupClaims').textContent = data.total_duplicate_claims || 0;
-
-        //     const container = document.getElementById('duplicateClaimsContainer');
-        //     if (!data.location_analysis || data.location_analysis.length === 0) {
-        //         container.innerHTML = '<div class="no-data"><p>No duplicate location claims found</p></div>';
-        //         return;
-        //     }
-
-        //     container.innerHTML = data.location_analysis.map(loc => `
-        //         <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:8px;">
-        //             <div style="font-weight:700;color:#92400e;margin-bottom:6px;">
-        //                 <i class="fas fa-route"></i> ${loc.location_route}
-        //             </div>
-        //             <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">
-        //                 <strong>Total Claims:</strong> ${loc.total_claims} | 
-        //                 <strong>Unique Employees:</strong> ${loc.unique_employees} |
-        //                 <strong>Duplicates:</strong> ${loc.duplicate_claims}
-        //             </div>
-        //             <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
-        //                 <strong>Avg Amount:</strong> ₹${loc.amount_stats.average} |
-        //                 <strong>Min:</strong> ₹${loc.amount_stats.minimum} |
-        //                 <strong>Max:</strong> ₹${loc.amount_stats.maximum} |
-        //                 <strong>Spread:</strong> ₹${loc.amount_stats.spread}
-        //             </div>
-        //             ${loc.short_claims.length > 0 ? `<div style="font-size:11px;color:#ef4444;margin-top:4px;"><strong>Short Claims (<80% avg):</strong> ${loc.short_claims.length}</div>` : ''}
-        //             ${loc.excess_claims.length > 0 ? `<div style="font-size:11px;color:#ef4444;margin-top:4px;"><strong>Excess Claims (>120% avg):</strong> ${loc.excess_claims.length}</div>` : ''}
-        //         </div>
-        //     `).join('');
-        // }
-
-        // function renderBackdatedAnalysis(data) {
-        //     document.getElementById('backdatedSummary').style.display = 'grid';
-        //     document.getElementById('backdatedCount').textContent = data.total_backdated_claims || 0;
-
-        //     const avgDays = data.backdated_claims && data.backdated_claims.length > 0
-        //         ? Math.round(data.backdated_claims.reduce((sum, c) => sum + c.days_late, 0) / data.backdated_claims.length)
-        //         : 0;
-        //     document.getElementById('avgDaysLate').textContent = avgDays;
-
-        //     const container = document.getElementById('backdatedClaimsContainer');
-        //     if (!data.backdated_claims || data.backdated_claims.length === 0) {
-        //         container.innerHTML = '<div class="no-data"><p>No backdated claims found</p></div>';
-        //         return;
-        //     }
-
-        //     container.innerHTML = data.backdated_claims.slice(0, 20).map(claim => `
-        //         <div style="background:#fee2e2;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:8px;">
-        //             <div style="font-weight:700;color:#991b1b;margin-bottom:6px;">
-        //                 <i class="fas fa-clock"></i> ${claim.employee_name || claim.employee_id}
-        //             </div>
-        //             <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">
-        //                 <strong>Payroll Month:</strong> ${claim.payroll_month} |
-        //                 <strong>Days Late:</strong> ${claim.days_late} |
-        //                 <strong>Amount:</strong> ₹${claim.amount}
-        //             </div>
-        //             <div style="font-size:11px;color:#991b1b;margin-top:4px;">
-        //                 Submitted: ${claim.submission_date.split('T')[0]} | 
-        //                 Threshold: ${claim.threshold_date.split('T')[0]}
-        //             </div>
-        //         </div>
-        //     `).join('') + (data.backdated_claims.length > 20 ? `<div style="text-align:center;font-size:12px;color:#6b7280;margin-top:8px;">Showing 20 of ${data.backdated_claims.length} backdated claims</div>` : '');
-        // }
-
-        // function resetAdvancedFilters() {
-        //     document.getElementById('advancedFilterMonth').value = '';
-        //     document.getElementById('backdatedThreshold').value = 30;
-        //     document.getElementById('duplicateSummary').style.display = 'none';
-        //     document.getElementById('backdatedSummary').style.display = 'none';
-        //     document.getElementById('duplicateClaimsContainer').innerHTML = '<div class="no-data"><p>Run analysis to see duplicate claims</p></div>';
-        //     document.getElementById('backdatedClaimsContainer').innerHTML = '<div class="no-data"><p>Run analysis to see backdated claims</p></div>';
-        // }
-
-
-
-        // ── PROJECT ANALYSIS (REPLACE THIS ENTIRE SECTION) ───────────────────────
         let allProjectData = [];
 
         async function loadProjectAnalysis() {
@@ -2386,10 +2021,34 @@
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
+                // REPLACE the summary update inside loadProjectAnalysis (after allProjectData = data.clients):
                 allProjectData = data.clients || [];
 
-                // Populate dropdowns
-                populateProjectDropdowns(allProjectData);
+                // Compute truly unique project IDs and employees across all clients
+                const allUniqueProjects = new Set();
+                const allUniqueEmps = new Set();
+                let grandTotal = 0;
+                allProjectData.forEach(c => {
+                    c.projects.forEach(p => {
+                        allUniqueProjects.add(p.project_id);
+                        grandTotal += p.total_amount || 0;
+                        // total_employees per project is unique within that project
+                        // We can't deduplicate globally without IDs, use sum
+                        allUniqueEmps.add(...Array.from({ length: p.total_employees }, (_, i) => `${p.project_id}_${i}`));
+                    });
+                });
+
+                // Use backend-provided global unique counts
+                const globalProjects = data.global_unique_projects || 0;
+                const globalEmps = data.global_unique_employees || 0;
+                const globalAmt = (data.clients || []).reduce((s, c) => s + (c.total_amount || 0), 0);
+
+                document.getElementById('sumTotalProjects').textContent = globalProjects;
+                document.getElementById('sumTotalProjectEmps').textContent = globalEmps;
+                document.getElementById('sumTotalProjectAmt').textContent = formatCurrency(globalAmt);
+                document.getElementById('sumAvgPerEmp').textContent = globalEmps > 0 ? formatCurrency(globalAmt / globalEmps) : '₹0';
+                document.getElementById('projectSummaryCards').style.display = 'grid';
+
 
                 renderProjectCards(allProjectData);
             } catch (err) {
@@ -2397,75 +2056,13 @@
             }
         }
 
-        function populateClientDropdown(responseData) {
-            const clientNames = responseData.all_client_names || [];
-            let datalist = document.getElementById('clientListOptions');
-
-            if (!datalist) {
-                datalist = document.createElement('datalist');
-                datalist.id = 'clientListOptions';
-                document.body.appendChild(datalist);
-                document.getElementById('clientSearchInput').setAttribute('list', 'clientListOptions');
-            }
-
-            // ✅ FIXED: Map to option elements
-            datalist.innerHTML = clientNames
-                .map(name => `<option value="${(name || '').trim()}">`)
-                .join('');
-
-            console.log(`✅ Populated ${clientNames.length} client names in dropdown`);
-        }
-
-        function populateProjectDropdowns(clients) {
-            // Collect all unique projects and clients
-            const projectMap = new Map();
-            const clientSet = new Set();
-
-            for (const client of clients) {
-                clientSet.add(client.client);
-                for (const project of client.projects) {
-                    const key = project.project_id;
-                    if (!projectMap.has(key)) {
-                        projectMap.set(key, {
-                            id: project.project_id,
-                            name: project.project_name,
-                            type: project.project_type
-                        });
-                    }
-                }
-            }
-
-            // Populate project dropdown
-            const projectDropdown = document.getElementById('projectSearchDropdown');
-            projectDropdown.innerHTML = '<option value="">All Projects</option>';
-            Array.from(projectMap.values())
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                .forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.textContent = p.name || p.id;
-                    projectDropdown.appendChild(opt);
-                });
-
-            // Populate client dropdown
-            const clientDropdown = document.getElementById('projectClientSearchDropdown');
-            clientDropdown.innerHTML = '<option value="">All Clients</option>';
-            Array.from(clientSet)
-                .sort()
-                .forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    clientDropdown.appendChild(opt);
-                });
-        }
-
+        // REPLACE renderProjectCards function entirely
         function renderProjectCards(clients) {
             const container = document.getElementById('projectCardsContainer');
-            const projectFilterVal = document.getElementById('projectSearchDropdown').value;
-            const clientFilterVal = document.getElementById('projectClientSearchDropdown').value;
+            const searchVal = document.getElementById('projectSearchInput').value.toLowerCase();
+            const clientSearchVal = document.getElementById('projectClientSearchInput').value.toLowerCase();
 
-            // Flatten all projects
+            // Flatten all projects from all clients
             let allProjects = [];
             clients.forEach(c => {
                 c.projects.forEach(p => {
@@ -2474,41 +2071,27 @@
             });
 
             // Apply filters
-            if (projectFilterVal) allProjects = allProjects.filter(p => p.project_id === projectFilterVal);
-            if (clientFilterVal) allProjects = allProjects.filter(p => p.client === clientFilterVal);
+            if (searchVal) allProjects = allProjects.filter(p => (p.project_name || '').toLowerCase().includes(searchVal));
+            if (clientSearchVal) allProjects = allProjects.filter(p => (p.client || '').toLowerCase().includes(clientSearchVal));
 
-            // Detect conflicts: project has employees with BOTH pass-type AND ticket-type travel modes
-            function detectProjectConflicts(project) {
-                const conflicts = [];
-                (project.payroll_months || []).forEach(pm => {
-                    const employees = pm.employees || [];
-                    const passUsers = employees.filter(e =>
-                        (e.travel_modes || []).some(m => ['pass', 'metro_pass', 'bus_pass', 'train_pass'].some(t => m.includes(t)))
-                    );
-                    const ticketUsers = employees.filter(e =>
-                        (e.travel_modes || []).some(m => ['ticket', 'metro_tickets', 'bus_ticket', 'train_ticket'].some(t => m.includes(t)))
-                    );
-                    if (passUsers.length > 0 && ticketUsers.length > 0) {
-                        conflicts.push({ payroll_month: pm.payroll_month, passUsers, ticketUsers });
-                    }
-                });
-                return conflicts;
-            }
-
-            // Calculate summary stats
+            // Unique counts for summary
             const uniqueProjectIds = new Set(allProjects.map(p => p.project_id));
-            let conflictCount = 0;
-            let totalAmt = 0;
-            let totalEmps = 0;
-
+            const uniqueEmpIds = new Set();
             allProjects.forEach(p => {
-                totalAmt += p.total_amount || 0;
-                totalEmps += p.total_employees || 0;
-                if (detectProjectConflicts(p).length > 0) conflictCount++;
+                p.payroll_months && p.payroll_months.forEach(pm => {
+                    // employees aren't stored per-project in response, use total_employees approximation
+                });
             });
+            let totalAmt = allProjects.reduce((s, p) => s + (p.total_amount || 0), 0);
+            // Use global unique employee count from original clients data
+            const globalUniqueEmps = new Set();
+            clients.forEach(c => {
+                // We don't have individual emp IDs here, use the per-project counts as best effort
+            });
+            let totalEmps = allProjects.reduce((s, p) => s + (p.total_employees || 0), 0);
 
             document.getElementById('sumTotalProjects').textContent = uniqueProjectIds.size;
-            document.getElementById('sumConflictProjects').textContent = conflictCount;
+            document.getElementById('sumTotalProjectEmps').textContent = totalEmps;
             document.getElementById('sumTotalProjectAmt').textContent = formatCurrency(totalAmt);
             document.getElementById('sumAvgPerEmp').textContent = totalEmps > 0 ? formatCurrency(totalAmt / totalEmps) : '₹0';
             document.getElementById('projectSummaryCards').style.display = allProjects.length ? 'grid' : 'none';
@@ -2518,86 +2101,41 @@
                 return;
             }
 
-            // Sort by total amount desc
+            // Sort projects by total amount descending
             allProjects.sort((a, b) => (b.total_amount || 0) - (a.total_amount || 0));
 
             container.innerHTML = allProjects.map((project, pi) => {
-                const projectConflicts = detectProjectConflicts(project);
-                const hasConflict = projectConflicts.length > 0;
-
-                // Months breakdown
-                const monthsHTML = (project.payroll_months || []).map(pm => {
-                    const empRows = (pm.employees || []).map((emp, ei) => {
-                        const modeHTML = (emp.travel_modes || [emp.travel_mode]).filter(Boolean).map(m => {
-                            const isPass = ['pass', 'metro_pass', 'bus_pass', 'train_pass'].some(t => m.includes(t));
-                            const isTicket = ['ticket', 'metro_tickets', 'bus_ticket', 'train_ticket'].some(t => m.includes(t));
-                            return `<span class="${isPass ? 'pass-badge' : isTicket ? 'ticket-badge' : 'mode-badge'}">${m.replace(/_/g, ' ')}</span>`;
-                        }).join('');
-
-                        return `<tr>
-                    <td><strong style="color:${ei === 0 ? '#d97706' : '#475569'}">#${ei + 1}</strong></td>
-                    <td><strong>${emp.employee_name || emp.employee_id}</strong><br>
-                        <span style="font-size:11px;color:#94a3b8;">${emp.employee_id || ''}</span></td>
-                    <td style="text-align:right;font-weight:700;color:#059669;">
-                        ₹${(emp.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td>${modeHTML}</td>
-                    <td style="text-align:center;color:#6b7280;">${emp.entry_count || 1}</td>
-                </tr>`;
-                    }).join('');
-
-                    // Conflict alert for this month
-                    const monthConflict = projectConflicts.find(c => c.payroll_month === pm.payroll_month);
-                    const conflictHTML = monthConflict ? `
-                <div class="conflict-alert">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <div class="conflict-alert-text">
-                        <strong>⚠️ Pass vs Ticket Conflict!</strong><br>
-                        <strong>Pass users:</strong> ${monthConflict.passUsers.map(e => e.employee_name || e.employee_id).join(', ')} &nbsp;|&nbsp;
-                        <strong>Ticket users:</strong> ${monthConflict.ticketUsers.map(e => e.employee_name || e.employee_id).join(', ')}
-                    </div>
-                </div>` : '';
-
-                    const hasEmpData = (pm.employees || []).length > 0;
-                    return `<div class="month-section">
-                <div class="month-header" onclick="toggleMonthSection(this)" style="cursor:pointer;user-select:none;">
-                    <span><i class="fas fa-calendar-alt"></i> ${pm.payroll_month}</span>
-                    <div class="month-stats">
-                        <span class="month-stat"><i class="fas fa-users"></i> ${pm.employee_count} emp</span>
-                        <span class="month-stat">₹${pm.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        ${monthConflict ? `<span class="month-stat" style="background:rgba(245,158,11,.3);">⚠️ Conflict</span>` : ''}
-                        <span class="month-stat" style="background:rgba(255,255,255,.25);min-width:28px;text-align:center;">
-                            <i class="fas fa-chevron-down" style="transition:transform .3s;"></i>
-                        </span>
-                    </div>
-                </div>
-                <div class="month-body" style="display:none;">
-                    ${conflictHTML}
-                    ${hasEmpData ? `<div style="overflow-x:auto;">
-                        <table class="emp-table">
-                            <thead><tr><th>#</th><th>Employee</th><th style="text-align:right;">Amount</th><th>Travel Mode</th><th style="text-align:center;">Entries</th></tr></thead>
-                            <tbody>${empRows}</tbody>
-                        </table></div>` : `<p style="padding:12px 20px;color:#94a3b8;font-size:13px;">Click Analyse to see detailed employee breakdown</p>`}
-                </div>
-            </div>`;
-                }).join('');
+                const monthsHTML = (project.payroll_months || []).map(pm => `
+                    <tr>
+                        <td>${pm.payroll_month}</td>
+                        <td style="text-align:right;">${pm.employee_count}</td>
+                        <td style="text-align:right;font-weight:700;">₹${pm.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                `).join('');
 
                 return `<div class="client-card" id="proj-card-${pi}">
-            <div class="client-card-header" onclick="toggleProjCard(${pi})">
-                <div class="client-name">
-                    <i class="fas fa-folder" style="color:#fbbf24;"></i>
-                    ${project.project_name || 'Unknown Project'}
-                    <span style="background:rgba(255,255,255,.12);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:500;margin-left:6px;">${project.project_type || ''}</span>
-                    ${hasConflict ? '<span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">⚠️ CONFLICT</span>' : ''}
-                </div>
-                <div class="client-meta">
-                    <span class="client-badge"><i class="fas fa-building"></i> ${project.client}</span>
-                    <span class="client-badge"><i class="fas fa-users"></i> ${project.total_employees} emp</span>
-                    <span class="client-badge">₹${formatCurrencyShort(project.total_amount)}</span>
-                    <i class="fas fa-chevron-down" id="proj-chevron-${pi}" style="transition:transform .3s;"></i>
-                </div>
-            </div>
-            <div class="client-body" id="proj-body-${pi}">${monthsHTML}</div>
-        </div>`;
+                    <div class="client-card-header" onclick="toggleProjCard(${pi})">
+                        <div class="client-name">
+                            <i class="fas fa-folder" style="color:#fbbf24;"></i>
+                            ${project.project_name || 'Unknown Project'}
+                            <span style="background:rgba(255,255,255,.12);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:500;margin-left:6px;">${project.project_type || ''}</span>
+                        </div>
+                        <div class="client-meta">
+                            <span class="client-badge"><i class="fas fa-building"></i> ${project.client}</span>
+                            <span class="client-badge"><i class="fas fa-users"></i> ${project.total_employees} emp</span>
+                            <span class="client-badge">₹${formatCurrencyShort(project.total_amount)}</span>
+                            <i class="fas fa-chevron-down" id="proj-chevron-${pi}" style="transition:transform .3s;"></i>
+                        </div>
+                    </div>
+                    <div class="client-body" id="proj-body-${pi}">
+                        <div style="overflow-x:auto;padding:16px;">
+                            <table class="emp-table">
+                                <thead><tr><th>Payroll Month</th><th style="text-align:right;">Employees</th><th style="text-align:right;">Amount</th></tr></thead>
+                                <tbody>${monthsHTML}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
             }).join('');
         }
 
@@ -2608,46 +2146,45 @@
             chevron.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
         }
 
-        function filterProjectCards() {
-            renderProjectCards(allProjectData);
-        }
-
+        function filterProjectCards() { renderProjectCards(allProjectData); }
         function resetProjectFilters() {
             document.getElementById('projectFilterMonth').value = '';
-            document.getElementById('projectSearchDropdown').value = '';
-            document.getElementById('projectClientSearchDropdown').value = '';
+            document.getElementById('projectSearchInput').value = '';
+            document.getElementById('projectClientSearchInput').value = '';
             document.getElementById('projectCardsContainer').innerHTML = '<div class="no-data"><i class="fas fa-project-diagram"></i><p>Select a payroll month and click Analyse to see project-wise OPE data</p></div>';
             document.getElementById('projectSummaryCards').style.display = 'none';
         }
 
-
-        // ── ADVANCED ANALYSIS (REPLACE THIS ENTIRE SECTION) ────────────────────────
-
+        // ── ADVANCED ANALYSIS ───────────────────────────────────────────
         async function loadAdvancedAnalysis() {
             const token = localStorage.getItem('access_token');
             const month = document.getElementById('advancedFilterMonth').value;
+            const threshold = document.getElementById('backdatedThreshold').value || 30;
 
             showLoading(true);
+
             try {
+                // Load duplicate location analysis
                 const dupParams = new URLSearchParams();
                 if (month) dupParams.append('payroll_month', month);
-
                 const dupRes = await fetch(`${API_URL}/api/admin/analysis/duplicate-locations?${dupParams}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (dupRes.ok) {
                     const dupData = await dupRes.json();
-                    renderDuplicateAnalysisEnhanced(dupData);
+                    renderDuplicateAnalysis(dupData);
+                }
 
-                    // Auto-expand first card for immediate visibility
-                    setTimeout(() => {
-                        const firstBody = document.getElementById('dup-body-0');
-                        const firstChevron = document.getElementById('dup-chevron-0');
-                        if (firstBody) {
-                            firstBody.style.display = 'block';
-                            if (firstChevron) firstChevron.style.transform = 'rotate(180deg)';
-                        }
-                    }, 100);
+                // Load backdated claims analysis
+                const backParams = new URLSearchParams();
+                if (month) backParams.append('payroll_month', month);
+                backParams.append('days_threshold', threshold);
+                const backRes = await fetch(`${API_URL}/api/admin/analysis/backdated-claims?${backParams}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (backRes.ok) {
+                    const backData = await backRes.json();
+                    renderBackdatedAnalysis(backData);
                 }
             } catch (err) {
                 console.error('Advanced analysis error:', err);
@@ -2656,17 +2193,10 @@
             }
         }
 
-
-        function renderDuplicateAnalysisEnhanced(data) {
+        function renderDuplicateAnalysis(data) {
             document.getElementById('duplicateSummary').style.display = 'grid';
             document.getElementById('dupLocations').textContent = data.total_locations_analyzed || 0;
             document.getElementById('dupClaims').textContent = data.total_duplicate_claims || 0;
-
-            // Show/hide export button
-            const exportBtn = document.getElementById('btnDuplicateExport');
-            if (exportBtn) {
-                exportBtn.style.display = (data.location_analysis && data.location_analysis.length > 0) ? 'flex' : 'none';
-            }
 
             const container = document.getElementById('duplicateClaimsContainer');
             if (!data.location_analysis || data.location_analysis.length === 0) {
@@ -2674,157 +2204,68 @@
                 return;
             }
 
-            container.innerHTML = data.location_analysis.map((loc, li) => {
-                const amounts = loc.all_claims.map(c => c.amount);
-                const avg = amounts.reduce((a, b) => a + b, 0) / (amounts.length || 1);
+            container.innerHTML = data.location_analysis.map(loc => `
+                <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="font-weight:700;color:#92400e;margin-bottom:6px;">
+                        <i class="fas fa-route"></i> ${loc.location_route}
+                    </div>
+                    <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">
+                        <strong>Total Claims:</strong> ${loc.total_claims} | 
+                        <strong>Unique Employees:</strong> ${loc.unique_employees} |
+                        <strong>Duplicates:</strong> ${loc.duplicate_claims}
+                    </div>
+                    <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                        <strong>Avg Amount:</strong> ₹${loc.amount_stats.average} |
+                        <strong>Min:</strong> ₹${loc.amount_stats.minimum} |
+                        <strong>Max:</strong> ₹${loc.amount_stats.maximum} |
+                        <strong>Spread:</strong> ₹${loc.amount_stats.spread}
+                    </div>
+                    ${loc.short_claims.length > 0 ? `<div style="font-size:11px;color:#ef4444;margin-top:4px;"><strong>Short Claims (<80% avg):</strong> ${loc.short_claims.length}</div>` : ''}
+                    ${loc.excess_claims.length > 0 ? `<div style="font-size:11px;color:#ef4444;margin-top:4px;"><strong>Excess Claims (>120% avg):</strong> ${loc.excess_claims.length}</div>` : ''}
+                </div>
+            `).join('');
+        }
 
-                const shortClaimants = loc.all_claims.filter(c => c.amount < avg * 0.8);
-                const excessClaimants = loc.all_claims.filter(c => c.amount > avg * 1.2);
-                const normalClaimants = loc.all_claims.filter(c => c.amount >= avg * 0.8 && c.amount <= avg * 1.2);
+        function renderBackdatedAnalysis(data) {
+            document.getElementById('backdatedSummary').style.display = 'grid';
+            document.getElementById('backdatedCount').textContent = data.total_backdated_claims || 0;
 
-                // Employee rows grouped by type
-                function buildEmpRows(claimList, typeLabel, rowBg, textColor) {
-                    return claimList.map(c => `
-                <tr style="background:${rowBg};">
-                    <td style="width:22px;">
-                        <span style="background:${textColor};color:white;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;">${typeLabel}</span>
-                    </td>
-                    <td><strong>${c.employee_name || c.employee_id}</strong>
-                        <br><span style="font-size:11px;color:#94a3b8;">${c.employee_id}</span></td>
-                    <td>${c.client || '—'}</td>
-                    <td>${c.travel_mode || '—'}</td>
-                    <td>${c.date || '—'}</td>
-                    <td style="text-align:right;font-weight:700;">₹${(c.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td style="text-align:center;font-weight:600;color:${textColor};">
-                        ${((c.amount / avg) * 100).toFixed(0)}%
-                    </td>
-                    <td style="font-size:11px;color:#6b7280;">${c.payroll_month || '—'}</td>
-                </tr>`).join('');
-                }
+            const avgDays = data.backdated_claims && data.backdated_claims.length > 0
+                ? Math.round(data.backdated_claims.reduce((sum, c) => sum + c.days_late, 0) / data.backdated_claims.length)
+                : 0;
+            document.getElementById('avgDaysLate').textContent = avgDays;
 
-                const allRows = [
-                    ...buildEmpRows(excessClaimants, '⬆', '#FFFBEB', '#D97706'),
-                    ...buildEmpRows(normalClaimants, '✓', '#F0FDF4', '#16A34A'),
-                    ...buildEmpRows(shortClaimants, '⬇', '#FEF2F2', '#DC2626')
-                ];
+            const container = document.getElementById('backdatedClaimsContainer');
+            if (!data.backdated_claims || data.backdated_claims.length === 0) {
+                container.innerHTML = '<div class="no-data"><p>No backdated claims found</p></div>';
+                return;
+            }
 
-                const totalRows = loc.all_claims.length;
-
-                return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:12px;overflow:hidden;">
-            <!-- Header (always visible) -->
-            <div onclick="toggleDupCard(${li})"
-                 style="padding:14px 18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
-                        background:${loc.duplicate_claims > 10 ? '#FEF2F2' : '#F8FAFC'};
-                        border-bottom:1px solid #e2e8f0;">
-                <div>
-                    <span style="font-weight:700;color:#1e293b;font-size:14px;">
-                        <i class="fas fa-route" style="color:#ef4444;margin-right:6px;"></i>
-                        ${loc.location_route}
-                    </span>
-                    <div style="margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;">
-                        <span style="font-size:12px;color:#64748b;">Total: <strong>${loc.total_claims}</strong></span>
-                        <span style="font-size:12px;color:#64748b;">Unique Emp: <strong>${loc.unique_employees}</strong></span>
-                        <span style="font-size:12px;color:#ef4444;">Duplicates: <strong>${loc.duplicate_claims}</strong></span>
-                        <span style="font-size:12px;color:#059669;">Avg: <strong>₹${avg.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                        <span style="font-size:12px;color:#64748b;">Spread: <strong>₹${loc.amount_stats.spread}</strong></span>
-                        ${shortClaimants.length > 0 ? `<span style="background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">⬇ ${shortClaimants.length} Short</span>` : ''}
-                        ${excessClaimants.length > 0 ? `<span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">⬆ ${excessClaimants.length} Excess</span>` : ''}
+            container.innerHTML = data.backdated_claims.slice(0, 20).map(claim => `
+                <div style="background:#fee2e2;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:8px;">
+                    <div style="font-weight:700;color:#991b1b;margin-bottom:6px;">
+                        <i class="fas fa-clock"></i> ${claim.employee_name || claim.employee_id}
+                    </div>
+                    <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">
+                        <strong>Payroll Month:</strong> ${claim.payroll_month} |
+                        <strong>Days Late:</strong> ${claim.days_late} |
+                        <strong>Amount:</strong> ₹${claim.amount}
+                    </div>
+                    <div style="font-size:11px;color:#991b1b;margin-top:4px;">
+                        Submitted: ${claim.submission_date.split('T')[0]} | 
+                        Threshold: ${claim.threshold_date.split('T')[0]}
                     </div>
                 </div>
-                <i class="fas fa-chevron-down" id="dup-chevron-${li}" style="color:#94a3b8;transition:transform .3s;"></i>
-            </div>
- 
-            <!-- Expandable Employee List -->
-            <div id="dup-body-${li}" style="display:none;">
-                <div style="padding:8px 18px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-                    <span style="background:#FEF3C7;color:#92400e;padding:2px 8px;border-radius:6px;margin-right:6px;">⬆ Excess = >120% avg</span>
-                    <span style="background:#F0FDF4;color:#166534;padding:2px 8px;border-radius:6px;margin-right:6px;">✓ Normal = 80-120%</span>
-                    <span style="background:#FEE2E2;color:#991b1b;padding:2px 8px;border-radius:6px;">⬇ Short = <80% avg</span>
-                </div>
-                <div style="overflow-x:auto;">
-                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                        <thead>
-                            <tr style="background:#f1f5f9;">
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Type</th>
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Employee</th>
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Client</th>
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Mode</th>
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Date</th>
-                                <th style="padding:8px 14px;text-align:right;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Amount</th>
-                                <th style="padding:8px 14px;text-align:center;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">% of Avg</th>
-                                <th style="padding:8px 14px;text-align:left;font-weight:600;color:#64748b;border-bottom:2px solid #e2e8f0;">Payroll Month</th>
-                            </tr>
-                        </thead>
-                        <tbody>${allRows}</tbody>
-                    </table>
-                </div>
-                <div style="padding:10px 18px;background:#f8fafc;font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;">
-                    Showing all ${totalRows} claims for this route
-                </div>
-            </div>
-        </div>`;
-            }).join('');
+            `).join('') + (data.backdated_claims.length > 20 ? `<div style="text-align:center;font-size:12px;color:#6b7280;margin-top:8px;">Showing 20 of ${data.backdated_claims.length} backdated claims</div>` : '');
         }
-
-        function toggleDupCard(li) {
-            const body = document.getElementById('dup-body-' + li);
-            const chevron = document.getElementById('dup-chevron-' + li);
-            const isOpen = body.style.display !== 'none';
-            body.style.display = isOpen ? 'none' : 'block';
-            if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
-        }
-        async function downloadDuplicateClaimsExcel() {
-            const btn = document.getElementById('btnDuplicateExport');
-            const token = localStorage.getItem('access_token');
-            const month = document.getElementById('advancedFilterMonth').value.trim();
-
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generating Excel...';
-
-            try {
-                const params = new URLSearchParams();
-                if (month) params.append('payroll_month', month);
-
-                const res = await fetch(`${API_URL}/api/admin/export/duplicate-claims?${params}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.detail || `HTTP ${res.status}`);
-                }
-
-                const disposition = res.headers.get('Content-Disposition') || '';
-                const match = disposition.match(/filename="?([^"]+)"?/);
-                const filename = match ? match[1] : 'duplicate_claims.xlsx';
-
-                const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-            } catch (err) {
-                alert('❌ Export failed: ' + err.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-file-excel"></i> Export Duplicate Claims Excel';
-            }
-        }
-
-
 
         function resetAdvancedFilters() {
             document.getElementById('advancedFilterMonth').value = '';
+            document.getElementById('backdatedThreshold').value = 30;
             document.getElementById('duplicateSummary').style.display = 'none';
-            document.getElementById('duplicateClaimsContainer').innerHTML =
-                '<div class="no-data"><p>Run analysis to see duplicate claims</p></div>';
-            const exportBtn = document.getElementById('btnDuplicateExport');
-            if (exportBtn) exportBtn.style.display = 'none';
+            document.getElementById('backdatedSummary').style.display = 'none';
+            document.getElementById('duplicateClaimsContainer').innerHTML = '<div class="no-data"><p>Run analysis to see duplicate claims</p></div>';
+            document.getElementById('backdatedClaimsContainer').innerHTML = '<div class="no-data"><p>Run analysis to see backdated claims</p></div>';
         }
     </script>
 

@@ -138,8 +138,9 @@
               <label for="monthRange">Month Range:</label>
               <select id="monthRange" name="monthRange" required>
                 <option value="" disabled selected>Select Your Month</option>
+                <option value="jan-feb-2026">Jan 2026 - Feb 2026</option>
+                <option value="feb-mar-2026">Feb 2026 - Mar 2026</option>
                 <option value="mar-april-2026">Mar 2026 - April 2026</option>
-                <option value="april-may-2026">April 2026 - May 2026</option>
               </select>
             </div>   
           </div>
@@ -252,7 +253,6 @@
                     <th>Amount (₹)</th>
                     <th>Remarks</th>
                     <th>PDF</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="historyTableBody">
@@ -626,53 +626,122 @@
 
               <!-- Client Name -->
               <div>
-                <label style="
-                  display: block;
-                  font-weight: 600;
-                  margin-bottom: 8px;
-                  color: #374151;
-                  font-size: 14px;
-                ">
+                <label
+                  style="
+                    display: block;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                    color: #374151;
+                    font-size: 14px;
+                  "
+                >
                   Client Name <span style="color: #ef4444">*</span>
                 </label>
-                <!-- Hidden input keeps existing JS form-submit logic working -->
-                <input type="hidden" id="modalClient" name="modalClient" />
-                <!-- Dropdown is injected here by buildProjectFieldsModal() -->
-                <div id="modalClientContainer" style="width:100%;"></div>
+                <input
+                  type="text"
+                  id="modalClient"
+                  required
+                  placeholder="Enter client name"
+                  style="
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    background: #f9fafb;
+                  "
+                  onfocus="
+                    this.style.borderColor = '#667eea';
+                    this.style.background = 'white';
+                    this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  "
+                  onblur="
+                    this.style.borderColor = '#e5e7eb';
+                    this.style.background = '#f9fafb';
+                    this.style.boxShadow = 'none';
+                  "
+                />
               </div>
 
-              <!-- ── Project Name ──────────────────────────────────────────── -->
+              <!-- Project ID -->
               <div>
-                <label style="
-                  display: block;
-                  font-weight: 600;
-                  margin-bottom: 8px;
-                  color: #374151;
-                  font-size: 14px;
-                ">
-                  Project Name <span style="color: #ef4444">*</span>
-                </label>
-                <!-- Hidden input keeps existing JS form-submit logic working -->
-                <input type="hidden" id="modalProjectName" name="modalProjectName" />
-                <!-- Dropdown is injected here by buildProjectFieldsModal() -->
-                <div id="modalProjectNameContainer" style="width:100%;"></div>
-              </div>
-              
-              <!-- ── Project ID ────────────────────────────────────────────── -->
-              <div>
-                <label style="
-                  display: block;
-                  font-weight: 600;
-                  margin-bottom: 8px;
-                  color: #374151;
-                  font-size: 14px;
-                ">
+                <label
+                  style="
+                    display: block;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                    color: #374151;
+                    font-size: 14px;
+                  "
+                >
                   Project ID <span style="color: #ef4444">*</span>
                 </label>
-                <!-- Hidden input keeps existing JS form-submit logic working -->
-                <input type="hidden" id="modalProjectId" name="modalProjectId" />
-                <!-- Readonly visible input is injected here by buildProjectFieldsModal() -->
-                <div id="modalProjectIdContainer" style="width:100%;"></div>
+                <input
+                  type="text"
+                  id="modalProjectId"
+                  required
+                  placeholder="Enter project ID"
+                  style="
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    background: #f9fafb;
+                  "
+                  onfocus="
+                    this.style.borderColor = '#667eea';
+                    this.style.background = 'white';
+                    this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  "
+                  onblur="
+                    this.style.borderColor = '#e5e7eb';
+                    this.style.background = '#f9fafb';
+                    this.style.boxShadow = 'none';
+                  "
+                />
+              </div>
+
+              <!-- Project Name -->
+              <div>
+                <label
+                  style="
+                    display: block;
+                    font-weight: 600;
+                    margin-bottom: 8px;
+                    color: #374151;
+                    font-size: 14px;
+                  "
+                >
+                  Project Name <span style="color: #ef4444">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="modalProjectName"
+                  required
+                  placeholder="Enter project name"
+                  style="
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 2px solid #e5e7eb;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    background: #f9fafb;
+                  "
+                  onfocus="
+                    this.style.borderColor = '#667eea';
+                    this.style.background = 'white';
+                    this.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                  "
+                  onblur="
+                    this.style.borderColor = '#e5e7eb';
+                    this.style.background = '#f9fafb';
+                    this.style.boxShadow = 'none';
+                  "
+                />
               </div>
 
               <!-- Project Type -->

@@ -2,10 +2,10 @@ let formCounter = 1;
 let allHistoryData = [];
 let originalRowData = {};
 let savedEntries = []; // Temporary storage for saved entries
-API_URL = "http://127.0.0.1:8000";
-// API_URL = "";
+// API_URL = "http://127.0.0.1:8000";
+API_URL = "";
 
-
+ 
 // Add CSS animations for popups
 const style = document.createElement('style');
 style.textContent = `
@@ -37,11 +37,12 @@ style.textContent = `
       transform: translateX(0);
     }
   }
-`;
+`;    
 document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
+<<<<<<< HEAD
   'mar-april-2026': {
     start: '2026-03-21', 
     end: '2026-04-20', 
@@ -51,6 +52,22 @@ const monthRanges = {
     start: '2026-04-21', 
     end: '2026-05-20', 
     display: 'April 2026 - May 2026' 
+=======
+  'jan-feb-2026': {
+    start: '2026-01-21', 
+    end: '2026-02-20', 
+    display: 'Jan 2026 - Feb 2026' 
+  },
+  'feb-mar-2026': {
+    start: '2026-02-21', 
+    end: '2026-03-20', 
+    display: 'Feb 2026 - Mar 2026' 
+  },
+    'mar-april-2026': {
+    start: '2026-03-21', 
+    end: '2026-04-20', 
+    display: 'Mar 2026 - April 2026' 
+>>>>>>> 1187752781560dbff0c224f3acaf2f46f9132e25
   }
 };
 
@@ -1850,7 +1867,16 @@ function showNoData() {
 
 function setupNavigation() {
   console.log("🔧 Setting up navigation...");
-  
+
+  // ✅ ADMIN BUTTON - attached once on setup
+  const adminBtn = document.getElementById('btnSwitchToAdmin');
+  if (adminBtn) {
+    adminBtn.addEventListener('click', () => {
+      const modal = document.getElementById('adminSwitchModal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+
   const navOPE = document.getElementById('navOPE');
   const navHistory = document.getElementById('navHistory');
   const navStatus = document.getElementById('navStatus');
@@ -1873,7 +1899,7 @@ function setupNavigation() {
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.remove('active');
     });
-    
+  
     if (activeNav) {
       activeNav.classList.add('active');
     }
@@ -3115,9 +3141,9 @@ if (pdfFile) {
   if (successCount > 0) {
     let approvalInfo = '';
     if (totalAmount > window.employeeOPELimit) {
-      approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
+      // approvalInfo = `\n\n⚠️ Amount exceeds limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 3-level approval:\n✓ L1: Reporting Manager\n✓ L2: Partner\n✓ L3: HR`;
     } else {
-      approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
+      // approvalInfo = `\n\n✅ Within limit!\nTotal: ₹${totalAmount.toFixed(2)}\nLimit: ₹${window.employeeOPELimit}\n\nThis will require 2-level approval:\n✓ L1: Reporting Manager\n✓ L2: HR`;
     }
     
     showSuccessPopup(`${successCount} ${successCount === 1 ? 'entry' : 'entries'} saved successfully!${approvalInfo}`);
@@ -3718,19 +3744,21 @@ if (monthRangeSelect) {
     console.log("📅 Month changed to:", selectedMonth);
     
     if (selectedMonth) {
+      // ✅ FIX: Clear stale rows before loading so addNewEntryRow gets clean slate
+      const tbody = document.getElementById('entryTableBody');
+      tbody.innerHTML = '';
+      entryCounter = 0;
+
       // ✅ Load saved entries for THIS month ONLY
       await loadSavedEntries();
       
       // ✅ If no saved entries, add blank row
-      const tbody = document.getElementById('entryTableBody');
       const rows = tbody.querySelectorAll('tr');
       
       if (rows.length === 0) {
         console.log("No saved entries, adding blank row");
         addNewEntryRow();
-      }
-      
-      // showSuccessPopup(`Date range updated to ${monthRanges[selectedMonth].display}`); 
+      }   
     }
   });
 }
@@ -4244,9 +4272,10 @@ function displayPendingEmployeeTable(data) {
 }
 
 // ✅ NEW: Show pending employee modal with MONTH-FILTERED data
-window.showPendingEmployeeModal = function(employeeId) {
+window.showPendingEmployeeModal = async function(employeeId) {
     console.log("📋 Opening pending modal for employee:", employeeId);
     
+    const token = localStorage.getItem('access_token');
     const monthFilter = document.getElementById('pendingMonthFilter');
     const selectedMonth = monthFilter ? monthFilter.value : '';
     
@@ -4261,41 +4290,40 @@ window.showPendingEmployeeModal = function(employeeId) {
         return;
     }
     
-    const groupedByMonth = {};
+    // ✅ Fetch edited totals from Status collection ONCE
+    let statusEntries = [];
+    try {
+        const statusRes = await fetch(`${API_URL}/api/ope/status/${employeeId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            statusEntries = statusData.status_entries || [];
+        }
+    } catch(e) {
+        console.warn('Could not fetch status data:', e);
+    }
     
+    const groupedByMonth = {};
     employeeEntries.forEach(entry => {
         const month = entry.month_range || 'Unknown';
-        if (!groupedByMonth[month]) {
-            groupedByMonth[month] = [];
-        }
+        if (!groupedByMonth[month]) groupedByMonth[month] = [];
         groupedByMonth[month].push(entry);
     });
     
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7); z-index: 99999;
+        display: flex; align-items: center; justify-content: center; padding: 20px;
     `;
 
     const modal = document.createElement('div');
     modal.style.cssText = `
-        background: white;
-        border-radius: 16px;
-        max-width: 1400px;
-        width: 95%;
-        max-height: 90vh;
-        overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        background: white; border-radius: 16px; max-width: 1400px;
+        width: 95%; max-height: 90vh; overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     `;
 
     const employeeName = employeeEntries[0]?.employee_name || employeeId;
@@ -4315,17 +4343,37 @@ window.showPendingEmployeeModal = function(employeeId) {
                 </div>
                 <button onclick="this.closest('.modal-overlay').remove()" 
                         style="background: #ef4444; color: white; border: none; padding: 10px 20px; 
-                               border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
-                        onmouseover="this.style.background='#dc2626'"
-                        onmouseout="this.style.background='#ef4444'">
+                               border-radius: 8px; cursor: pointer; font-weight: 600;">
                     <i class="fas fa-times"></i> Close
                 </button>
             </div>
     `;
     
-    Object.keys(groupedByMonth).sort().forEach(monthRange => {
+    for (const monthRange of Object.keys(groupedByMonth).sort()) {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        // ✅ Get edited total from Status if available
+        const statusEntry = statusEntries.find(s => 
+    s.payroll_month === monthRange || 
+    s.payroll_month?.trim() === monthRange?.trim()
+);
+        const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+        const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+        const wasEdited = statusEntry && statusEntry.original_total && 
+                          parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+        
+        // ✅ Build total display HTML
+        const totalDisplayHTML = wasEdited ? `
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                    Original: ₹${parseFloat(originalTotal).toFixed(2)}
+                </div>
+                <div style="font-size: 14px; font-weight: 700;">
+                    Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+                </div>
+            </div>
+        ` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
@@ -4335,24 +4383,21 @@ window.showPendingEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
+                              data-entries="${entries.length}"
+                              data-original="${parseFloat(originalTotal).toFixed(2)}"
+                              style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            ${totalDisplayHTML}
                         </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})" 
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${statusTotal})" 
                                 style="
-                                    background: rgba(255, 255, 255, 0.3);
-                                    color: white;
-                                    border: 2px solid rgba(255, 255, 255, 0.5);
-                                    padding: 6px 12px;
-                                    border-radius: 8px;
-                                    cursor: pointer;
-                                    font-size: 13px;
-                                    font-weight: 600;
-                                    transition: all 0.2s ease;
-                                    backdrop-filter: blur(10px);
+                                    background: rgba(255,255,255,0.3); color: white;
+                                    border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px;
+                                    border-radius: 8px; cursor: pointer; font-size: 13px;
+                                    font-weight: 600; transition: all 0.2s ease;
                                 "
-                                onmouseover="this.style.background='rgba(255, 255, 255, 0.4)'; this.style.transform='translateY(-2px)'"
-                                onmouseout="this.style.background='rgba(255, 255, 255, 0.3)'; this.style.transform='translateY(0)'">
+                                onmouseover="this.style.background='rgba(255,255,255,0.4)'"
+                                onmouseout="this.style.background='rgba(255,255,255,0.3)'">
                             <i class="fas fa-edit"></i> Edit Total
                         </button>
                     </div>
@@ -4404,41 +4449,18 @@ window.showPendingEmployeeModal = function(employeeId) {
                     <td style="padding: 12px; text-align: center;">
                         ${entry.ticket_pdf
                             ? `<button onclick="viewPdf('${entry._id}', false)" 
-                                      style="
-                                          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-                                          color: white;
-                                          border: none;
-                                          padding: 6px 12px;
-                                          border-radius: 6px;
-                                          cursor: pointer;
-                                          font-size: 12px;
-                                          font-weight: 600;
-                                          transition: all 0.2s ease;
-                                          display: inline-flex;
-                                          align-items: center;
-                                          gap: 4px;
-                                      "
-                                      onmouseover="this.style.transform='translateY(-2px)'"
-                                      onmouseout="this.style.transform='translateY(0)'">
+                                      style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                                             color: white; border: none; padding: 6px 12px;
+                                             border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
                                   <i class="fas fa-file-pdf"></i> View
                                </button>` 
                             : `<span style="color: #9ca3af; font-size: 12px;">No PDF</span>`}
                     </td>
                     <td style="padding: 12px; text-align: center;">
                         <button onclick="editEntryAmount('${entry._id}', '${employeeId}', ${entry.amount || 0})" 
-                                style="
-                                    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-                                    color: white;
-                                    border: none;
-                                    padding: 6px 12px;
-                                    border-radius: 6px;
-                                    cursor: pointer;
-                                    font-size: 12px;
-                                    font-weight: 600;
-                                    transition: all 0.2s ease;
-                                "
-                                onmouseover="this.style.transform='translateY(-2px)'"
-                                onmouseout="this.style.transform='translateY(0)'">
+                                style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                                       color: white; border: none; padding: 6px 12px;
+                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
                             <i class="fas fa-edit"></i> Edit
                         </button>
                     </td>
@@ -4452,18 +4474,15 @@ window.showPendingEmployeeModal = function(employeeId) {
                 </div>
             </div>
         `;
-    });
+    }
     
     modalContent += `</div>`;
-    
     modal.innerHTML = modalContent;
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
     overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-            overlay.remove();
-        }
+        if (e.target === overlay) overlay.remove();
     });
 }
 
@@ -4740,20 +4759,39 @@ async function loadApproveData(token, empCode) {
                 approvedEmployeeCodes = data.employee_codes || [];
             }
         } else {
-            console.log("👔 USER IS MANAGER - Fetching manager approved entries");
-            
-            const approvedListResponse = await fetch(
-                `${API_URL}/api/ope/manager/approved-list`, 
-                {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }
-            );
+    const isPartner = localStorage.getItem("is_partner") === "true";
 
-            if (approvedListResponse.ok) {
-                const approvedListData = await approvedListResponse.json();
-                approvedEmployeeCodes = approvedListData.employee_codes || [];
+    if (isPartner) {
+        console.log("🤝 USER IS PARTNER - Fetching partner approved entries");
+
+        const approvedListResponse = await fetch(
+            `${API_URL}/api/ope/partner/approved-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
             }
+        );
+
+        if (approvedListResponse.ok) {
+            const approvedListData = await approvedListResponse.json();
+            approvedEmployeeCodes = approvedListData.employee_codes || [];
         }
+
+    } else {
+        console.log("👔 USER IS MANAGER - Fetching manager approved entries");
+
+        const approvedListResponse = await fetch(
+            `${API_URL}/api/ope/manager/approved-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }
+        );
+
+        if (approvedListResponse.ok) {
+            const approvedListData = await approvedListResponse.json();
+            approvedEmployeeCodes = approvedListData.employee_codes || [];
+        }
+    }
+}
 
         console.log("✅ Approved employees:", approvedEmployeeCodes);
 
@@ -4913,27 +4951,55 @@ function displayApproveEmployeeTable(data) {
     document.getElementById('approveTableSection').style.display = 'block';
 }
 
-// ✅ UPDATED: Show approved employee modal with MONTH-FILTERED data
-window.showApprovedEmployeeModal = function(employeeId) {
+
+// ✅ UPDATED: Show approved employee modal with REMARK
+window.showApprovedEmployeeModal = async function(employeeId) {
     console.log("📋 Opening modal for employee:", employeeId);
+    console.log("All Approve Data:", allApproveData);
     
-    // ✅ Get current selected month from filter
+    const token = localStorage.getItem('access_token');
+    
+    // Get current selected month from filter
     const monthFilter = document.getElementById('approveMonthFilter');
     const selectedMonth = monthFilter ? monthFilter.value : '';
     
     console.log("📅 Selected month filter:", selectedMonth || 'All Months');
     
-    // Find employee's approved entries (filtered by month if selected)
+    // Find employee's approved entries
     let employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
     
-    // ✅ Apply month filter
-    if (selectedMonth) {
-        employeeEntries = employeeEntries.filter(e => e.month_range === selectedMonth);
+    console.log(`📊 Found ${employeeEntries.length} entries for employee`);
+    
+    // Check if remark exists in first entry
+    if (employeeEntries.length > 0) {
+        console.log("First entry full data:", employeeEntries[0]);
+        console.log("Remark value:", employeeEntries[0].approval_remark);
+        console.log("Remark type:", typeof employeeEntries[0].approval_remark);
     }
     
-    if (employeeEntries.length === 0) {
+    // Apply month filter
+    if (selectedMonth) {
+        employeeEntries = employeeEntries.filter(e => e.month_range === selectedMonth);
+        console.log(`📊 After month filter: ${employeeEntries.length} entries`);
+    }
+    
+   if (employeeEntries.length === 0) {
         showErrorPopup('No approved entries found for this employee');
         return;
+    }
+    
+    // ✅ Fetch edited totals from Status collection
+    let statusEntries = [];
+    try {
+        const statusRes = await fetch(`${API_URL}/api/ope/status/${employeeId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            statusEntries = statusData.status_entries || [];
+        }
+    } catch(e) {
+        console.warn('Could not fetch status data:', e);
     }
     
     // Group by month
@@ -5004,7 +5070,28 @@ window.showApprovedEmployeeModal = function(employeeId) {
     // Display month-wise data
     Object.keys(groupedByMonth).sort().forEach(monthRange => {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        
+        // ✅ Get edited total from Status if available
+        const statusEntry = statusEntries.find(s => 
+            s.payroll_month === monthRange || 
+            s.payroll_month?.trim() === monthRange?.trim()
+        );
+        const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+        const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+        const wasEdited = statusEntry && statusEntry.original_total && 
+                          parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+        
+        const totalDisplayHTML = wasEdited ? `
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                    Original: ₹${parseFloat(originalTotal).toFixed(2)}
+                </div>
+                <div style="font-size: 14px; font-weight: 700;">
+                    Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+                </div>
+            </div>
+        ` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
@@ -5014,45 +5101,65 @@ window.showApprovedEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                        Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        ${totalDisplayHTML}
                     </span>
                 </div>
                 <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead style="background: #f8fafc;">
+                    <table class="history-detail-table">
+                        <thead>
                             <tr>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Date</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Client</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Project ID</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Project Name</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Type</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">From</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">To</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Mode</th>
-                                <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Amount</th>
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e2e8f0; font-size: 13px;">Approved By</th>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Approved By</th>
+                                <th>Approval Remark</th>
                             </tr>
                         </thead>
                         <tbody>
         `;
         
         entries.forEach(entry => {
+            // Get remark value - handle different possible field names
+            const remark = entry.approval_remark || entry.remark || '';
+            const hasRemark = remark && remark.toString().trim() !== '' && remark !== 'Approved without remark';
+            
+            console.log(`Entry date: ${entry.date}, Remark: "${remark}", HasRemark: ${hasRemark}`);
+            
+            // Escape special characters for safe HTML
+            const escapedRemark = remark.replace(/[&<>"]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                if (m === '"') return '&quot;';
+                return m;
+            });
+            
             modalContent += `
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; font-size: 13px;">${entry.date || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.client || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px; color: #3b82f6; font-weight: 600;">${entry.project_id || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.project_name || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">
-                        <span style="background: #e0e7ff; color: #4338ca; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">
-                            ${entry.project_type || '-'}
-                        </span>
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-submitted">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td>${entry.approver_name || entry.approved_by || '-'}</td>
+                    <td>
+                        ${hasRemark 
+                            ? `<div class="remark-cell" onclick='showFullRemark(${JSON.stringify(remark).replace(/'/g, "\\'")})'>
+                                <i class="fas fa-comment"></i>
+                                <span class="remark-text">${remark.substring(0, 30)}${remark.length > 30 ? '...' : ''}</span>
+                               </div>` 
+                            : '<span class="no-remark">-</span>'}
                     </td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.location_from || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${entry.location_to || '-'}</td>
-                    <td style="padding: 12px; font-size: 13px;">${getTravelModeLabel(entry.travel_mode)}</td>
-                    <td style="padding: 12px; text-align: right; font-weight: 700; color: #059669; font-size: 14px;">₹${entry.amount || 0}</td>
-                    <td style="padding: 12px; font-size: 13px; color: #059669; font-weight: 600;">${entry.approver_name || entry.approved_by || '-'}</td>
                 </tr>
             `;
         });
@@ -5078,6 +5185,116 @@ window.showApprovedEmployeeModal = function(employeeId) {
         }
     });
 }
+// ✅ Show Full Remark Popup
+function showFullRemark(remark) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 600px;
+        width: 90%;
+        max-height: 70vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-comment" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Approval Remark</h2>
+        </div>
+        
+        <div style="
+            background: #f0fdf4;
+            border: 2px solid #86efac;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #166534;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        ">
+            ${remark === 'Approved without remark' ? '<span style="color: #9ca3af; font-style: italic;">No remark provided</span>' : remark}
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRemarkBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRemarkBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showFullRemark = showFullRemark;
 
 function populateApproveMonthFilter() {
     const monthSet = new Set();
@@ -5438,7 +5655,6 @@ async function rejectApprovedEmployee(employeeId) {
             return;
         }
         
-        // Get all approved entries for this employee
         const employeeEntries = allApproveData.filter(e => e.employee_id === employeeId);
         
         if (employeeEntries.length === 0) {
@@ -5448,11 +5664,10 @@ async function rejectApprovedEmployee(employeeId) {
         
         let rejectedCount = 0;
         
-        // ✅ CHECK IF USER IS HR
         const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         if (isHR) {
-            // ✅ HR BULK REJECT
             const response = await fetch(`${API_URL}/api/ope/hr/reject/${employeeId}`, {
                 method: 'POST',
                 headers: {
@@ -5465,16 +5680,34 @@ async function rejectApprovedEmployee(employeeId) {
             if (response.ok) {
                 const result = await response.json();
                 showSuccessPopup(`HR rejected ${result.rejected_count} entries for employee ${employeeId}`);
-                
-                // Reload approve and reject data
                 await loadApproveData(token, currentEmpCode);
                 await loadRejectData(token, currentEmpCode);
             } else {
                 const errorData = await response.json();
                 showErrorPopup(errorData.detail || 'Rejection failed');
             }
+
+        } else if (isPartner) {
+            const response = await fetch(`${API_URL}/api/ope/partner/reject/${employeeId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ reason: reason })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showSuccessPopup(`Rejected ${result.rejected_count} entries for employee ${employeeId}`);
+                await loadApproveData(token, currentEmpCode);
+                await loadRejectData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Rejection failed');
+            }
+
         } else {
-            // ✅ MANAGER SINGLE-ENTRY REJECT
             for (const entry of employeeEntries) {
                 const response = await fetch(`${API_URL}/api/ope/manager/reject-single`, {
                     method: 'POST',
@@ -5496,8 +5729,6 @@ async function rejectApprovedEmployee(employeeId) {
             
             if (rejectedCount > 0) {
                 showSuccessPopup(`Rejected ${rejectedCount} entries for employee ${employeeId}`);
-                
-                // Reload approve and reject data
                 await loadApproveData(token, currentEmpCode);
                 await loadRejectData(token, currentEmpCode);
             }
@@ -5879,20 +6110,39 @@ async function loadRejectData(token, empCode) {
                 rejectedEmployeeCodes = data.employee_codes || [];
             }
         } else {
-            console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
-            
-            const rejectedListResponse = await fetch(
-                `${API_URL}/api/ope/manager/rejected-list`, 
-                {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }
-            );
+    const isPartner = localStorage.getItem("is_partner") === "true";
 
-            if (rejectedListResponse.ok) {
-                const rejectedListData = await rejectedListResponse.json();
-                rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+    if (isPartner) {
+        console.log("🤝 USER IS PARTNER - Fetching partner rejected entries");
+
+        const rejectedListResponse = await fetch(
+            `${API_URL}/api/ope/partner/rejected-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
             }
+        );
+
+        if (rejectedListResponse.ok) {
+            const rejectedListData = await rejectedListResponse.json();
+            rejectedEmployeeCodes = rejectedListData.employee_codes || [];
         }
+
+    } else {
+        console.log("👔 USER IS MANAGER - Fetching manager rejected entries");
+
+        const rejectedListResponse = await fetch(
+            `${API_URL}/api/ope/manager/rejected-list`,
+            {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }
+        );
+
+        if (rejectedListResponse.ok) {
+            const rejectedListData = await rejectedListResponse.json();
+            rejectedEmployeeCodes = rejectedListData.employee_codes || [];
+        }
+    }
+}
 
         console.log("✅ Rejected employees:", rejectedEmployeeCodes);
 
@@ -6035,7 +6285,7 @@ function displayRejectEmployeeTable(data) {
 }
 
 // ✅ UPDATED: Show rejected employee modal with MONTH-FILTERED data
-window.showRejectedEmployeeModal = function(employeeId) {
+window.showRejectedEmployeeModal = async function(employeeId) {
     console.log("📋 Opening rejected modal for employee:", employeeId);
     
     // ✅ Get current selected month from filter
@@ -6140,7 +6390,27 @@ window.showRejectedEmployeeModal = function(employeeId) {
     // Display month-wise data
     Object.keys(groupedByMonth).sort().forEach(monthRange => {
         const entries = groupedByMonth[monthRange];
-        const totalAmount = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const rawTotal = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+const statusEntry = statusEntries.find(s => 
+    s.payroll_month === monthRange || 
+    s.payroll_month?.trim() === monthRange?.trim()
+);
+const statusTotal = statusEntry ? (statusEntry.total_amount || rawTotal) : rawTotal;
+const originalTotal = statusEntry ? (statusEntry.original_total || rawTotal) : rawTotal;
+const wasEdited = statusEntry && statusEntry.original_total && 
+                  parseFloat(statusEntry.original_total).toFixed(2) !== parseFloat(statusEntry.total_amount).toFixed(2);
+const totalAmount = statusTotal;
+
+const totalDisplayHTML = wasEdited ? `
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+        <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+            Original: ₹${parseFloat(originalTotal).toFixed(2)}
+        </div>
+        <div style="font-size: 14px; font-weight: 700;">
+            Edited: ₹${parseFloat(statusTotal).toFixed(2)} | Entries: ${entries.length}
+        </div>
+    </div>
+` : `Total: ₹${rawTotal.toFixed(2)} | Entries: ${entries.length}`;
         
         modalContent += `
             <div style="margin-bottom: 30px; border: 2px solid #fee2e2; border-radius: 12px; overflow: hidden;">
@@ -6150,10 +6420,13 @@ window.showRejectedEmployeeModal = function(employeeId) {
                         ${monthRange}
                     </h3>
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
-                        </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})" 
+                        <span id="total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}"
+      data-entries="${entries.length}"
+      data-original="${parseFloat(originalTotal).toFixed(2)}"
+      style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+    ${totalDisplayHTML}
+</span>
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${totalAmount})"
                                 style="
                                     background: rgba(255, 255, 255, 0.3);
                                     color: white;
@@ -6710,7 +6983,6 @@ async function approveRejectedEmployee(employeeId) {
             return;
         }
         
-        // Get all rejected entries for this employee
         const employeeEntries = allRejectData.filter(e => e.employee_id === employeeId);
         
         if (employeeEntries.length === 0) {
@@ -6720,11 +6992,10 @@ async function approveRejectedEmployee(employeeId) {
         
         let approvedCount = 0;
         
-        // ✅ CHECK IF USER IS HR
         const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+        const isPartner = localStorage.getItem("is_partner") === "true";
         
         if (isHR) {
-            // ✅ HR BULK APPROVE
             const response = await fetch(`${API_URL}/api/ope/hr/approve/${employeeId}`, {
                 method: 'POST',
                 headers: {
@@ -6736,16 +7007,33 @@ async function approveRejectedEmployee(employeeId) {
             if (response.ok) {
                 const result = await response.json();
                 showSuccessPopup(`HR approved ${result.approved_count} entries for employee ${employeeId}`);
-                
-                // Reload reject and approve data
                 await loadRejectData(token, currentEmpCode);
                 await loadApproveData(token, currentEmpCode);
             } else {
                 const errorData = await response.json();
                 showErrorPopup(errorData.detail || 'Approval failed');
             }
+
+        } else if (isPartner) {
+            const response = await fetch(`${API_URL}/api/ope/partner/approve/${employeeId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showSuccessPopup(`Approved ${result.approved_count} entries for employee ${employeeId}`);
+                await loadRejectData(token, currentEmpCode);
+                await loadApproveData(token, currentEmpCode);
+            } else {
+                const errorData = await response.json();
+                showErrorPopup(errorData.detail || 'Approval failed');
+            }
+
         } else {
-            // ✅ MANAGER SINGLE-ENTRY APPROVE
             for (const entry of employeeEntries) {
                 const response = await fetch(`${API_URL}/api/ope/manager/approve-single`, {
                     method: 'POST',
@@ -6766,8 +7054,6 @@ async function approveRejectedEmployee(employeeId) {
             
             if (approvedCount > 0) {
                 showSuccessPopup(`Approved ${approvedCount} rejected entries for employee ${employeeId}`);
-                
-                // Reload reject and approve data
                 await loadRejectData(token, currentEmpCode);
                 await loadApproveData(token, currentEmpCode);
             }
@@ -6778,7 +7064,6 @@ async function approveRejectedEmployee(employeeId) {
         showErrorPopup('Network error during approval');
     }
 }
-
 // Make it global
 window.approveRejectedEmployee = approveRejectedEmployee;
 
@@ -6839,44 +7124,133 @@ function showRejectNoData() {
 // Check if user is a reporting manager
 
 async function checkUserRole() {
-  try {
-    const token = localStorage.getItem("access_token");
-    const empCode = localStorage.getItem("employee_code");
-    
-    if (!token || !empCode) {
-      console.log("❌ No token or empCode, skipping role check");
-      return false;
-    }
-    
-    console.log("🔍 Checking user role for:", empCode);
-    
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+      try {
+        const token = localStorage.getItem("access_token");
+        const empCode = localStorage.getItem("employee_code");
+        
+        if (!token || !empCode) {
+          return false;
+        }
+        
+        console.log("🔍 Checking user role for:", empCode);
+        
+        // ✅ CHECK IF USER IS HR
+        const isHR = (empCode.trim().toUpperCase() === "JHS729");
+        
+        if (isHR) {
+          localStorage.setItem("is_hr", "true");
+          localStorage.setItem("is_partner", "false");
+          localStorage.setItem("is_manager", "false");
+          toggleManagerButtons(true);
+          return true;
+        }
+        
+        // ✅ CHECK IF USER IS PARTNER
+        const partnerResponse = await fetch(`${API_URL}/api/check-partner/${empCode}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (partnerResponse.ok) {
+          const partnerData = await partnerResponse.json();
+          
+          if (partnerData.isPartner) {
+            console.log("👔 User is a PARTNER");
+            localStorage.setItem("is_partner", "true");
+            localStorage.setItem("is_hr", "false");
+            localStorage.setItem("is_manager", "false");
+            toggleManagerButtons(true);  // Show Pending/Approve/Reject for Partners too
+            return true;
+          }
+        }
+        
+        // ✅ CHECK IF USER IS REPORTING MANAGER
+        const managerResponse = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (managerResponse.ok) {
+          const managerData = await managerResponse.json();
+          
+          if (managerData.isManager) {
+            console.log("👔 User is a REPORTING MANAGER");
+            localStorage.setItem("is_manager", "true");
+            localStorage.setItem("is_partner", "false");
+            localStorage.setItem("is_hr", "false");
+            toggleManagerButtons(true);
+            return true;
+          }
+        }
+        
+        // ✅ USER IS EMPLOYEE
+        console.log("👤 User is an EMPLOYEE");
+        localStorage.setItem("is_manager", "false");
+        localStorage.setItem("is_partner", "false");
+        localStorage.setItem("is_hr", "false");
+        toggleManagerButtons(false);
+        return false;
+        
+      } catch (error) {
+        console.error("❌ Error checking role:", error);
+        return false;
       }
-    });
-    
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
     }
+
+
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
     
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
     
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
+//     console.log("🔍 Checking user role for:", empCode);
     
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
     
-    return data.isManager;
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
     
-  } catch (error) {
-    console.error("❌ Error checking role:", error);
-    return false;
-  }
-}
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
+    
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+    
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
+
+//     // ✅ ADMIN CHECK
+//     try {
+//       const adminRes = await fetch(`${API_URL}/api/check-admin/${empCode}`, {
+//         headers: { Authorization: `Bearer ${token}` }
+//       });
+//       if (adminRes.ok) {
+//         const adminData = await adminRes.json();
+//         if (adminData.is_admin) {
+//           const adminBtn = document.getElementById('btnSwitchToAdmin');
+//           if (adminBtn) adminBtn.style.display = 'flex';
+//         }
+//       }
+//     } catch (err) {
+//       console.warn('Admin check failed:', err);
+//     }
+    
+//     return data.isManager;
+    
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
 
 // Toggle visibility of manager-only sidebar buttons
 // function toggleManagerButtons(isManager) {
@@ -6969,58 +7343,58 @@ console.log("✅ Manager Buttons Toggle initialized!");
 
 // Update checkUserRole to use isManager
 
-async function checkUserRole() {
-  try {
-    const token = localStorage.getItem("access_token");
-    const empCode = localStorage.getItem("employee_code");
+// async function checkUserRole() {
+//   try {
+//     const token = localStorage.getItem("access_token");
+//     const empCode = localStorage.getItem("employee_code");
     
-    if (!token || !empCode) {
-      console.log("❌ No token or empCode, skipping role check");
-      return false;
-    }
+//     if (!token || !empCode) {
+//       console.log("❌ No token or empCode, skipping role check");
+//       return false;
+//     }
     
-    console.log("🔍 Checking user role for:", empCode);
+//     console.log("🔍 Checking user role for:", empCode);
     
-    // ✅ CHECK IF USER IS HR
-    const isHR = (empCode.trim().toUpperCase() === "JHS729");
+//     // ✅ CHECK IF USER IS HR
+//     const isHR = (empCode.trim().toUpperCase() === "JHS729");
     
-    if (isHR) {
-      console.log("👔 User is HR - showing manager buttons");
-      localStorage.setItem("is_manager", "true");
-      localStorage.setItem("is_hr", "true");
-      toggleManagerButtons(true);
-      return true;
-    }
+//     if (isHR) {
+//       console.log("👔 User is HR - showing manager buttons");
+//       localStorage.setItem("is_manager", "true");
+//       localStorage.setItem("is_hr", "true");
+//       toggleManagerButtons(true);
+//       return true;
+//     }
     
-    // ✅ CHECK IF USER IS REPORTING MANAGER
-    const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+//     // ✅ CHECK IF USER IS REPORTING MANAGER
+//     const response = await fetch(`${API_URL}/api/check-manager/${empCode}`, {
+//       headers: {
+//         Authorization: `Bearer ${token}`
+//       }
+//     });
     
-    if (!response.ok) {
-      console.error("❌ Role check failed:", response.status);
-      return false;
-    }
+//     if (!response.ok) {
+//       console.error("❌ Role check failed:", response.status);
+//       return false;
+//     }
     
-    const data = await response.json();
-    console.log("✅ Role check result:", data);
+//     const data = await response.json();
+//     console.log("✅ Role check result:", data);
     
-    // Store role in localStorage
-    localStorage.setItem("is_manager", data.isManager);
-    localStorage.setItem("is_hr", "false");
+//     // Store role in localStorage
+//     localStorage.setItem("is_manager", data.isManager);
+//     localStorage.setItem("is_hr", "false");
     
-    // Show/hide manager-only buttons
-    toggleManagerButtons(data.isManager);
+//     // Show/hide manager-only buttons
+//     toggleManagerButtons(data.isManager);
     
-    return data.isManager;
+//     return data.isManager;
     
-  } catch (error) {
-    console.error("❌ Error checking role:", error);
-    return false;
-  }
-}
+//   } catch (error) {
+//     console.error("❌ Error checking role:", error);
+//     return false;
+//   }
+// }
 
 
 function showEmployeeModal(employeeId) {
@@ -7340,13 +7714,68 @@ function showAmountEditPopup(currentAmount) {
 window.editEntryAmount = editEntryAmount;
 
 // ✅ NEW: Edit Total Amount for entire month
+// async function editTotalAmount(employeeId, monthRange, currentTotal) {
+//     const newTotal = await showAmountEditPopup(currentTotal);
+    
+//     if (newTotal === null || newTotal === currentTotal) {
+//         return;
+//     }
+    
+//     if (newTotal <= 0) {
+//         showErrorPopup('Total amount must be greater than 0');
+//         return;
+//     }
+    
+//     const token = localStorage.getItem('access_token');
+    
+//     try {
+//         console.log(`💰 Updating total amount for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
+        
+//         const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
+//             method: 'PUT',
+//             headers: {
+//                 'Authorization': `Bearer ${token}`,
+//                 'Content-Type': 'application/json'
+//             },
+//             body: JSON.stringify({
+//                 employee_id: employeeId,
+//                 month_range: monthRange,
+//                 new_total: newTotal
+//             })
+//         });
+        
+//         if (response.ok) {
+//             const result = await response.json();
+//             showSuccessPopup(`Total amount updated successfully!\n\nOld Total: ₹${currentTotal}\nNew Total: ₹${newTotal}\nEntries adjusted: ${result.entries_updated}`);
+            
+//             // Reload the current section
+//             const empCode = localStorage.getItem('employee_code');
+//             const navPending = document.getElementById('navPending');
+//             const navApprove = document.getElementById('navApprove');
+//             const navReject = document.getElementById('navReject');
+            
+//             if (navPending && navPending.classList.contains('active')) {
+//                 await loadPendingData(token, empCode);
+//             } else if (navApprove && navApprove.classList.contains('active')) {
+//                 await loadApproveData(token, empCode);
+//             } else if (navReject && navReject.classList.contains('active')) {
+//                 await loadRejectData(token, empCode);
+//             }
+//         } else {
+//             const errorData = await response.json();
+//             showErrorPopup(errorData.detail || 'Failed to update total amount');
+//         }
+        
+//     } catch (error) {
+//         console.error('Error updating total amount:', error);
+//         showErrorPopup('Network error');
+//     }
+// }
+
 async function editTotalAmount(employeeId, monthRange, currentTotal) {
     const newTotal = await showAmountEditPopup(currentTotal);
     
-    if (newTotal === null || newTotal === currentTotal) {
-        return;
-    }
-    
+    if (newTotal === null || newTotal === currentTotal) return;
     if (newTotal <= 0) {
         showErrorPopup('Total amount must be greater than 0');
         return;
@@ -7355,8 +7784,6 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
     const token = localStorage.getItem('access_token');
     
     try {
-        console.log(`💰 Updating total amount for ${employeeId} - ${monthRange}: ${currentTotal} → ${newTotal}`);
-        
         const response = await fetch(`${API_URL}/api/ope/manager/edit-total-amount`, {
             method: 'PUT',
             headers: {
@@ -7371,42 +7798,67 @@ async function editTotalAmount(employeeId, monthRange, currentTotal) {
         });
         
         if (response.ok) {
-            const result = await response.json();
-            showSuccessPopup(`Total amount updated successfully!\n\nOld Total: ₹${currentTotal}\nNew Total: ₹${newTotal}\nEntries adjusted: ${result.entries_updated}`);
+            // ✅ Update span directly in open modal
+            const spanId = `total-display-${employeeId}-${monthRange.replace(/[\s/]/g, '-')}`;
+            const span = document.getElementById(spanId);
             
-            // Reload the current section
+            if (span) {
+                const entryCount = span.dataset.entries;
+                const originalAmount = span.dataset.original;
+                span.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                        <div style="font-size: 11px; opacity: 0.8; text-decoration: line-through;">
+                            Original: ₹${parseFloat(originalAmount).toFixed(2)}
+                        </div>
+                        <div style="font-size: 14px; font-weight: 700;">
+                            Edited: ₹${newTotal.toFixed(2)} | Entries: ${entryCount}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            showSuccessPopup(
+                `Total updated!<br><br>` +
+                `<b>Original:</b> ₹${currentTotal.toFixed(2)}<br>` +
+                `<b>Edited:</b> ₹${newTotal.toFixed(2)}<br><br>` +
+                `<span style="color:#6b7280;font-size:12px;">Entry amounts unchanged.</span>`
+            );
+            
             const empCode = localStorage.getItem('employee_code');
-            const navPending = document.getElementById('navPending');
-            const navApprove = document.getElementById('navApprove');
-            const navReject = document.getElementById('navReject');
-            
-            if (navPending && navPending.classList.contains('active')) {
+            if (document.getElementById('navPending')?.classList.contains('active')) {
                 await loadPendingData(token, empCode);
-            } else if (navApprove && navApprove.classList.contains('active')) {
+            } else if (document.getElementById('navApprove')?.classList.contains('active')) {
                 await loadApproveData(token, empCode);
-            } else if (navReject && navReject.classList.contains('active')) {
+            } else if (document.getElementById('navReject')?.classList.contains('active')) {
                 await loadRejectData(token, empCode);
             }
+            
         } else {
             const errorData = await response.json();
             showErrorPopup(errorData.detail || 'Failed to update total amount');
         }
-        
     } catch (error) {
-        console.error('Error updating total amount:', error);
         showErrorPopup('Network error');
     }
 }
 
-// Make it global
 window.editTotalAmount = editTotalAmount;
 
+
+// ✅ UPDATED: Approve Employee with Remark
 async function approveEmployee(employeeId) {
   const token = localStorage.getItem('access_token');
   const currentEmpCode = localStorage.getItem('employee_code');
   
   try {
     console.log("✅ Approving employee:", employeeId);
+    
+    // ✅ Show remark popup first
+    const remark = await showApproveRemarkPopup();
+    
+    if (remark === null) {
+      return; // User cancelled
+    }
     
     const confirmed = await showConfirmPopup(
       'Approve All Entries',
@@ -7421,16 +7873,21 @@ async function approveEmployee(employeeId) {
     
     // ✅ DETERMINE ENDPOINT BASED ON USER
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
     const endpoint = isHR 
       ? `${API_URL}/api/ope/hr/approve/${employeeId}`
-      : `${API_URL}/api/ope/manager/approve/${employeeId}`;
+      : isPartner
+        ? `${API_URL}/api/ope/partner/approve/${employeeId}`
+        : `${API_URL}/api/ope/manager/approve/${employeeId}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ remark: remark }) // ✅ Send remark to backend
     });
     
     if (response.ok) {
@@ -7517,9 +7974,13 @@ async function rejectEmployee(employeeId) {
     
     // ✅ DETERMINE ENDPOINT BASED ON USER
     const isHR = (currentEmpCode.toUpperCase() === "JHS729");
-    const endpoint = isHR 
-      ? `${API_URL}/api/ope/hr/reject/${employeeId}`
-      : `${API_URL}/api/ope/manager/reject/${employeeId}`;
+const isPartner = localStorage.getItem("is_partner") === "true";
+
+const endpoint = isHR 
+  ? `${API_URL}/api/ope/hr/reject/${employeeId}`
+  : isPartner
+    ? `${API_URL}/api/ope/partner/reject/${employeeId}`
+    : `${API_URL}/api/ope/manager/reject/${employeeId}`;
     
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -7718,8 +8179,310 @@ async function loadStatusData(token, empCode) {
 }
 
 
+// ✅ UPDATED: Display status table with edit tracking
+// ✅ UPDATED: Display status table with reject tracking
+// function displayStatusTable(data) {
+//     console.log("🎨 Displaying status table with reject tracking");
+//     console.log("Status data:", data);
+    
+//     const tbody = document.getElementById('statusTableBody');
+//     if (!tbody) {
+//         console.error("❌ statusTableBody not found!");
+//         return;
+//     }
+
+//     tbody.innerHTML = '';
+
+//     if (!data || data.length === 0) {
+//         showStatusNoData();
+//         return;
+//     }
+
+//     // Display each payroll month as one row
+//     data.forEach((entry) => {
+//         const row = document.createElement('tr');
+        
+//         const L1 = entry.L1 || {};
+//         const L2 = entry.L2 || {};
+//         const L3 = entry.L3 || {};
+//         const totalLevels = entry.total_levels || 2;
+//         const currentLevel = entry.current_level || 'L1';
+//         const overallStatus = entry.overall_status || 'pending';
+//         const isRejected = entry.is_rejected || false;
+        
+//         console.log(`Processing month: ${entry.payroll_month}, isRejected: ${isRejected}`);
+        
+//         // Check if amount was edited
+//         const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
+//         const editedBy = entry.last_edited_by_name || entry.last_edited_by;
+//         const editedByRole = entry.last_edited_by_role;
+//         const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
+//             day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+//         }) : null;
+        
+//         // Generate amount display with edit info
+//         let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
+        
+//         if (wasEdited) {
+//             amountDisplay = `
+//                 <div class="amount-edit-info">
+//                     <span class="amount-original">₹${(entry.original_total || 0).toFixed(2)}</span>
+//                     <i class="fas fa-arrow-right"></i>
+//                     <span class="amount-current edited">₹${(entry.total_amount || 0).toFixed(2)}</span>
+//                     ${editedBy ? `
+//                         <div class="edit-by">
+//                             <i class="fas fa-pencil-alt"></i>
+//                             Edited by: <strong>${editedBy}</strong> (${editedByRole || 'Unknown'})
+//                             ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             `;
+//         }
+        
+//         // Generate rejection info if rejected
+//         let rejectionHTML = '';
+//         if (isRejected) {
+//             const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
+//                 day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+//             }) : null;
+            
+//             rejectionHTML = `
+//                 <div class="rejection-info">
+//                     <div class="rejection-badge">
+//                         <i class="fas fa-times-circle"></i> REJECTED
+//                     </div>
+//                     <div class="rejection-details">
+//                         <div><strong>Rejected by:</strong> ${entry.rejected_by_name || entry.rejected_by || 'Unknown'} (${entry.rejected_by_role || 'Unknown'})</div>
+//                         ${rejectedDate ? `<div><strong>Date:</strong> ${rejectedDate}</div>` : ''}
+//                         ${entry.rejection_reason ? `<div><strong>Reason:</strong> ${entry.rejection_reason}</div>` : ''}
+//                         <div><strong>Rejected at:</strong> ${entry.rejected_level || 'Unknown'} level</div>
+//                     </div>
+//                 </div>
+//             `;
+//         }
+        
+//         // Generate status tracker HTML
+//         let statusTrackerHTML = `<div class="approval-tracker">`;
+        
+//         // L1 - Reporting Manager
+//         const l1Status = L1.status || false;
+//         const l1Rejected = L1.rejected || false;
+//         let l1Class = 'inactive';
+//         let l1Icon = 'fa-circle';
+//         let l1StatusText = 'Pending';
+        
+//         if (l1Rejected) {
+//             l1Class = 'rejected';
+//             l1Icon = 'fa-times-circle';
+//             l1StatusText = 'Rejected';
+//         } else if (l1Status) {
+//             l1Class = 'approved';
+//             l1Icon = 'fa-check-circle';
+//             l1StatusText = 'Approved';
+//         } else if (currentLevel === 'L1' && !isRejected) {
+//             l1Class = 'pending';
+//             l1Icon = 'fa-clock';
+//             l1StatusText = 'Pending';
+//         }
+        
+//         statusTrackerHTML += `
+//             <div class="approval-level ${l1Class}">
+//                 <i class="fas ${l1Icon}"></i>
+//                 <div class="level-info">
+//                     <div class="level-title">L1 - ${L1.level_name || 'Reporting Manager'}</div>
+//                     <div class="level-status">
+//                         ${l1Rejected ? '❌ Rejected' : (l1Status ? '✓ Approved' : '⏳ Pending')}
+//                     </div>
+//                     ${l1Rejected && L1.rejection_reason ? `
+//                         <div class="level-reason" title="${L1.rejection_reason}">
+//                             <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
+//                         </div>
+//                     ` : ''}
+//                     ${l1Status && L1.approved_date ? `
+//                         <div class="level-date">
+//                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                     ${l1Rejected && L1.rejected_date ? `
+//                         <div class="level-date rejected">
+//                             ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </div>
+//             <i class="fas fa-arrow-right approval-arrow ${(l1Status && !l1Rejected) ? 'active' : 'inactive'}"></i>
+//         `;
+        
+//         // L2 - Partner or HR
+//         const l2Status = L2.status || false;
+//         const l2Rejected = L2.rejected || false;
+//         let l2Class = 'inactive';
+//         let l2Icon = 'fa-circle';
+//         let l2StatusText = 'Pending';
+        
+//         if (l2Rejected) {
+//             l2Class = 'rejected';
+//             l2Icon = 'fa-times-circle';
+//             l2StatusText = 'Rejected';
+//         } else if (l2Status) {
+//             l2Class = 'approved';
+//             l2Icon = 'fa-check-circle';
+//             l2StatusText = 'Approved';
+//         } else if (currentLevel === 'L2' && !isRejected) {
+//             l2Class = 'pending';
+//             l2Icon = 'fa-clock';
+//             l2StatusText = 'Pending';
+//         }
+        
+//         statusTrackerHTML += `
+//             <div class="approval-level ${l2Class}">
+//                 <i class="fas ${l2Icon}"></i>
+//                 <div class="level-info">
+//                     <div class="level-title">L2 - ${L2.level_name || (totalLevels === 3 ? 'Partner' : 'HR')}</div>
+//                     <div class="level-status">
+//                         ${l2Rejected ? '❌ Rejected' : (l2Status ? '✓ Approved' : '⏳ Pending')}
+//                     </div>
+//                     ${l2Rejected && L2.rejection_reason ? `
+//                         <div class="level-reason" title="${L2.rejection_reason}">
+//                             <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
+//                         </div>
+//                     ` : ''}
+//                     ${l2Status && L2.approved_date ? `
+//                         <div class="level-date">
+//                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                     ${l2Rejected && L2.rejected_date ? `
+//                         <div class="level-date rejected">
+//                             ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </div>
+//         `;
+        
+//         // L3 - HR (only if total_levels = 3)
+//         if (totalLevels === 3) {
+//             const l3Status = L3.status || false;
+//             const l3Rejected = L3.rejected || false;
+//             let l3Class = 'inactive';
+//             let l3Icon = 'fa-circle';
+//             let l3StatusText = 'Pending';
+            
+//             if (l3Rejected) {
+//                 l3Class = 'rejected';
+//                 l3Icon = 'fa-times-circle';
+//                 l3StatusText = 'Rejected';
+//             } else if (l3Status) {
+//                 l3Class = 'approved';
+//                 l3Icon = 'fa-check-circle';
+//                 l3StatusText = 'Approved';
+//             } else if (currentLevel === 'L3' && !isRejected) {
+//                 l3Class = 'pending';
+//                 l3Icon = 'fa-clock';
+//                 l3StatusText = 'Pending';
+//             }
+            
+//             statusTrackerHTML += `
+//                 <i class="fas fa-arrow-right approval-arrow ${(l2Status && !l2Rejected) ? 'active' : 'inactive'}"></i>
+//                 <div class="approval-level ${l3Class}">
+//                     <i class="fas ${l3Icon}"></i>
+//                     <div class="level-info">
+//                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
+//                         <div class="level-status">
+//                             ${l3Rejected ? '❌ Rejected' : (l3Status ? '✓ Approved' : '⏳ Pending')}
+//                         </div>
+//                         ${l3Rejected && L3.rejection_reason ? `
+//                             <div class="level-reason" title="${L3.rejection_reason}">
+//                                 <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
+//                             </div>
+//                         ` : ''}
+//                         ${l3Status && L3.approved_date ? `
+//                             <div class="level-date">
+//                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             </div>
+//                         ` : ''}
+//                         ${l3Rejected && L3.rejected_date ? `
+//                             <div class="level-date rejected">
+//                                 ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             </div>
+//                         ` : ''}
+//                     </div>
+//                 </div>
+//             `;
+//         }
+        
+//         statusTrackerHTML += `</div>`;
+        
+//         // Overall status badge
+//         let statusBadge = '';
+//         if (isRejected) {
+//             statusBadge = `
+//                 <span class="status-badge rejected">
+//                     <i class="fas fa-times-circle"></i> REJECTED
+//                 </span>
+//             `;
+//         } else if (overallStatus === 'approved') {
+//             statusBadge = `
+//                 <span class="status-badge completed">
+//                     <i class="fas fa-check-circle"></i> APPROVED
+//                 </span>
+//             `;
+//         } else {
+//             statusBadge = `
+//                 <span class="status-badge pending">
+//                     <i class="fas fa-clock"></i> IN PROGRESS
+//                 </span>
+//             `;
+//         }
+        
+//         row.innerHTML = `
+//             <td>${entry.payroll_month || '-'}</td>
+//             <td class="amount-column">
+//                 ${amountDisplay}
+//                 ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
+//                     <button class="view-history-btn" onclick='showEditHistory(${JSON.stringify(entry.payroll_month)})'>
+//                         <i class="fas fa-history"></i> View History
+//                     </button>
+//                 ` : ''}
+//             </td>
+//             <td>
+//                 <div class="status-badge-container">
+//                     ${statusBadge}
+//                     <div class="status-info">
+//                         Levels: <strong>${totalLevels}</strong> | 
+//                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
+//                     </div>
+//                     ${isRejected ? `
+//                         <div class="rejection-summary" onclick='showRejectionDetails(${JSON.stringify({
+//                             rejected_by: entry.rejected_by_name || entry.rejected_by,
+//                             role: entry.rejected_by_role,
+//                             date: entry.rejected_date,
+//                             reason: entry.rejection_reason,
+//                             level: entry.rejected_level
+//                         })})'>
+//                             <i class="fas fa-info-circle"></i> Click for rejection details
+//                         </div>
+//                     ` : ''}
+//                 </div>
+//             </td>
+//             <td>
+//                 ${statusTrackerHTML}
+//             </td>
+//         `;
+        
+//         tbody.appendChild(row);
+//     });
+
+//     document.getElementById('statusLoadingDiv').style.display = 'none';
+//     document.getElementById('statusTableSection').style.display = 'block';
+// }
+
+// ✅ UPDATED: Display status table with reject tracking
 function displayStatusTable(data) {
-    console.log("🎨 Displaying status table");
+    console.log("🎨 Displaying status table with reject tracking");
+    console.log("Status data:", data);
     
     const tbody = document.getElementById('statusTableBody');
     if (!tbody) {
@@ -7734,7 +8497,7 @@ function displayStatusTable(data) {
         return;
     }
 
-    // ✅ Display each payroll month as one row
+    // Display each payroll month as one row
     data.forEach((entry) => {
         const row = document.createElement('tr');
         
@@ -7744,64 +8507,218 @@ function displayStatusTable(data) {
         const totalLevels = entry.total_levels || 2;
         const currentLevel = entry.current_level || 'L1';
         const overallStatus = entry.overall_status || 'pending';
+        const isRejected = entry.is_rejected || false;
+        const rejectedLevel = entry.rejected_level || null;
+        const rejectedByName = entry.rejected_by_name || entry.rejected_by || '';
+        const rejectionReason = entry.rejection_reason || '';
         
-        // Generate status tracker HTML with compact design
+        console.log(`Processing month: ${entry.payroll_month}, isRejected: ${isRejected}, level: ${rejectedLevel}`);
+        
+        // Check if amount was edited
+        const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
+        const editedBy = entry.last_edited_by_name || entry.last_edited_by;
+        const editedByRole = entry.last_edited_by_role;
+        const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }) : null;
+        
+        // Generate amount display with edit info
+        let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
+        
+        if (wasEdited) {
+            amountDisplay = `
+                <div class="amount-edit-info">
+                    <span class="amount-original">₹${(entry.original_total || 0).toFixed(2)}</span>
+                    <i class="fas fa-arrow-right"></i>
+                    <span class="amount-current edited">₹${(entry.total_amount || 0).toFixed(2)}</span>
+                    ${editedBy ? `
+                        <div class="edit-by">
+                            <i class="fas fa-pencil-alt"></i>
+                            Edited by: <strong>${editedBy}</strong> (${editedByRole || 'Unknown'})
+                            ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        // Generate rejection info if rejected
+        let rejectionHTML = '';
+        if (isRejected) {
+            const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }) : null;
+            
+            rejectionHTML = `
+                <div class="rejection-info">
+                    <div class="rejection-badge">
+                        <i class="fas fa-times-circle"></i> REJECTED AT ${rejectedLevel || 'Unknown'}
+                    </div>
+                    <div class="rejection-details">
+                        <div><strong>Rejected by:</strong> ${rejectedByName || 'Unknown'}</div>
+                        ${rejectedDate ? `<div><strong>Date:</strong> ${rejectedDate}</div>` : ''}
+                        ${rejectionReason ? `<div><strong>Reason:</strong> ${rejectionReason}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Generate status tracker HTML with rejection indicators
         let statusTrackerHTML = `<div class="approval-tracker">`;
         
-        // L1
-        const l1Class = L1.status ? 'approved' : (currentLevel === 'L1' ? 'pending' : 'inactive');
+        // L1 - Reporting Manager
+        const l1Status = L1.status || false;
+        const l1Rejected = L1.rejected || false;
+        let l1Class = 'inactive';
+        let l1Icon = 'fa-circle';
+        let l1StatusText = 'Pending';
+        let l1StatusIcon = '⏳';
+        
+        if (l1Rejected) {
+            l1Class = 'rejected';
+            l1Icon = 'fa-times-circle';
+            l1StatusText = 'Rejected';
+            l1StatusIcon = '❌';
+        } else if (l1Status) {
+            l1Class = 'approved';
+            l1Icon = 'fa-check-circle';
+            l1StatusText = 'Approved';
+            l1StatusIcon = '✓';
+        } else if (currentLevel === 'L1' && !isRejected) {
+            l1Class = 'pending';
+            l1Icon = 'fa-clock';
+            l1StatusText = 'Pending';
+            l1StatusIcon = '⏳';
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l1Class}">
-                <i class="fas ${L1.status ? 'fa-check-circle' : (currentLevel === 'L1' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l1Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L1 - ${L1.level_name || 'Manager'}</div>
+                    <div class="level-title">L1 - ${L1.level_name || 'Reporting Manager'}</div>
                     <div class="level-status">
-                        ${L1.status ? '✓ ' + (L1.approver_name || 'Approved') : '⏳ Pending'}
+                        ${l1StatusIcon} ${l1StatusText}
                     </div>
-                    ${L1.status && L1.approved_date ? `
+                    ${l1Rejected && L1.rejection_reason ? `
+                        <div class="level-reason" title="${L1.rejection_reason}">
+                            <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l1Status && L1.approved_date ? `
                         <div class="level-date">
                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                         </div>
                     ` : ''}
+                    ${l1Rejected && L1.rejected_date ? `
+                        <div class="level-date rejected">
+                            ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
-            <i class="fas fa-arrow-right approval-arrow ${L1.status ? 'active' : 'inactive'}"></i>
+            <i class="fas fa-arrow-right approval-arrow ${(l1Status && !l1Rejected) ? 'active' : 'inactive'}"></i>
         `;
         
-        // L2
-        const l2Class = L2.status ? 'approved' : (currentLevel === 'L2' ? 'pending' : 'inactive');
+        // L2 - Partner or HR
+        const l2Status = L2.status || false;
+        const l2Rejected = L2.rejected || false;
+        let l2Class = 'inactive';
+        let l2Icon = 'fa-circle';
+        let l2StatusText = 'Pending';
+        let l2StatusIcon = '⏳';
+        
+        if (l2Rejected) {
+            l2Class = 'rejected';
+            l2Icon = 'fa-times-circle';
+            l2StatusText = 'Rejected';
+            l2StatusIcon = '❌';
+        } else if (l2Status) {
+            l2Class = 'approved';
+            l2Icon = 'fa-check-circle';
+            l2StatusText = 'Approved';
+            l2StatusIcon = '✓';
+        } else if (currentLevel === 'L2' && !isRejected) {
+            l2Class = 'pending';
+            l2Icon = 'fa-clock';
+            l2StatusText = 'Pending';
+            l2StatusIcon = '⏳';
+        }
+        
         statusTrackerHTML += `
             <div class="approval-level ${l2Class}">
-                <i class="fas ${L2.status ? 'fa-check-circle' : (currentLevel === 'L2' ? 'fa-clock' : 'fa-circle')}"></i>
+                <i class="fas ${l2Icon}"></i>
                 <div class="level-info">
-                    <div class="level-title">L2 - ${L2.level_name || 'Partner'}</div>
+                    <div class="level-title">L2 - ${L2.level_name || (totalLevels === 3 ? 'Partner' : 'HR')}</div>
                     <div class="level-status">
-                        ${L2.status ? '✓ ' + (L2.approver_name || 'Approved') : '⏳ Pending'}
+                        ${l2StatusIcon} ${l2StatusText}
                     </div>
-                    ${L2.status && L2.approved_date ? `
+                    ${l2Rejected && L2.rejection_reason ? `
+                        <div class="level-reason" title="${L2.rejection_reason}">
+                            <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l2Status && L2.approved_date ? `
                         <div class="level-date">
                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                        </div>
+                    ` : ''}
+                    ${l2Rejected && L2.rejected_date ? `
+                        <div class="level-date rejected">
+                            ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                         </div>
                     ` : ''}
                 </div>
             </div>
         `;
         
-        // L3 (only if total_levels = 3)
+        // L3 - HR (only if total_levels = 3)
         if (totalLevels === 3) {
-            const l3Class = L3.status ? 'approved' : (currentLevel === 'L3' ? 'pending' : 'inactive');
+            const l3Status = L3.status || false;
+            const l3Rejected = L3.rejected || false;
+            let l3Class = 'inactive';
+            let l3Icon = 'fa-circle';
+            let l3StatusText = 'Pending';
+            let l3StatusIcon = '⏳';
+            
+            if (l3Rejected) {
+                l3Class = 'rejected';
+                l3Icon = 'fa-times-circle';
+                l3StatusText = 'Rejected';
+                l3StatusIcon = '❌';
+            } else if (l3Status) {
+                l3Class = 'approved';
+                l3Icon = 'fa-check-circle';
+                l3StatusText = 'Approved';
+                l3StatusIcon = '✓';
+            } else if (currentLevel === 'L3' && !isRejected) {
+                l3Class = 'pending';
+                l3Icon = 'fa-clock';
+                l3StatusText = 'Pending';
+                l3StatusIcon = '⏳';
+            }
+            
             statusTrackerHTML += `
-                <i class="fas fa-arrow-right approval-arrow ${L2.status ? 'active' : 'inactive'}"></i>
+                <i class="fas fa-arrow-right approval-arrow ${(l2Status && !l2Rejected) ? 'active' : 'inactive'}"></i>
                 <div class="approval-level ${l3Class}">
-                    <i class="fas ${L3.status ? 'fa-check-circle' : (currentLevel === 'L3' ? 'fa-clock' : 'fa-circle')}"></i>
+                    <i class="fas ${l3Icon}"></i>
                     <div class="level-info">
                         <div class="level-title">L3 - ${L3.level_name || 'HR'}</div>
                         <div class="level-status">
-                            ${L3.status ? '✓ ' + (L3.approver_name || 'Approved') : '⏳ Pending'}
+                            ${l3StatusIcon} ${l3StatusText}
                         </div>
-                        ${L3.status && L3.approved_date ? `
+                        ${l3Rejected && L3.rejection_reason ? `
+                            <div class="level-reason" title="${L3.rejection_reason}">
+                                <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                        ${l3Status && L3.approved_date ? `
                             <div class="level-date">
                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            </div>
+                        ` : ''}
+                        ${l3Rejected && L3.rejected_date ? `
+                            <div class="level-date rejected">
+                                ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
                             </div>
                         ` : ''}
                     </div>
@@ -7811,18 +8728,91 @@ function displayStatusTable(data) {
         
         statusTrackerHTML += `</div>`;
         
+        // Overall status badge
+        let statusBadge = '';
+        if (isRejected) {
+            statusBadge = `
+                <span class="status-badge rejected" style="
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+                ">
+                    <i class="fas fa-times-circle"></i> REJECTED
+                </span>
+            `;
+        } else if (overallStatus === 'approved') {
+            statusBadge = `
+                <span class="status-badge completed" style="
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+                ">
+                    <i class="fas fa-check-circle"></i> APPROVED
+                </span>
+            `;
+        } else {
+            statusBadge = `
+                <span class="status-badge pending" style="
+                    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+                ">
+                    <i class="fas fa-clock"></i> IN PROGRESS
+                </span>
+            `;
+        }
+        
         row.innerHTML = `
-            <td>${entry.payroll_month || '-'}</td>
-            <td>₹${(entry.total_amount || 0).toFixed(2)}</td>
+            <td><strong>${entry.payroll_month || '-'}</strong></td>
+            <td class="amount-column">
+                ${amountDisplay}
+                ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
+                    <button class="view-history-btn" onclick='showEditHistory(${JSON.stringify(entry.payroll_month)})'>
+                        <i class="fas fa-history"></i> View History
+                    </button>
+                ` : ''}
+            </td>
             <td>
                 <div class="status-badge-container">
-                    <span class="status-badge ${overallStatus === 'approved' ? 'completed' : 'pending'}">
-                        ${overallStatus === 'approved' ? '✓ COMPLETED' : '⏳ IN PROGRESS'}
-                    </span>
-                    <div class="status-info">
+                    ${statusBadge}
+                    <div class="status-info" style="margin-top: 8px; font-size: 12px; color: #6b7280;">
                         Levels: <strong>${totalLevels}</strong> | 
                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
                     </div>
+                    ${isRejected ? `
+                        <div class="rejection-summary" style="margin-top: 10px; cursor: pointer;" 
+                             onclick='showRejectionDetails(${JSON.stringify({
+                                rejected_by: entry.rejected_by_name || entry.rejected_by,
+                                level: entry.rejected_level,
+                                date: entry.rejected_date,
+                                reason: entry.rejection_reason
+                             })})'>
+                            <span style="color: #ef4444; font-size: 12px; text-decoration: underline;">
+                                <i class="fas fa-info-circle"></i> Click for rejection details
+                            </span>
+                        </div>
+                    ` : ''}
                 </div>
             </td>
             <td>
@@ -7837,6 +8827,144 @@ function displayStatusTable(data) {
     document.getElementById('statusTableSection').style.display = 'block';
 }
 
+// ✅ Rejection Details Popup (already hai, confirm kar lo)
+function showRejectionDetails(rejectionData) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        width: 90%;
+        animation: slideUp 0.3s ease;
+    `;
+
+    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }) : 'Unknown';
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-times-circle" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Rejection Details</h2>
+        </div>
+        
+        <div style="background: #fef2f2; border: 2px solid #fee2e2; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: grid; gap: 15px;">
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected By</div>
+                    <div style="font-weight: 600; color: #1f2937;">${rejectionData.rejected_by || 'Unknown'}</div>
+                    <div style="font-size: 12px; color: #6b7280;">Role: ${rejectionData.role || 'Unknown'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected At Level</div>
+                    <div>
+                        <span style="
+                            background: #fee2e2;
+                            color: #991b1b;
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 13px;
+                            font-weight: 600;
+                        ">
+                            ${rejectionData.level || 'Unknown'}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Date</div>
+                    <div style="font-weight: 500; color: #374151;">${rejectedDate}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Reason</div>
+                    <div style="
+                        background: white;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 12px;
+                        min-height: 60px;
+                        font-size: 14px;
+                        color: #374151;
+                        word-wrap: break-word;
+                    ">
+                        ${rejectionData.reason || 'No reason provided'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRejectBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRejectBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showRejectionDetails = showRejectionDetails;
 function generateStatusTracker(L1, L2, L3, currentLevel) {
     return `
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -8021,6 +9149,139 @@ function getOverallStatusLabel(overallStatus, currentLevel, L1, L2, L3) {
     }
 }
 
+// ✅ NEW: Show Edit History Popup
+function showEditHistory(payrollMonth) {
+    const statusEntry = allStatusData.find(e => e.payroll_month === payrollMonth);
+    
+    if (!statusEntry || !statusEntry.amount_edit_history || statusEntry.amount_edit_history.length === 0) {
+        showErrorPopup('No edit history found');
+        return;
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: white;
+        border-radius: 16px;
+        max-width: 800px;
+        width: 95%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 30px;
+    `;
+
+    let historyHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <h2 style="font-size: 22px; color: #1e293b; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-history" style="color: #3b82f6;"></i>
+                Amount Edit History - ${payrollMonth}
+            </h2>
+            <button onclick="this.closest('.modal-overlay').remove()" 
+                    style="background: #ef4444; color: white; border: none; padding: 8px 16px; 
+                           border-radius: 8px; cursor: pointer;">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+    `;
+
+    if (statusEntry.amount_edit_history.length === 0) {
+        historyHTML += `<p style="color: #6b7280; text-align: center;">No edit history available</p>`;
+    } else {
+        historyHTML += `
+            <div style="margin-bottom: 20px;">
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600;">Original Amount:</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #64748b;">₹${(statusEntry.original_total || 0).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                        <span style="font-weight: 600;">Current Amount:</span>
+                        <span style="font-size: 18px; font-weight: 700; color: #10b981;">₹${(statusEntry.total_amount || 0).toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h3 style="font-size: 18px; margin-bottom: 15px;">Edit History</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="padding: 12px; text-align: left;">Date</th>
+                        <th style="padding: 12px; text-align: left;">Edited By</th>
+                        <th style="padding: 12px; text-align: left;">Role</th>
+                        <th style="padding: 12px; text-align: right;">Old Amount</th>
+                        <th style="padding: 12px; text-align: right;">New Amount</th>
+                        <th style="padding: 12px; text-align: center;">Entries</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        // Sort history by date (newest first)
+        const sortedHistory = [...statusEntry.amount_edit_history].sort((a, b) => 
+            new Date(b.edited_date) - new Date(a.edited_date)
+        );
+
+        sortedHistory.forEach(edit => {
+            const editDate = new Date(edit.edited_date).toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+            
+            historyHTML += `
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 12px;">${editDate}</td>
+                    <td style="padding: 12px; font-weight: 600;">${edit.edited_by_name || edit.edited_by}</td>
+                    <td style="padding: 12px;">
+                        <span style="
+                            background: ${edit.edited_by_role === 'HR' ? '#fef3c7' : 
+                                       edit.edited_by_role === 'Partner' ? '#e0e7ff' : '#dbeafe'};
+                            color: ${edit.edited_by_role === 'HR' ? '#92400e' : 
+                                   edit.edited_by_role === 'Partner' ? '#4338ca' : '#1e40af'};
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-size: 12px;
+                            font-weight: 600;
+                        ">
+                            ${edit.edited_by_role || 'Unknown'}
+                        </span>
+                    </td>
+                    <td style="padding: 12px; text-align: right; color: #ef4444; text-decoration: line-through;">₹${edit.old_total.toFixed(2)}</td>
+                    <td style="padding: 12px; text-align: right; color: #10b981; font-weight: 600;">₹${edit.new_total.toFixed(2)}</td>
+                    <td style="padding: 12px; text-align: center;">${edit.entries_updated}</td>
+                </tr>
+            `;
+        });
+
+        historyHTML += `
+                </tbody>
+            </table>
+        `;
+    }
+
+    modal.innerHTML = historyHTML;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+}
+
+// Make it global
+window.showEditHistory = showEditHistory;
 // ============================================
 // MOBILE MENU TOGGLE - FIXED VERSION
 // ============================================
@@ -8089,3 +9350,784 @@ document.addEventListener('DOMContentLoaded', function() {
 window.toggleMobileMenu = toggleMobileMenu;
 
 console.log("✅ Mobile Menu Toggle initialized successfully!");
+
+// ✅ ADMIN MODAL FUNCTIONS
+function closeAdminSwitchModal() {
+    const modal = document.getElementById('adminSwitchModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function confirmSwitchToAdmin() {
+    closeAdminSwitchModal();
+    window.location.href = '/admin.html';
+}
+
+// ✅ NEW: Approval Remark Popup
+function showApproveRemarkPopup() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+      background: white;
+      padding: 35px 30px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 90%;
+      animation: slideUp 0.3s ease;
+    `;
+
+    popup.innerHTML = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="
+          width: 70px;
+          height: 70px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 15px;
+        ">
+          <i class="fas fa-check-circle" style="font-size: 30px; color: white;"></i>
+        </div>
+        <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Approval Remark</h2>
+        <p style="color: #6b7280; font-size: 14px;">Add a remark (optional)</p>
+      </div>
+      
+      <textarea id="approveRemark" placeholder="Enter approval remark..." style="
+        width: 100%;
+        min-height: 100px;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        margin-bottom: 20px;
+        box-sizing: border-box;
+      "></textarea>
+      
+      <div style="display: flex; gap: 12px; justify-content: center;">
+        <button id="submitApproveBtn" style="
+          padding: 12px 28px;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        ">
+          <i class="fas fa-check"></i> Approve
+        </button>
+        <button id="cancelApproveBtn" style="
+          padding: 12px 28px;
+          background: #f1f5f9;
+          color: #4a5568;
+          border: 2px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        ">
+          Cancel
+        </button>
+      </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const textarea = document.getElementById('approveRemark');
+    const submitBtn = document.getElementById('submitApproveBtn');
+    const cancelBtn = document.getElementById('cancelApproveBtn');
+
+    setTimeout(() => textarea.focus(), 100);
+
+    submitBtn.addEventListener('click', () => {
+      const remark = textarea.value.trim() || 'Approved without remark';
+      document.body.removeChild(overlay);
+      resolve(remark);
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      resolve(null);
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+        resolve(null);
+      }
+    });
+  });
+}
+// ============================================
+// UPDATED: History Section - Payroll Month Cards
+// ============================================
+
+// Store grouped history data
+let groupedHistoryData = {};
+
+// UPDATED: Load history from Temp_OPE_data (editable) and OPE_data (non-editable)
+async function loadHistoryData(token, empCode) {
+    try {
+        console.log("📡 Fetching history for:", empCode);
+        
+        document.getElementById('loadingDiv').style.display = 'block';
+        document.getElementById('historyTableSection').style.display = 'none';
+        document.getElementById('noDataDiv').style.styleSheets = 'none';
+
+        // Fetch from Temp_OPE_data (editable)
+        console.log("🔍 Fetching temp data...");
+        const tempResponse = await fetch(`${API_URL}/api/ope/temp-history/${empCode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        // Fetch from OPE_data (submitted, non-editable)
+        console.log("🔍 Fetching submitted data...");
+        const response = await fetch(`${API_URL}/api/ope/history/${empCode}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!tempResponse.ok && !response.ok) {
+            throw new Error('Failed to fetch history');
+        }
+
+        const tempData = tempResponse.ok ? await tempResponse.json() : { history: [] };
+        const data = response.ok ? await response.json() : { history: [] };
+        
+        console.log("✅ Temp API Response:", tempData);
+        console.log("✅ Submitted API Response:", data);
+        
+        allHistoryData = {
+            temp: tempData.history || [],
+            submitted: data.history || []
+        };
+        
+        console.log("✅ allHistoryData set:", allHistoryData);
+        console.log("📊 Temp entries:", allHistoryData.temp.length);
+        console.log("📊 Submitted entries:", allHistoryData.submitted.length);
+
+        // ✅ NEW: Group data by payroll month
+        groupHistoryByMonth();
+        
+        populateMonthFilter();
+        
+        // ✅ Display cards instead of table
+        displayHistoryCards();
+        
+        hideLoading();
+
+    } catch (error) {
+        console.error('❌ Error loading history:', error);
+        document.getElementById('loadingDiv').style.display = 'none';
+        showNoData();
+    }
+}
+
+// ✅ NEW: Group history entries by payroll month
+function groupHistoryByMonth() {
+    groupedHistoryData = {};
+    
+    // Group submitted entries
+    (allHistoryData.submitted || []).forEach(entry => {
+        const month = entry.month_range || 'Unknown';
+        if (!groupedHistoryData[month]) {
+            groupedHistoryData[month] = {
+                submitted: [],
+                temp: []
+            };
+        }
+        groupedHistoryData[month].submitted.push(entry);
+    });
+    
+    // Group temp entries
+    (allHistoryData.temp || []).forEach(entry => {
+        const month = entry.month_range || 'Unknown';
+        if (!groupedHistoryData[month]) {
+            groupedHistoryData[month] = {
+                submitted: [],
+                temp: []
+            };
+        }
+        groupedHistoryData[month].temp.push(entry);
+    });
+    
+    console.log("📊 Grouped by month:", Object.keys(groupedHistoryData));
+}
+
+// ✅ NEW: Display history as cards
+function displayHistoryCards() {
+    console.log("🎨 displayHistoryCards called");
+    
+    const container = document.getElementById('historyCardsContainer');
+    
+    if (!container) {
+        console.error("❌ historyCardsContainer not found in DOM!");
+        return;
+    }
+
+    container.innerHTML = '';
+    
+    const months = Object.keys(groupedHistoryData);
+    
+    if (months.length === 0) {
+        console.log("📭 No data to display");
+        showNoData();
+        return;
+    }
+
+    // Sort months in descending order (newest first)
+    months.sort().reverse();
+
+    months.forEach(month => {
+        const monthData = groupedHistoryData[month];
+        const submittedEntries = monthData.submitted || [];
+        const tempEntries = monthData.temp || [];
+        
+        // Calculate totals
+        const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const totalEntries = submittedEntries.length + tempEntries.length;
+        
+        // Create card
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.dataset.month = month;
+        
+        // Determine card color based on status
+        let cardStatus = 'mixed';
+        let statusIcon = 'fa-calendar-alt';
+        let statusColor = '#3b82f6';
+        
+        if (submittedEntries.length > 0 && tempEntries.length === 0) {
+            cardStatus = 'submitted';
+            statusIcon = 'fa-check-circle';
+            statusColor = '#10b981';
+        } else if (tempEntries.length > 0 && submittedEntries.length === 0) {
+            cardStatus = 'draft';
+            statusIcon = 'fa-pen';
+            statusColor = '#f59e0b';
+        }
+        
+        card.innerHTML = `
+            <div class="history-card-header" style="background: linear-gradient(135deg, ${statusColor} 0%, ${adjustColor(statusColor, -20)} 100%);">
+                <div class="card-header-left">
+                    <i class="fas ${statusIcon}"></i>
+                    <h3>${month}</h3>
+                </div>
+                <div class="card-header-right">
+                    <span class="entry-count">${totalEntries} entries</span>
+                </div>
+            </div>
+            <div class="history-card-body" onclick="showMonthDetails('${month}')">
+                <div class="card-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Submitted</span>
+                        <span class="stat-value">${submittedEntries.length}</span>
+                        <span class="stat-amount">₹${submittedTotal.toFixed(2)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Drafts</span>
+                        <span class="stat-value">${tempEntries.length}</span>
+                        <span class="stat-amount">₹${tempTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="view-details">
+                        <i class="fas fa-chevron-right"></i> Click to view details
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+
+    const loadingDiv = document.getElementById('loadingDiv');
+    const tableSection = document.getElementById('historyTableSection');
+    const noDataDiv = document.getElementById('noDataDiv');
+    
+    if (loadingDiv) loadingDiv.style.display = 'none';
+    if (noDataDiv) noDataDiv.style.display = 'none';
+    
+    if (tableSection) {
+        tableSection.style.display = 'block';
+        tableSection.style.visibility = 'visible';
+        tableSection.style.opacity = '1';
+    }
+}
+
+// Helper function to adjust color brightness
+function adjustColor(hex, percent) {
+    // Simple color adjustment for demo
+    return hex;
+}
+
+// ✅ NEW: Show month details in modal
+window.showMonthDetails = function(month) {
+    console.log("📋 Showing details for month:", month);
+    
+    const monthData = groupedHistoryData[month];
+    if (!monthData) return;
+    
+    const submittedEntries = monthData.submitted || [];
+    const tempEntries = monthData.temp || [];
+    
+    // Calculate totals
+    const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: white;
+        border-radius: 16px;
+        max-width: 1400px;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    `;
+
+    let modalContent = `
+        <div style="padding: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 2px solid #e5e7eb; padding-bottom: 15px;">
+                <div>
+                    <h2 style="font-size: 24px; color: #1e293b; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-calendar-alt" style="color: #3b82f6;"></i>
+                        ${month}
+                    </h2>
+                    <p style="color: #64748b; font-size: 14px;">
+                        Total Entries: ${submittedEntries.length + tempEntries.length} | 
+                        Submitted: ₹${submittedTotal.toFixed(2)} | 
+                        Drafts: ₹${tempTotal.toFixed(2)}
+                    </p>
+                </div>
+                <button onclick="this.closest('.modal-overlay').remove()" 
+                        style="background: #ef4444; color: white; border: none; padding: 10px 20px; 
+                               border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
+                        onmouseover="this.style.background='#dc2626'"
+                        onmouseout="this.style.background='#ef4444'">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+    `;
+
+    // Submitted Entries Section
+    if (submittedEntries.length > 0) {
+        modalContent += `
+            <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 15px 20px;">
+                    <h3 style="color: white; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-check-circle"></i>
+                        Submitted Entries (${submittedEntries.length})
+                    </h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="history-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Remarks</th>
+                                <th>PDF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        submittedEntries.forEach(entry => {
+            modalContent += `
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-submitted">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td class="remarks" title="${entry.remarks || 'NA'}">${entry.remarks || 'NA'}</td>
+                    <td>
+                        ${entry.ticket_pdf 
+                            ? `<button class="btn-pdf" onclick="viewPdf('${entry._id}', false)">
+                                <i class="fas fa-file-pdf"></i>
+                               </button>` 
+                            : '-'}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        modalContent += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    // Draft Entries Section
+    if (tempEntries.length > 0) {
+        modalContent += `
+            <div style="margin-bottom: 30px; border: 2px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 15px 20px;">
+                    <h3 style="color: white; margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-pen"></i>
+                        Draft Entries (${tempEntries.length})
+                    </h3>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="history-detail-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Client</th>
+                                <th>Project ID</th>
+                                <th>Project Name</th>
+                                <th>Type</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Mode</th>
+                                <th>Amount</th>
+                                <th>Remarks</th>
+                                <th>PDF</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        tempEntries.forEach(entry => {
+            modalContent += `
+                <tr>
+                    <td>${entry.date || '-'}</td>
+                    <td>${entry.client || '-'}</td>
+                    <td class="project-id">${entry.project_id || '-'}</td>
+                    <td>${entry.project_name || '-'}</td>
+                    <td><span class="badge badge-draft">${entry.project_type || '-'}</span></td>
+                    <td>${entry.location_from || '-'}</td>
+                    <td>${entry.location_to || '-'}</td>
+                    <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td class="amount">₹${entry.amount || 0}</td>
+                    <td class="remarks" title="${entry.remarks || 'NA'}">${entry.remarks || 'NA'}</td>
+                    <td>
+                        ${entry.ticket_pdf 
+                            ? `<button class="btn-pdf" onclick="viewPdf('${entry._id}', true)">
+                                <i class="fas fa-file-pdf"></i>
+                               </button>` 
+                            : '-'}
+                    </td>
+                    <td>
+                        <button class="btn-edit" onclick="editTempRow('${entry._id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-delete" onclick="deleteTempRow('${entry._id}', '${month}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        modalContent += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+    
+    modalContent += `</div>`;
+    
+    modal.innerHTML = modalContent;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Close on overlay click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+}
+
+// Update populateMonthFilter for new structure
+function populateMonthFilter() {
+    const monthSet = new Set();
+    
+    const months = Object.keys(groupedHistoryData);
+    months.forEach(month => monthSet.add(month));
+
+    const select = document.getElementById('monthRangeFilter');
+    select.innerHTML = '<option value="">All Months</option>';
+
+    Array.from(monthSet).sort().reverse().forEach(month => {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = month;
+        select.appendChild(option);
+    });
+
+    select.addEventListener('change', function() {
+        const selectedMonth = this.value;
+        
+        if (selectedMonth === '') {
+            displayHistoryCards();
+        } else {
+            // Filter to show only selected month
+            const filteredData = {
+                [selectedMonth]: groupedHistoryData[selectedMonth]
+            };
+            displayFilteredCards(filteredData);
+        }
+    });
+}
+
+// Display filtered cards
+function displayFilteredCards(filteredData) {
+    const container = document.getElementById('historyCardsContainer');
+    container.innerHTML = '';
+    
+    Object.keys(filteredData).forEach(month => {
+        const monthData = filteredData[month];
+        const submittedEntries = monthData.submitted || [];
+        const tempEntries = monthData.temp || [];
+        
+        const submittedTotal = submittedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const tempTotal = tempEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+        const totalEntries = submittedEntries.length + tempEntries.length;
+        
+        const card = document.createElement('div');
+        card.className = 'history-card';
+        card.dataset.month = month;
+        
+        let cardStatus = 'mixed';
+        let statusIcon = 'fa-calendar-alt';
+        let statusColor = '#3b82f6';
+        
+        if (submittedEntries.length > 0 && tempEntries.length === 0) {
+            cardStatus = 'submitted';
+            statusIcon = 'fa-check-circle';
+            statusColor = '#10b981';
+        } else if (tempEntries.length > 0 && submittedEntries.length === 0) {
+            cardStatus = 'draft';
+            statusIcon = 'fa-pen';
+            statusColor = '#f59e0b';
+        }
+        
+        card.innerHTML = `
+            <div class="history-card-header" style="background: linear-gradient(135deg, ${statusColor} 0%, ${adjustColor(statusColor, -20)} 100%);">
+                <div class="card-header-left">
+                    <i class="fas ${statusIcon}"></i>
+                    <h3>${month}</h3>
+                </div>
+                <div class="card-header-right">
+                    <span class="entry-count">${totalEntries} entries</span>
+                </div>
+            </div>
+            <div class="history-card-body" onclick="showMonthDetails('${month}')">
+                <div class="card-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Submitted</span>
+                        <span class="stat-value">${submittedEntries.length}</span>
+                        <span class="stat-amount">₹${submittedTotal.toFixed(2)}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Drafts</span>
+                        <span class="stat-value">${tempEntries.length}</span>
+                        <span class="stat-amount">₹${tempTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="view-details">
+                        <i class="fas fa-chevron-right"></i> Click to view details
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}
+
+// ✅ NEW: Show Rejection Details Popup
+function showRejectionDetails(rejectionData) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    `;
+
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+        background: white;
+        padding: 35px 30px;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        width: 90%;
+        animation: slideUp 0.3s ease;
+    `;
+
+    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }) : 'Unknown';
+
+    popup.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="
+                width: 70px;
+                height: 70px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 15px;
+            ">
+                <i class="fas fa-times-circle" style="font-size: 30px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 8px; font-weight: 600;">Rejection Details</h2>
+        </div>
+        
+        <div style="background: #fef2f2; border: 2px solid #fee2e2; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: grid; gap: 15px;">
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected By</div>
+                    <div style="font-weight: 600; color: #1f2937;">${rejectionData.rejected_by || 'Unknown'}</div>
+                    <div style="font-size: 12px; color: #6b7280;">Role: ${rejectionData.role || 'Unknown'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejected At Level</div>
+                    <div>
+                        <span style="
+                            background: #fee2e2;
+                            color: #991b1b;
+                            padding: 4px 12px;
+                            border-radius: 20px;
+                            font-size: 13px;
+                            font-weight: 600;
+                        ">
+                            ${rejectionData.level || 'Unknown'}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Date</div>
+                    <div style="font-weight: 500; color: #374151;">${rejectedDate}</div>
+                </div>
+                <div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">Rejection Reason</div>
+                    <div style="
+                        background: white;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 12px;
+                        min-height: 60px;
+                        font-size: 14px;
+                        color: #374151;
+                        word-wrap: break-word;
+                    ">
+                        ${rejectionData.reason || 'No reason provided'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: center;">
+            <button id="closeRejectBtn" style="
+                padding: 12px 32px;
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <i class="fas fa-check"></i> Close
+            </button>
+        </div>
+    `;
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById('closeRejectBtn');
+
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.transform = 'translateY(-2px)';
+        closeBtn.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.transform = 'translateY(0)';
+        closeBtn.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+// Make it global
+window.showRejectionDetails = showRejectionDetails;
