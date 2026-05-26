@@ -138,9 +138,8 @@
               <label for="monthRange">Month Range:</label>
               <select id="monthRange" name="monthRange" required>
                 <option value="" disabled selected>Select Your Month</option>
-                <option value="jan-feb-2026">Jan 2026 - Feb 2026</option>
-                <option value="feb-mar-2026">Feb 2026 - Mar 2026</option>
                 <option value="mar-april-2026">Mar 2026 - April 2026</option>
+                <option value="april-may-2026">April 2026 - May 2026</option>
               </select>
             </div>   
           </div>
@@ -369,6 +368,23 @@
             <h2><i class="fas fa-users"></i> Employees Awaiting Approval</h2>
           </div>
           <div class="card-body">
+            <!-- Search Filter -->
+            <div class="search-filter" style="margin-bottom: 20px;">
+              <input 
+                type="text" 
+                id="pendingSearchInput" 
+                placeholder="🔍 Search by Employee ID or Name..." 
+                style="
+                  width: 100%;
+                  padding: 12px 16px;
+                  border: 2px solid #e5e7eb;
+                  border-radius: 8px;
+                  font-size: 14px;
+                  transition: all 0.3s ease;
+                "
+                onkeyup="filterPendingTable()"
+              />
+            </div>
             <div class="table-wrapper">
               <table class="history-table" style="width: 50%">
                 <thead>
@@ -425,6 +441,23 @@
 
         <div class="card" id="approveTableSection" style="display: none">
           <div class="card-body">
+            <!-- Search Filter -->
+            <div class="search-filter" style="margin-bottom: 20px;">
+              <input 
+                type="text" 
+                id="approveSearchInput" 
+                placeholder="🔍 Search by Employee ID or Name..." 
+                style="
+                  width: 100%;
+                  padding: 12px 16px;
+                  border: 2px solid #e5e7eb;
+                  border-radius: 8px;
+                  font-size: 14px;
+                  transition: all 0.3s ease;
+                "
+                onkeyup="filterApproveTable()"
+              />
+            </div>
             <div class="table-wrapper">
               <table class="history-table">
                 <thead>
@@ -480,6 +513,23 @@
 
         <div class="card" id="rejectTableSection" style="display: none">
           <div class="card-body">
+            <!-- Search Filter -->
+            <div class="search-filter" style="margin-bottom: 20px;">
+              <input 
+                type="text" 
+                id="rejectSearchInput" 
+                placeholder="🔍 Search by Employee ID or Name..." 
+                style="
+                  width: 100%;
+                  padding: 12px 16px;
+                  border: 2px solid #e5e7eb;
+                  border-radius: 8px;
+                  font-size: 14px;
+                  transition: all 0.3s ease;
+                "
+                onkeyup="filterRejectTable()"
+              />
+            </div>
             <div class="table-wrapper">
               <table class="history-table">
                 <thead>

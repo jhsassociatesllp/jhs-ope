@@ -154,7 +154,7 @@ function showSuccessPopup(message) {
     animation: slideUp 0.3s ease;
   `;
 
-  // ✅ UPDATED: Removed progress bar, centered text
+  // ✅ SUCCESS POPUP WITH GREEN CHECKMARK
   popup.innerHTML = `
     <div style="
       width: 70px;
@@ -178,24 +178,29 @@ function showSuccessPopup(message) {
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
 
-  // Button hover effect
-  const okBtn = document.getElementById('okBtn');
-  okBtn.addEventListener('mouseenter', () => {
-    okBtn.style.transform = 'translateY(-2px)';
-    okBtn.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
-  });
-  okBtn.addEventListener('mouseleave', () => {
-    okBtn.style.transform = 'translateY(0)';
-    okBtn.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
-  });
+  // Auto-close after 2.5 seconds
+  setTimeout(() => {
+    if (document.body.contains(overlay)) {
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
+    }
+  }, 2500);
 
-  okBtn.addEventListener('click', function() {
-    document.body.removeChild(overlay);
-  });
-
+  // Click overlay to close
   overlay.addEventListener('click', function(e) {
     if (e.target === overlay) {
-      document.body.removeChild(overlay);
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }, 300);
     }
   });
 }
@@ -2786,9 +2791,9 @@ async function saveAllEntries() {
     }
     
     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-    const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-    const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-    const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
+    const client = getDropdownValue(`client_${rowId}`);
+    const projectId = getDropdownValue(`projectid_${rowId}`);
+    const projectName = getDropdownValue(`projectname_${rowId}`);
     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
@@ -2820,9 +2825,9 @@ async function saveAllEntries() {
     const savedEntryId = row.dataset.savedEntryId;
     
     const date = row.querySelector(`input[name="date_${rowId}"]`)?.value;
-    const client = row.querySelector(`input[name="client_${rowId}"]`)?.value.trim();
-    const projectId = row.querySelector(`input[name="projectid_${rowId}"]`)?.value.trim();
-    const projectName = row.querySelector(`input[name="projectname_${rowId}"]`)?.value.trim();
+    const client = getDropdownValue(`client_${rowId}`);
+    const projectId = getDropdownValue(`projectid_${rowId}`);
+    const projectName = getDropdownValue(`projectname_${rowId}`);
     const projectType = row.querySelector(`select[name="projecttype_${rowId}"]`)?.value;
     const locationFrom = row.querySelector(`input[name="locationfrom_${rowId}"]`)?.value.trim();
     const locationTo = row.querySelector(`input[name="locationto_${rowId}"]`)?.value.trim();
@@ -8347,30 +8352,40 @@ function displayStatusTable(data) {
         
         console.log(`Processing month: ${entry.payroll_month}, isRejected: ${isRejected}, level: ${rejectedLevel}`);
         
-        // Check if amount was edited
-        const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
+        // ✅ CALCULATE ACTUAL TOTAL FROM SUBMITTED ENTRIES
+        let actualTotal = 0;
+        if (allHistoryData && allHistoryData.submitted) {
+            const submittedForMonth = allHistoryData.submitted.filter(e => e.month_range === entry.payroll_month);
+            actualTotal = submittedForMonth.reduce((sum, e) => sum + (e.amount || 0), 0);
+            console.log(`📊 Calculated actual total for ${entry.payroll_month}: ₹${actualTotal} (${submittedForMonth.length} entries)`);
+        } else {
+            // Fallback to backend total_amount if history data not available
+            actualTotal = entry.total_amount || 0;
+            console.log(`⚠️ Using backend total_amount for ${entry.payroll_month}: ₹${actualTotal}`);
+        }
+        
+        // ✅ CHECK IF AMOUNT WAS EDITED BY RM/PARTNER/HR
+        const wasEdited = entry.original_total && entry.original_total !== actualTotal;
         const editedBy = entry.last_edited_by_name || entry.last_edited_by;
         const editedByRole = entry.last_edited_by_role;
         const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
             day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
         }) : null;
         
-        // Generate amount display with edit info
-        let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
+        // ✅ SHOW EDIT HISTORY ONLY IF EDITED BY RM/PARTNER/HR
+        let amountDisplay = `<span class="amount-current">₹${actualTotal.toFixed(2)}</span>`;
         
-        if (wasEdited) {
+        if (wasEdited && editedByRole && (editedByRole === 'Reporting Manager' || editedByRole === 'Partner' || editedByRole === 'HR')) {
             amountDisplay = `
                 <div class="amount-edit-info">
                     <span class="amount-original">₹${(entry.original_total || 0).toFixed(2)}</span>
                     <i class="fas fa-arrow-right"></i>
-                    <span class="amount-current edited">₹${(entry.total_amount || 0).toFixed(2)}</span>
-                    ${editedBy ? `
-                        <div class="edit-by">
-                            <i class="fas fa-pencil-alt"></i>
-                            Edited by: <strong>${editedBy}</strong> (${editedByRole || 'Unknown'})
-                            ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
-                        </div>
-                    ` : ''}
+                    <span class="amount-current edited">₹${actualTotal.toFixed(2)}</span>
+                    <div class="edit-by">
+                        <i class="fas fa-pencil-alt"></i>
+                        Edited by: <strong>${editedByRole}</strong>
+                        ${editedDate ? `<span class="edit-date">${editedDate}</span>` : ''}
+                    </div>
                 </div>
             `;
         }
@@ -9605,6 +9620,7 @@ window.showMonthDetails = function(month) {
                                 <th>Amount</th>
                                 <th>Remarks</th>
                                 <th>PDF</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -9629,6 +9645,12 @@ window.showMonthDetails = function(month) {
                                 <i class="fas fa-file-pdf"></i>
                                </button>` 
                             : '-'}
+                    </td>
+                    <td>
+                        <button class="btn-delete" onclick="deleteHistoryEntry('${entry._id}', ${entry.amount || 0}, '${month}')" 
+                                title="Delete this entry">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </td>
                 </tr>
             `;
@@ -9964,3 +9986,266 @@ function showRejectionDetails(rejectionData) {
 
 // Make it global
 window.showRejectionDetails = showRejectionDetails;
+// ✅ NEW: Delete history entry function
+window.deleteHistoryEntry = async function(entryId, monthRange) {
+    console.log("🗑️ Deleting entry:", entryId, "Month:", monthRange);
+    
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete this entry?\n\nThis action cannot be undone.`);
+    if (!confirmed) return;
+    
+    try {
+        const token = localStorage.getItem('access_token');
+        const empCode = localStorage.getItem('employee_code');
+        
+        if (!token || !empCode) {
+            showErrorPopup('Authentication required. Please login again.');
+            return;
+        }
+        
+        console.log("🔑 Token:", token ? "Present" : "Missing");
+        console.log("👤 Employee Code:", empCode);
+        
+        // Show loading
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        loadingOverlay.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #3b82f6; margin-bottom: 10px;"></i>
+                <p>Deleting entry...</p>
+            </div>
+        `;
+        document.body.appendChild(loadingOverlay);
+        
+        // Prepare request data (month_range in body as per API spec)
+        const requestData = {
+            month_range: monthRange
+        };
+        
+        console.log("📤 Sending DELETE request to:", `/api/ope/delete/${entryId}`);
+        console.log("📤 Request data:", requestData);
+        
+        // Call delete API (DELETE method with entry_id in URL)
+        const response = await fetch(`/api/ope/delete/${entryId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        console.log("📥 Response status:", response.status);
+        
+        // Remove loading
+        loadingOverlay.remove();
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Response error:", errorText);
+            showErrorPopup(`HTTP ${response.status}: ${errorText}`);
+            return;
+        }
+        
+        const result = await response.json();
+        console.log("✅ Response result:", result);
+        
+        if (result.success) {
+            showSuccessPopup(`Entry deleted successfully! New total: ₹${result.new_total || 0}`);
+            
+            // Close the month details modal
+            const modalOverlay = document.querySelector('.modal-overlay');
+            if (modalOverlay) modalOverlay.remove();
+            
+            // Refresh history and status data
+            await loadHistoryData(token, empCode);
+            displayHistoryCards();
+            
+            // Refresh status section if visible
+            const statusSection = document.getElementById('statusSection');
+            if (statusSection && statusSection.style.display !== 'none') {
+                await loadStatusData(token, empCode);
+            }
+            
+        } else {
+            showErrorPopup(result.message || 'Failed to delete entry. Please try again.');
+        }
+        
+    } catch (error) {
+        console.error('❌ Delete error:', error);
+        showErrorPopup(`Network error: ${error.message}`);
+        
+        // Remove loading if still present
+        const loadingOverlay = document.querySelector('[style*="position: fixed"][style*="z-index: 999999"]');
+        if (loadingOverlay) loadingOverlay.remove();
+    }
+};
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        loadingOverlay.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #3b82f6; margin-bottom: 10px;"></i>
+                <p>Deleting entry...</p>
+            </div>
+        `;
+        document.body.appendChild(loadingOverlay);
+        
+        // Prepare request data
+        const requestData = {
+            entry_id: entryId,
+            employee_code: empCode
+        };
+        
+        console.log("📤 Sending request:", requestData);
+        
+        // Call delete API
+        const response = await fetch('/delete_travel_entry', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        console.log("📥 Response status:", response.status);
+        
+        // Remove loading
+        loadingOverlay.remove();
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("❌ Response error:", errorText);
+            showErrorPopup(`HTTP ${response.status}: ${errorText}`);
+            return;
+        }
+        
+        const result = await response.json();
+        console.log("✅ Response result:", result);
+        
+        if (result.success) {
+            showSuccessPopup(`Entry deleted successfully! New total: ₹${result.new_total || 0}`);
+            
+            // Close the month details modal
+            const modalOverlay = document.querySelector('.modal-overlay');
+            if (modalOverlay) modalOverlay.remove();
+            
+            // Refresh history and status data
+            await loadHistoryData(token, empCode);
+            displayHistoryCards();
+            
+            // Refresh status section if visible
+            const statusSection = document.getElementById('statusSection');
+            if (statusSection && statusSection.style.display !== 'none') {
+                await loadStatusData(token, empCode);
+            }
+            
+        } else {
+            showErrorPopup(result.message || 'Failed to delete entry. Please try again.');
+        }
+        
+    } catch (error) {
+        console.error('❌ Delete error:', error);
+        showErrorPopup(`Network error: ${error.message}`);
+        
+        // Remove loading if still present
+        const loadingOverlay = document.querySelector('[style*="position: fixed"][style*="z-index: 999999"]');
+        if (loadingOverlay) loadingOverlay.remove();
+    }
+};
+
+
+// ✅ FILTER FUNCTIONS FOR PENDING, APPROVED, REJECTED TABLES
+
+function filterPendingTable() {
+    const input = document.getElementById('pendingSearchInput');
+    const filter = input.value.toUpperCase();
+    const tbody = document.getElementById('pendingTableBody');
+    const rows = tbody.getElementsByTagName('tr');
+    
+    let visibleCount = 0;
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const empId = row.cells[0]?.textContent || '';
+        const empName = row.cells[1]?.textContent || '';
+        
+        if (empId.toUpperCase().indexOf(filter) > -1 || empName.toUpperCase().indexOf(filter) > -1) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    }
+    
+    console.log(`🔍 Pending filter: ${visibleCount} of ${rows.length} rows visible`);
+}
+
+function filterApproveTable() {
+    const input = document.getElementById('approveSearchInput');
+    const filter = input.value.toUpperCase();
+    const tbody = document.getElementById('approveTableBody');
+    const rows = tbody.getElementsByTagName('tr');
+    
+    let visibleCount = 0;
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const empId = row.cells[0]?.textContent || '';
+        const empName = row.cells[1]?.textContent || '';
+        
+        if (empId.toUpperCase().indexOf(filter) > -1 || empName.toUpperCase().indexOf(filter) > -1) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    }
+    
+    console.log(`🔍 Approve filter: ${visibleCount} of ${rows.length} rows visible`);
+}
+
+function filterRejectTable() {
+    const input = document.getElementById('rejectSearchInput');
+    const filter = input.value.toUpperCase();
+    const tbody = document.getElementById('rejectTableBody');
+    const rows = tbody.getElementsByTagName('tr');
+    
+    let visibleCount = 0;
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const empId = row.cells[0]?.textContent || '';
+        const empName = row.cells[1]?.textContent || '';
+        
+        if (empId.toUpperCase().indexOf(filter) > -1 || empName.toUpperCase().indexOf(filter) > -1) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    }
+    
+    console.log(`🔍 Reject filter: ${visibleCount} of ${rows.length} rows visible`);
+}
+
+// Make functions globally available
+window.filterPendingTable = filterPendingTable;
+window.filterApproveTable = filterApproveTable;
+window.filterRejectTable = filterRejectTable;
