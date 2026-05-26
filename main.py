@@ -1442,6 +1442,123 @@ async def get_employee_rejected(
 
 
 
+# @app.post("/api/ope/manager/reject/{employee_code}")
+# async def reject_employee_entries(
+#     employee_code: str,
+#     request: Request,
+#     current_user=Depends(get_current_user)
+# ):
+#     try:
+#         reporting_emp_code = current_user["employee_code"].strip().upper()
+#         employee_code = employee_code.strip().upper()
+        
+#         body = await request.json()
+#         rejection_reason = body.get("reason", "No reason provided")
+        
+#         print(f"\n{'='*60}")
+#         print(f"❌ REJECTING EMPLOYEE")
+#         print(f"Manager: {reporting_emp_code}")
+#         print(f"Employee: {employee_code}")
+#         print(f"Reason: {rejection_reason}")
+#         print(f"{'='*60}\n")
+        
+#         manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": reporting_emp_code})
+#         if not manager:
+#             raise HTTPException(status_code=403, detail="You are not a reporting manager")
+        
+#         manager_name = manager.get("ReportingEmpName", reporting_emp_code)
+        
+#         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
+#         if not emp:
+#             raise HTTPException(status_code=404, detail="Employee not found")
+        
+#         emp_reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
+        
+#         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_code})
+#         if not ope_doc:
+#             raise HTTPException(status_code=404, detail="No data found")
+        
+#         data_array = ope_doc.get("Data", [])
+#         rejected_count = 0
+#         current_time = datetime.utcnow().isoformat()
+        
+#         for i, data_item in enumerate(data_array):
+#             for month_range, entries in data_item.items():
+#                 for j, entry in enumerate(entries):
+#                     if entry.get("status", "").lower() == "pending":
+#                         await db["OPE_data"].update_one(
+#                             {"employeeId": employee_code},
+#                             {"$set": {
+#                                 f"Data.{i}.{month_range}.{j}.status": "rejected",
+#                                 f"Data.{i}.{month_range}.{j}.rejected_by": reporting_emp_code,
+#                                 f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,
+#                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
+#                                 f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason
+#                             }}
+#                         )
+                        
+#                         status_id = entry.get("status_id")
+#                         if status_id:
+#                             await db["Status"].update_one(
+#                                 {"_id": ObjectId(status_id)},
+#                                 {"$set": {
+#                                     "overall_status": "rejected",
+#                                     "L1.status": False,
+#                                     "L1.rejected_by": reporting_emp_code,
+#                                     "L1.rejected_date": current_time
+#                                 }}
+#                             )
+                        
+#                         rejected_count += 1
+#                         print(f"✅ Rejected entry {j + 1}")
+        
+#         if rejected_count == 0:
+#             raise HTTPException(status_code=404, detail="No pending entries found")
+        
+#         print(f"\n✅ Total entries rejected: {rejected_count}")
+        
+#         await db["Pending"].update_one(
+#             {"ReportingEmpCode": emp_reporting_manager_code},
+#             {"$pull": {"EmployeesCodes": employee_code}}
+#         )
+#         print(f"✅ Removed from Pending collection")
+        
+#         rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
+        
+#         if not rejected_doc:
+#             await db["Rejected"].insert_one({
+#                 "ReportingEmpCode": reporting_emp_code,
+#                 "EmployeesCodes": [employee_code]
+#             })
+#             print(f"✅ Created NEW Rejected document")
+#         else:
+#             if employee_code not in rejected_doc.get("EmployeesCodes", []):
+#                 await db["Rejected"].update_one(
+#                     {"ReportingEmpCode": reporting_emp_code},
+#                     {"$addToSet": {"EmployeesCodes": employee_code}}
+#                 )
+#                 print(f"✅ Added to Rejected collection")
+#             else:
+#                 print(f"⚠️ Employee already in Rejected collection")
+        
+#         print(f"{'='*60}\n")
+        
+#         return {
+#             "message": f"Rejected {rejected_count} entries",
+#             "rejected_count": rejected_count,
+#             "rejection_reason": rejection_reason,
+#             "employee_code": employee_code
+#         }
+        
+#     except HTTPException as he:
+#         raise he
+#     except Exception as e:
+#         print(f"❌ Error: {str(e)}")
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=str(e))  
+
+
 @app.post("/api/ope/manager/reject/{employee_code}")
 async def reject_employee_entries(
     employee_code: str,
@@ -1482,6 +1599,9 @@ async def reject_employee_entries(
         rejected_count = 0
         current_time = datetime.utcnow().isoformat()
         
+        # ✅ Track which payroll months had pending entries
+        rejected_payroll_months = set()
+        
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
                 for j, entry in enumerate(entries):
@@ -1493,36 +1613,66 @@ async def reject_employee_entries(
                                 f"Data.{i}.{month_range}.{j}.rejected_by": reporting_emp_code,
                                 f"Data.{i}.{month_range}.{j}.rejector_name": manager_name,
                                 f"Data.{i}.{month_range}.{j}.rejected_date": current_time,
-                                f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason
+                                f"Data.{i}.{month_range}.{j}.rejection_reason": rejection_reason,
+                                f"Data.{i}.{month_range}.{j}.rejected_level": "L1"
                             }}
                         )
-                        
-                        status_id = entry.get("status_id")
-                        if status_id:
-                            await db["Status"].update_one(
-                                {"_id": ObjectId(status_id)},
-                                {"$set": {
-                                    "overall_status": "rejected",
-                                    "L1.status": False,
-                                    "L1.rejected_by": reporting_emp_code,
-                                    "L1.rejected_date": current_time
-                                }}
-                            )
-                        
+                        rejected_payroll_months.add(month_range)
                         rejected_count += 1
-                        print(f"✅ Rejected entry {j + 1}")
+                        print(f"✅ Rejected entry {j + 1} in month {month_range}")
         
         if rejected_count == 0:
             raise HTTPException(status_code=404, detail="No pending entries found")
         
         print(f"\n✅ Total entries rejected: {rejected_count}")
+        print(f"📅 Affected payroll months: {rejected_payroll_months}")
         
+        # ✅ FIXED: Update Status collection properly
+        status_doc = await db["Status"].find_one({"employeeId": employee_code})
+        
+        if status_doc:
+            approval_status_array = status_doc.get("approval_status", [])
+            
+            for i, ps in enumerate(approval_status_array):
+                payroll_month = ps.get("payroll_month") or ps.get("month_range")
+                
+                if payroll_month in rejected_payroll_months:
+                    print(f"📊 Updating Status for month: {payroll_month}")
+                    
+                    await db["Status"].update_one(
+                        {"employeeId": employee_code},
+                        {"$set": {
+                            # ✅ L1 rejection details
+                            f"approval_status.{i}.L1.status": False,
+                            f"approval_status.{i}.L1.rejected": True,
+                            f"approval_status.{i}.L1.rejected_by": reporting_emp_code,
+                            f"approval_status.{i}.L1.rejector_name": manager_name,
+                            f"approval_status.{i}.L1.rejected_date": current_time,
+                            f"approval_status.{i}.L1.rejection_reason": rejection_reason,
+                            # ✅ Overall status
+                            f"approval_status.{i}.overall_status": "rejected",
+                            f"approval_status.{i}.current_level": "L1",
+                            # ✅ Top-level rejection fields for easy access
+                            f"approval_status.{i}.is_rejected": True,
+                            f"approval_status.{i}.rejected_level": "L1",
+                            f"approval_status.{i}.rejected_by": reporting_emp_code,
+                            f"approval_status.{i}.rejected_by_name": manager_name,
+                            f"approval_status.{i}.rejected_date": current_time,
+                            f"approval_status.{i}.rejection_reason": rejection_reason,
+                        }}
+                    )
+                    print(f"✅ Status updated for month: {payroll_month}")
+        else:
+            print(f"⚠️ No Status document found for {employee_code}")
+        
+        # ✅ Remove from Pending collection
         await db["Pending"].update_one(
             {"ReportingEmpCode": emp_reporting_manager_code},
             {"$pull": {"EmployeesCodes": employee_code}}
         )
         print(f"✅ Removed from Pending collection")
         
+        # ✅ Add to Rejected collection
         rejected_doc = await db["Rejected"].find_one({"ReportingEmpCode": reporting_emp_code})
         
         if not rejected_doc:
@@ -1538,8 +1688,6 @@ async def reject_employee_entries(
                     {"$addToSet": {"EmployeesCodes": employee_code}}
                 )
                 print(f"✅ Added to Rejected collection")
-            else:
-                print(f"⚠️ Employee already in Rejected collection")
         
         print(f"{'='*60}\n")
         
@@ -1547,7 +1695,8 @@ async def reject_employee_entries(
             "message": f"Rejected {rejected_count} entries",
             "rejected_count": rejected_count,
             "rejection_reason": rejection_reason,
-            "employee_code": employee_code
+            "employee_code": employee_code,
+            "affected_months": list(rejected_payroll_months)
         }
         
     except HTTPException as he:
@@ -1556,9 +1705,9 @@ async def reject_employee_entries(
         print(f"❌ Error: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))  
+        raise HTTPException(status_code=500, detail=str(e))
 
-
+        
 @app.put("/api/ope/manager/edit-total-amount")
 async def edit_total_amount(
     request: Request,

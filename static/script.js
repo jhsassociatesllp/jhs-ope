@@ -9462,6 +9462,48 @@ function displayStatusTable(data) {
                         Levels: <strong>${totalLevels}</strong> | 
                         Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
                     </div>
+                    ${isRejected && rejectionReason ? `
+                        <div class="rejection-reason-box" style="
+                            margin-top: 12px;
+                            padding: 12px;
+                            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+                            border-left: 4px solid #ef4444;
+                            border-radius: 8px;
+                            text-align: left;
+                        ">
+                            <div style="
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                margin-bottom: 6px;
+                                color: #dc2626;
+                                font-weight: 600;
+                                font-size: 13px;
+                            ">
+                                <i class="fas fa-exclamation-circle"></i>
+                                <span>Rejection Reason</span>
+                            </div>
+                            <div style="
+                                color: #991b1b;
+                                font-size: 13px;
+                                line-height: 1.5;
+                                word-wrap: break-word;
+                            ">
+                                ${rejectionReason}
+                            </div>
+                            <div style="
+                                margin-top: 8px;
+                                font-size: 11px;
+                                color: #dc2626;
+                                display: flex;
+                                align-items: center;
+                                gap: 6px;
+                            ">
+                                <i class="fas fa-user"></i>
+                                <span>Rejected by: <strong>${rejectedByName || 'Unknown'}</strong> at ${rejectedLevel || 'Unknown'} level</span>
+                            </div>
+                        </div>
+                    ` : ''}
                     ${isRejected ? `
                         <div class="rejection-summary" style="margin-top: 10px; cursor: pointer;" 
                              onclick='showRejectionDetails(${JSON.stringify({
@@ -9471,7 +9513,7 @@ function displayStatusTable(data) {
                                 reason: entry.rejection_reason
                              })})'>
                             <span style="color: #ef4444; font-size: 12px; text-decoration: underline;">
-                                <i class="fas fa-info-circle"></i> Click for rejection details
+                                <i class="fas fa-info-circle"></i> Click for full rejection details
                             </span>
                         </div>
                     ` : ''}
