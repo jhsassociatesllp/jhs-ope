@@ -55,7 +55,11 @@ const monthRanges = {
     end: '2026-05-20', 
     display: 'April 2026 - May 2026' 
   },
-
+  'may-june-2026': {
+    start: '2026-05-21', 
+    end: '2026-06-20', 
+    display: 'May 2026 - June 2026' 
+  },
 };
 
 // Validate if date is within selected month range
