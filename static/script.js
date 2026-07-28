@@ -61,8 +61,8 @@ const monthRanges = {
     display: 'May 2026 - June 2026' 
   },
   'june-july-2026':{
-    start: '2026-05-21', 
-    end: '2026-06-20', 
+    start: '2026-06-21', 
+    end: '2026-07-20', 
     display: 'June 2026 - July 2026' 
   }
 };
