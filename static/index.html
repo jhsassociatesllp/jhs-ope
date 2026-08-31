@@ -142,8 +142,13 @@
                 <option value="april-may-2026">April 2026 - May 2026</option>
                 <option value="may-june-2026">May 2026 - June 2026</option>
                 <option value="june-july-2026">June 2026 - July 2026</option>
+                <option value="july-august-2026">July 2026 - August 2026</option>
               </select>
-            </div>   
+            </div>
+            <!-- ✅ NEW: Informational-only submission deadline banner (does not block submission) -->
+            <div id="submitDeadlineBanner" class="deadline-banner" style="display: none;">
+              <span class="deadline-text"></span>
+            </div>
           </div>
         </div>
 
@@ -360,6 +365,27 @@
           <p>Review and approve employee expense entries</p>
         </div>
 
+        <!-- ✅ NEW: Informational-only approval deadline banner (does not block approval) -->
+        <div id="approveDeadlineBanner" class="deadline-banner" style="display: none;">
+          <span class="deadline-text"></span>
+        </div>
+
+        <!-- ✅ NEW: Dashboard summary tiles (Pending / Approved / Rejected counts) -->
+        <div class="dashboard-summary-tiles">
+          <div class="stat-item">
+            <span class="stat-label">Pending</span>
+            <span class="stat-value stat-pending" id="pendingStatPending">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Approved</span>
+            <span class="stat-value stat-approved" id="pendingStatApproved">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Rejected</span>
+            <span class="stat-value stat-rejected" id="pendingStatRejected">0</span>
+          </div>
+        </div>
+
         <div id="pendingLoadingDiv" class="loading-container">
           <div class="loading-spinner">
             <i class="fas fa-spinner fa-spin"></i>
@@ -420,6 +446,22 @@
         <div class="page-header">
           <h1><i class="fas fa-check-circle"></i> Approved Entries</h1>
           <p>View all approved expense entries</p>
+        </div>
+
+        <!-- ✅ NEW: Dashboard summary tiles (Pending / Approved / Rejected counts) -->
+        <div class="dashboard-summary-tiles">
+          <div class="stat-item">
+            <span class="stat-label">Pending</span>
+            <span class="stat-value stat-pending" id="approveStatPending">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Approved</span>
+            <span class="stat-value stat-approved" id="approveStatApproved">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Rejected</span>
+            <span class="stat-value stat-rejected" id="approveStatRejected">0</span>
+          </div>
         </div>
 
         <div class="card">
@@ -492,6 +534,22 @@
         <div class="page-header">
           <h1><i class="fas fa-times-circle"></i> Rejected Entries</h1>
           <p>View all rejected expense entries</p>
+        </div>
+
+        <!-- ✅ NEW: Dashboard summary tiles (Pending / Approved / Rejected counts) -->
+        <div class="dashboard-summary-tiles">
+          <div class="stat-item">
+            <span class="stat-label">Pending</span>
+            <span class="stat-value stat-pending" id="rejectStatPending">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Approved</span>
+            <span class="stat-value stat-approved" id="rejectStatApproved">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Rejected</span>
+            <span class="stat-value stat-rejected" id="rejectStatRejected">0</span>
+          </div>
         </div>
 
         <div class="card">

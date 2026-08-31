@@ -64,8 +64,131 @@ const monthRanges = {
     start: '2026-06-21', 
     end: '2026-07-20', 
     display: 'June 2026 - July 2026' 
+  },
+  'july-august-2026':{
+    start: '2026-07-21',
+    end: '2026-08-20',
+    display: 'July 2026 - August 2026',
+    // Fixed dates for this period (agreed cutoffs) instead of the usual
+    // +7/+5 day formula below - see computeSubmissionDeadline/computeApprovalDeadline.
+    submitDeadline: '2026-09-02',
+    approveDeadline: '2026-09-05'
   }
 };
+
+// ============================================
+// DEADLINE CONFIGURATION (informational banners only — does NOT block any action)
+// Adjust these two numbers if the submission/approval policy changes.
+// ============================================
+// How many days after a payroll period's END date employees have to submit OPE entries for that period.
+const SUBMISSION_DEADLINE_DAYS_AFTER_PERIOD_END = 7;
+// How many days after the submission deadline (above) approvers (RM/Partner/HR) should complete approvals.
+const APPROVAL_DEADLINE_DAYS_AFTER_SUBMISSION_DEADLINE = 5;
+
+// Add N days to a Date and return a new Date
+function addDaysToDate(date, days) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+}
+
+// Compute the "submit by" deadline date for a given monthRange key
+function computeSubmissionDeadline(monthRangeKey) {
+    if (!monthRangeKey || !monthRanges[monthRangeKey]) return null;
+    const range = monthRanges[monthRangeKey];
+    // A period can pin an explicit cutoff (e.g. an agreed date that doesn't
+    // fall on the usual +N-days formula) instead of deriving one.
+    if (range.submitDeadline) return new Date(range.submitDeadline);
+    const periodEnd = new Date(range.end);
+    return addDaysToDate(periodEnd, SUBMISSION_DEADLINE_DAYS_AFTER_PERIOD_END);
+}
+
+// Compute the "approve by" deadline date for a given monthRange key
+function computeApprovalDeadline(monthRangeKey) {
+    if (monthRangeKey && monthRanges[monthRangeKey] && monthRanges[monthRangeKey].approveDeadline) {
+        return new Date(monthRanges[monthRangeKey].approveDeadline);
+    }
+    const submissionDeadline = computeSubmissionDeadline(monthRangeKey);
+    if (!submissionDeadline) return null;
+    return addDaysToDate(submissionDeadline, APPROVAL_DEADLINE_DAYS_AFTER_SUBMISSION_DEADLINE);
+}
+
+// Format a Date as "27 Jun 2026" for display in banners
+function formatDeadlineDate(date) {
+    if (!date) return '';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Pick the most relevant monthRange key "right now" (used when there isn't an explicit selection,
+// e.g. the Pending section's Approve-by banner before a month filter is chosen).
+function getRelevantMonthRangeKey() {
+    const today = new Date();
+    const keys = Object.keys(monthRanges);
+    if (keys.length === 0) return null;
+
+    // Prefer a period that is still within its submission/approval window today
+    for (const key of keys) {
+        const range = monthRanges[key];
+        const start = new Date(range.start);
+        const approvalDeadline = computeApprovalDeadline(key);
+        if (today >= start && approvalDeadline && today <= approvalDeadline) {
+            return key;
+        }
+    }
+
+    // Otherwise, prefer the soonest upcoming period
+    const sortedKeys = [...keys].sort((a, b) => new Date(monthRanges[a].end) - new Date(monthRanges[b].end));
+    for (const key of sortedKeys) {
+        if (new Date(monthRanges[key].end) >= today) return key;
+    }
+
+    // Fallback: everything is in the past, show the most recent one
+    return sortedKeys[sortedKeys.length - 1];
+}
+
+// Update the "Please submit your OPE entries..." banner on the OPE entry section
+function updateSubmitDeadlineBanner() {
+    const banner = document.getElementById('submitDeadlineBanner');
+    if (!banner) return;
+
+    const monthRangeSelect = document.getElementById('monthRange');
+    const key = monthRangeSelect ? monthRangeSelect.value : '';
+
+    if (!key || !monthRanges[key]) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    const deadline = computeSubmissionDeadline(key);
+    const textEl = banner.querySelector('.deadline-text');
+    if (textEl) {
+        textEl.innerHTML = `<i class="fas fa-calendar-check"></i> Please submit your OPE entries for <strong>${monthRanges[key].display}</strong> by <strong>${formatDeadlineDate(deadline)}</strong>`;
+    }
+    banner.style.display = 'flex';
+}
+window.updateSubmitDeadlineBanner = updateSubmitDeadlineBanner;
+
+// Update the "Please approve pending OPE entries..." banner on the Pending section
+function updateApproveDeadlineBanner() {
+    const banner = document.getElementById('approveDeadlineBanner');
+    if (!banner) return;
+
+    const monthFilterSelect = document.getElementById('pendingMonthFilter');
+    const key = (monthFilterSelect && monthFilterSelect.value) ? monthFilterSelect.value : getRelevantMonthRangeKey();
+
+    if (!key || !monthRanges[key]) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    const deadline = computeApprovalDeadline(key);
+    const textEl = banner.querySelector('.deadline-text');
+    if (textEl) {
+        textEl.innerHTML = `<i class="fas fa-hourglass-half"></i> Please approve pending OPE entries for <strong>${monthRanges[key].display}</strong> by <strong>${formatDeadlineDate(deadline)}</strong>`;
+    }
+    banner.style.display = 'flex';
+}
+window.updateApproveDeadlineBanner = updateApproveDeadlineBanner;
 
 // Validate if date is within selected month range
 function isDateInMonthRange(dateStr, monthRangeKey) {
@@ -1937,10 +2060,12 @@ function setupNavigation() {
       switchSection(navPending, pendingSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
+
         if (token && empCode) {
           console.log("📥 Loading pending data...");
           await loadPendingData(token, empCode);
+          await loadDashboardSummary();
+          updateApproveDeadlineBanner();
         }
       });
     });
@@ -1951,14 +2076,15 @@ function setupNavigation() {
     navApprove.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("✅ Approve clicked");
-      
+
       switchSection(navApprove, approveSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
+
         if (token && empCode) {
           console.log("📥 Loading approve data...");
           await loadApproveData(token, empCode);
+          await loadDashboardSummary();
         }
       });
     });
@@ -1969,14 +2095,15 @@ function setupNavigation() {
     navReject.addEventListener('click', async function(e) {
       e.preventDefault();
       console.log("❌ Reject clicked");
-      
+
       switchSection(navReject, rejectSection, async () => {
         const token = localStorage.getItem('access_token');
         const empCode = localStorage.getItem('employee_code');
-        
+
         if (token && empCode) {
           console.log("📥 Loading reject data...");
           await loadRejectData(token, empCode);
+          await loadDashboardSummary();
         }
       });
     });
@@ -2162,11 +2289,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const monthRangeSelect = document.getElementById('monthRange');
   if (monthRangeSelect) {
+    // ✅ NEW: Initialize + wire up the informational "submit by" deadline banner
+    updateSubmitDeadlineBanner();
     monthRangeSelect.addEventListener('change', function() {
       const selectedMonth = this.value;
       const tbody = document.getElementById('entryTableBody');
       const rows = tbody.querySelectorAll('tr');
-      
+
+      updateSubmitDeadlineBanner();
+
       if (selectedMonth && rows.length > 0) {
         const startDate = getStartDateForMonth(selectedMonth);
         
@@ -4680,9 +4811,11 @@ function populatePendingMonthFilter() {
 
 function handlePendingMonthChange() {
     const selectedMonth = this.value;
-    
+
     console.log("📅 Pending month filter changed to:", selectedMonth || 'All Months');
-    
+
+    updateApproveDeadlineBanner();
+
     if (selectedMonth === '') {
         // Show all pending data
         displayPendingEmployeeTable(allPendingData);
@@ -4825,6 +4958,236 @@ function displayPendingEmployeeTable(data) {
     document.getElementById('pendingTableSection').style.display = 'block';
 }
 
+// ✅ NEW: Approve a single pending entry (granular action inside the Pending modal)
+async function approveSingleEntry(entryId, employeeId) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+
+  try {
+    console.log("✅ Approving single entry:", entryId, "for employee:", employeeId);
+
+    const remark = await showApproveRemarkPopup();
+    if (remark === null) {
+      return; // User cancelled
+    }
+
+    // ✅ DETERMINE ENDPOINT BASED ON USER (same isHR/isPartner pattern used elsewhere)
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
+    const endpoint = isHR
+      ? `${API_URL}/api/ope/hr/approve-single`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/approve-single`
+        : `${API_URL}/api/ope/manager/approve-single`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ entry_id: entryId, employee_id: employeeId, remark: remark })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(result.message || 'Entry approved successfully');
+
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+
+      await loadPendingData(token, currentEmpCode);
+      await loadDashboardSummary();
+
+      // Reopen the modal for this employee if they still have pending entries
+      if (allPendingData.some(e => e.employee_id === employeeId)) {
+        showPendingEmployeeModal(employeeId);
+      }
+
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Failed to approve entry');
+    }
+
+  } catch (error) {
+    console.error('Approve single entry error:', error);
+    showErrorPopup(`Network error: ${error.message}`);
+  }
+}
+window.approveSingleEntry = approveSingleEntry;
+
+// ✅ NEW: Reject a single pending entry (granular action inside the Pending modal)
+async function rejectSingleEntry(entryId, employeeId) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+
+  try {
+    console.log("❌ Rejecting single entry:", entryId, "for employee:", employeeId);
+
+    const reason = await showRejectReasonPopup();
+    if (!reason) {
+      return; // User cancelled
+    }
+
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
+    const endpoint = isHR
+      ? `${API_URL}/api/ope/hr/reject-single`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/reject-single`
+        : `${API_URL}/api/ope/manager/reject-single`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ entry_id: entryId, employee_id: employeeId, reason: reason })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(result.message || 'Entry rejected successfully');
+
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+
+      await loadPendingData(token, currentEmpCode);
+      await loadDashboardSummary();
+
+      if (allPendingData.some(e => e.employee_id === employeeId)) {
+        showPendingEmployeeModal(employeeId);
+      }
+
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Failed to reject entry');
+    }
+
+  } catch (error) {
+    console.error('Reject single entry error:', error);
+    showErrorPopup(`Network error: ${error.message}`);
+  }
+}
+window.rejectSingleEntry = rejectSingleEntry;
+
+// ✅ NEW: Approve all pending entries for one employee within a single month bucket
+async function approveMonthEntries(employeeId, monthRange) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+
+  try {
+    console.log("✅ Approving month entries:", monthRange, "for employee:", employeeId);
+
+    const remark = await showApproveRemarkPopup();
+    if (remark === null) {
+      return; // User cancelled
+    }
+
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
+    const endpoint = isHR
+      ? `${API_URL}/api/ope/hr/approve-month`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/approve-month`
+        : `${API_URL}/api/ope/manager/approve-month`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ employee_id: employeeId, month_range: monthRange, remark: remark })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(`Approved ${result.approved_count || 0} entries for ${monthRange}`);
+
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+
+      await loadPendingData(token, currentEmpCode);
+      await loadDashboardSummary();
+
+      if (allPendingData.some(e => e.employee_id === employeeId)) {
+        showPendingEmployeeModal(employeeId);
+      }
+
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Failed to approve month entries');
+    }
+
+  } catch (error) {
+    console.error('Approve month entries error:', error);
+    showErrorPopup(`Network error: ${error.message}`);
+  }
+}
+window.approveMonthEntries = approveMonthEntries;
+
+// ✅ NEW: Reject all pending entries for one employee within a single month bucket
+async function rejectMonthEntries(employeeId, monthRange) {
+  const token = localStorage.getItem('access_token');
+  const currentEmpCode = localStorage.getItem('employee_code');
+
+  try {
+    console.log("❌ Rejecting month entries:", monthRange, "for employee:", employeeId);
+
+    const reason = await showRejectReasonPopup();
+    if (!reason) {
+      return; // User cancelled
+    }
+
+    const isHR = (currentEmpCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+
+    const endpoint = isHR
+      ? `${API_URL}/api/ope/hr/reject-month`
+      : isPartner
+        ? `${API_URL}/api/ope/partner/reject-month`
+        : `${API_URL}/api/ope/manager/reject-month`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ employee_id: employeeId, month_range: monthRange, reason: reason })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      showSuccessPopup(`Rejected ${result.rejected_count || 0} entries for ${monthRange}`);
+
+      const modals = document.querySelectorAll('.modal-overlay');
+      modals.forEach(modal => modal.remove());
+
+      await loadPendingData(token, currentEmpCode);
+      await loadDashboardSummary();
+
+      if (allPendingData.some(e => e.employee_id === employeeId)) {
+        showPendingEmployeeModal(employeeId);
+      }
+
+    } else {
+      const errorData = await response.json();
+      showErrorPopup(errorData.detail || 'Failed to reject month entries');
+    }
+
+  } catch (error) {
+    console.error('Reject month entries error:', error);
+    showErrorPopup(`Network error: ${error.message}`);
+  }
+}
+window.rejectMonthEntries = rejectMonthEntries;
+
 // ✅ NEW: Show pending employee modal with MONTH-FILTERED data
 window.showPendingEmployeeModal = async function(employeeId) {
     console.log("📋 Opening pending modal for employee:", employeeId);
@@ -4943,7 +5306,7 @@ window.showPendingEmployeeModal = async function(employeeId) {
                               style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
                             ${totalDisplayHTML}
                         </span>
-                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${statusTotal})" 
+                        <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${statusTotal})"
                                 style="
                                     background: rgba(255,255,255,0.3); color: white;
                                     border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px;
@@ -4953,6 +5316,30 @@ window.showPendingEmployeeModal = async function(employeeId) {
                                 onmouseover="this.style.background='rgba(255,255,255,0.4)'"
                                 onmouseout="this.style.background='rgba(255,255,255,0.3)'">
                             <i class="fas fa-edit"></i> Edit Total
+                        </button>
+                        <button onclick="approveMonthEntries('${employeeId}', '${monthRange}')"
+                                style="
+                                    background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;
+                                    border: none; padding: 6px 12px;
+                                    border-radius: 8px; cursor: pointer; font-size: 13px;
+                                    font-weight: 600; transition: all 0.2s ease;
+                                    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+                                "
+                                onmouseover="this.style.transform='translateY(-2px)'"
+                                onmouseout="this.style.transform='translateY(0)'">
+                            <i class="fas fa-check-double"></i> Approve Month
+                        </button>
+                        <button onclick="rejectMonthEntries('${employeeId}', '${monthRange}')"
+                                style="
+                                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white;
+                                    border: none; padding: 6px 12px;
+                                    border-radius: 8px; cursor: pointer; font-size: 13px;
+                                    font-weight: 600; transition: all 0.2s ease;
+                                    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+                                "
+                                onmouseover="this.style.transform='translateY(-2px)'"
+                                onmouseout="this.style.transform='translateY(0)'">
+                            <i class="fas fa-ban"></i> Reject Month
                         </button>
                     </div>
                 </div>
@@ -5010,13 +5397,29 @@ window.showPendingEmployeeModal = async function(employeeId) {
                                </button>` 
                             : `<span style="color: #9ca3af; font-size: 12px;">No PDF</span>`}
                     </td>
-                    <td style="padding: 12px; text-align: center;">
-                        <button onclick="editEntryAmount('${entry._id}', '${employeeId}', ${entry.amount || 0})" 
+                    <td style="padding: 12px; text-align: center; white-space: nowrap;">
+                        <button onclick="editEntryAmount('${entry._id}', '${employeeId}', ${entry.amount || 0})"
                                 style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
                                        color: white; border: none; padding: 6px 12px;
-                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 4px;">
                             <i class="fas fa-edit"></i> Edit
                         </button>
+                        ${(!entry.status || entry.status === 'pending') ? `
+                        <button onclick="approveSingleEntry('${entry._id}', '${employeeId}')"
+                                title="Approve this entry"
+                                style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                                       color: white; border: none; padding: 6px 10px;
+                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 4px;">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button onclick="rejectSingleEntry('${entry._id}', '${employeeId}')"
+                                title="Reject this entry"
+                                style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                                       color: white; border: none; padding: 6px 10px;
+                                       border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        ` : ''}
                     </td>
                 </tr>
             `;
@@ -8796,6 +9199,48 @@ function showRejectReasonPopup() {
   });
 }
 
+// ✅ NEW: Dashboard summary tiles (Pending / Approved / Rejected counts) for RM/Partner/HR
+async function loadDashboardSummary() {
+  try {
+    const token = localStorage.getItem('access_token');
+    const empCode = localStorage.getItem('employee_code');
+    if (!token || !empCode) return;
+
+    // ✅ DETERMINE ENDPOINT BASED ON USER (same isHR/isPartner pattern used elsewhere)
+    const isHR = (empCode.toUpperCase() === "JHS729");
+    const isPartner = localStorage.getItem("is_partner") === "true";
+    const rolePrefix = isHR ? 'hr' : (isPartner ? 'partner' : 'manager');
+
+    const response = await fetch(`${API_URL}/api/ope/${rolePrefix}/dashboard-summary/${empCode}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      console.warn("⚠️ Failed to load dashboard summary:", response.status);
+      return;
+    }
+
+    const data = await response.json();
+    const pendingCount = data.pending || 0;
+    const approvedCount = data.approved || 0;
+    const rejectedCount = data.rejected || 0;
+
+    // Update the stat tiles on Pending / Approve / Reject sections (all kept in sync together)
+    ['pending', 'approve', 'reject'].forEach(sectionPrefix => {
+      const pendingEl = document.getElementById(`${sectionPrefix}StatPending`);
+      const approvedEl = document.getElementById(`${sectionPrefix}StatApproved`);
+      const rejectedEl = document.getElementById(`${sectionPrefix}StatRejected`);
+      if (pendingEl) pendingEl.textContent = pendingCount;
+      if (approvedEl) approvedEl.textContent = approvedCount;
+      if (rejectedEl) rejectedEl.textContent = rejectedCount;
+    });
+
+  } catch (error) {
+    console.error('❌ Error loading dashboard summary:', error);
+  }
+}
+window.loadDashboardSummary = loadDashboardSummary;
+
 // ============================================
 // STATUS SECTION - NEW IMPLEMENTATION
 // ============================================
@@ -9240,12 +9685,22 @@ function displayStatusTable(data) {
         // L1 - Reporting Manager
         const l1Status = L1.status || false;
         const l1Rejected = L1.rejected || false;
+        // ✅ NEW: per-level entry counts (mix of approved+rejected entries within one level = "partial")
+        const l1ApprovedCount = L1.approved_count || 0;
+        const l1RejectedCount = L1.rejected_count || 0;
+        const l1PendingCount = L1.pending_count || 0;
+        const l1IsPartial = l1ApprovedCount > 0 && l1RejectedCount > 0;
         let l1Class = 'inactive';
         let l1Icon = 'fa-circle';
         let l1StatusText = 'Pending';
         let l1StatusIcon = '⏳';
-        
-        if (l1Rejected) {
+
+        if (l1IsPartial) {
+            l1Class = 'partial';
+            l1Icon = 'fa-adjust';
+            l1StatusText = 'Partially Approved';
+            l1StatusIcon = '◐';
+        } else if (l1Rejected) {
             l1Class = 'rejected';
             l1Icon = 'fa-times-circle';
             l1StatusText = 'Rejected';
@@ -9261,7 +9716,7 @@ function displayStatusTable(data) {
             l1StatusText = 'Pending';
             l1StatusIcon = '⏳';
         }
-        
+
         statusTrackerHTML += `
             <div class="approval-level ${l1Class}">
                 <i class="fas ${l1Icon}"></i>
@@ -9270,9 +9725,19 @@ function displayStatusTable(data) {
                     <div class="level-status">
                         ${l1StatusIcon} ${l1StatusText}
                     </div>
+                    ${l1IsPartial ? `
+                        <div class="level-reason">
+                            <i class="fas fa-list-ol"></i> ${l1ApprovedCount} Approved · ${l1RejectedCount} Rejected${l1PendingCount ? ` · ${l1PendingCount} Pending` : ''}
+                        </div>
+                    ` : ''}
                     ${l1Rejected && L1.rejection_reason ? `
                         <div class="level-reason" title="${L1.rejection_reason}">
                             <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l1Status && !l1IsPartial && L1.approval_remark ? `
+                        <div class="level-reason" title="${L1.approval_remark}">
+                            <i class="fas fa-comment-dots"></i> ${L1.approval_remark.substring(0, 20)}${L1.approval_remark.length > 20 ? '...' : ''}
                         </div>
                     ` : ''}
                     ${l1Status && L1.approved_date ? `
@@ -9293,12 +9758,21 @@ function displayStatusTable(data) {
         // L2 - Partner or HR
         const l2Status = L2.status || false;
         const l2Rejected = L2.rejected || false;
+        const l2ApprovedCount = L2.approved_count || 0;
+        const l2RejectedCount = L2.rejected_count || 0;
+        const l2PendingCount = L2.pending_count || 0;
+        const l2IsPartial = l2ApprovedCount > 0 && l2RejectedCount > 0;
         let l2Class = 'inactive';
         let l2Icon = 'fa-circle';
         let l2StatusText = 'Pending';
         let l2StatusIcon = '⏳';
-        
-        if (l2Rejected) {
+
+        if (l2IsPartial) {
+            l2Class = 'partial';
+            l2Icon = 'fa-adjust';
+            l2StatusText = 'Partially Approved';
+            l2StatusIcon = '◐';
+        } else if (l2Rejected) {
             l2Class = 'rejected';
             l2Icon = 'fa-times-circle';
             l2StatusText = 'Rejected';
@@ -9314,7 +9788,7 @@ function displayStatusTable(data) {
             l2StatusText = 'Pending';
             l2StatusIcon = '⏳';
         }
-        
+
         statusTrackerHTML += `
             <div class="approval-level ${l2Class}">
                 <i class="fas ${l2Icon}"></i>
@@ -9323,9 +9797,19 @@ function displayStatusTable(data) {
                     <div class="level-status">
                         ${l2StatusIcon} ${l2StatusText}
                     </div>
+                    ${l2IsPartial ? `
+                        <div class="level-reason">
+                            <i class="fas fa-list-ol"></i> ${l2ApprovedCount} Approved · ${l2RejectedCount} Rejected${l2PendingCount ? ` · ${l2PendingCount} Pending` : ''}
+                        </div>
+                    ` : ''}
                     ${l2Rejected && L2.rejection_reason ? `
                         <div class="level-reason" title="${L2.rejection_reason}">
                             <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    ${l2Status && !l2IsPartial && L2.approval_remark ? `
+                        <div class="level-reason" title="${L2.approval_remark}">
+                            <i class="fas fa-comment-dots"></i> ${L2.approval_remark.substring(0, 20)}${L2.approval_remark.length > 20 ? '...' : ''}
                         </div>
                     ` : ''}
                     ${l2Status && L2.approved_date ? `
@@ -9346,12 +9830,21 @@ function displayStatusTable(data) {
         if (totalLevels === 3) {
             const l3Status = L3.status || false;
             const l3Rejected = L3.rejected || false;
+            const l3ApprovedCount = L3.approved_count || 0;
+            const l3RejectedCount = L3.rejected_count || 0;
+            const l3PendingCount = L3.pending_count || 0;
+            const l3IsPartial = l3ApprovedCount > 0 && l3RejectedCount > 0;
             let l3Class = 'inactive';
             let l3Icon = 'fa-circle';
             let l3StatusText = 'Pending';
             let l3StatusIcon = '⏳';
-            
-            if (l3Rejected) {
+
+            if (l3IsPartial) {
+                l3Class = 'partial';
+                l3Icon = 'fa-adjust';
+                l3StatusText = 'Partially Approved';
+                l3StatusIcon = '◐';
+            } else if (l3Rejected) {
                 l3Class = 'rejected';
                 l3Icon = 'fa-times-circle';
                 l3StatusText = 'Rejected';
@@ -9367,7 +9860,7 @@ function displayStatusTable(data) {
                 l3StatusText = 'Pending';
                 l3StatusIcon = '⏳';
             }
-            
+
             statusTrackerHTML += `
                 <i class="fas fa-arrow-right approval-arrow ${(l2Status && !l2Rejected) ? 'active' : 'inactive'}"></i>
                 <div class="approval-level ${l3Class}">
@@ -9377,9 +9870,19 @@ function displayStatusTable(data) {
                         <div class="level-status">
                             ${l3StatusIcon} ${l3StatusText}
                         </div>
+                        ${l3IsPartial ? `
+                            <div class="level-reason">
+                                <i class="fas fa-list-ol"></i> ${l3ApprovedCount} Approved · ${l3RejectedCount} Rejected${l3PendingCount ? ` · ${l3PendingCount} Pending` : ''}
+                            </div>
+                        ` : ''}
                         ${l3Rejected && L3.rejection_reason ? `
                             <div class="level-reason" title="${L3.rejection_reason}">
                                 <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                        ${l3Status && !l3IsPartial && L3.approval_remark ? `
+                            <div class="level-reason" title="${L3.approval_remark}">
+                                <i class="fas fa-comment-dots"></i> ${L3.approval_remark.substring(0, 20)}${L3.approval_remark.length > 20 ? '...' : ''}
                             </div>
                         ` : ''}
                         ${l3Status && L3.approved_date ? `
@@ -9433,6 +9936,23 @@ function displayStatusTable(data) {
                     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
                 ">
                     <i class="fas fa-check-circle"></i> APPROVED
+                </span>
+            `;
+        } else if (overallStatus === 'partial') {
+            statusBadge = `
+                <span class="status-badge partial" style="
+                    background: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+                ">
+                    <i class="fas fa-adjust"></i> PARTIALLY APPROVED
                 </span>
             `;
         } else {
@@ -10482,6 +11002,7 @@ window.showMonthDetails = function(month) {
                                 <th>From</th>
                                 <th>To</th>
                                 <th>Mode</th>
+                                <th>Status</th>
                                 <th>Amount</th>
                                 <th>Remarks</th>
                                 <th>PDF</th>
@@ -10490,8 +11011,37 @@ window.showMonthDetails = function(month) {
                         </thead>
                         <tbody>
         `;
-        
+
         submittedEntries.forEach(entry => {
+            // ✅ NEW: Show a distinct status badge for approved/pending/rejected entries.
+            // Rejected entries additionally surface the rejection reason + who rejected it,
+            // so employees don't need to jump to the Status tab to see why.
+            let entryStatusCell = '';
+            if (entry.status === 'rejected') {
+                const rejectionReasonEsc = (entry.rejection_reason || 'No reason provided').replace(/"/g, '&quot;');
+                entryStatusCell = `
+                    <span class="status-badge rejected" style="font-size: 10px; padding: 4px 10px;">
+                        <i class="fas fa-times-circle"></i> Rejected
+                    </span>
+                    <div style="font-size: 11px; color: #991b1b; margin-top: 4px; max-width: 160px; white-space: normal;" title="${rejectionReasonEsc}">
+                        <strong>Reason:</strong> ${entry.rejection_reason || 'No reason provided'}
+                    </div>
+                    ${entry.rejector_name ? `<div style="font-size: 11px; color: #991b1b;">By: ${entry.rejector_name}</div>` : ''}
+                `;
+            } else if (entry.status === 'pending') {
+                entryStatusCell = `
+                    <span class="status-badge pending" style="font-size: 10px; padding: 4px 10px;">
+                        <i class="fas fa-clock"></i> Pending
+                    </span>
+                `;
+            } else {
+                entryStatusCell = `
+                    <span class="status-badge completed" style="font-size: 10px; padding: 4px 10px;">
+                        <i class="fas fa-check-circle"></i> Approved
+                    </span>
+                `;
+            }
+
             modalContent += `
                 <tr>
                     <td>${entry.date || '-'}</td>
@@ -10502,17 +11052,18 @@ window.showMonthDetails = function(month) {
                     <td>${entry.location_from || '-'}</td>
                     <td>${entry.location_to || '-'}</td>
                     <td>${getTravelModeLabel(entry.travel_mode)}</td>
+                    <td>${entryStatusCell}</td>
                     <td class="amount">₹${entry.amount || 0}</td>
                     <td class="remarks" title="${entry.remarks || 'NA'}">${entry.remarks || 'NA'}</td>
                     <td>
-                        ${entry.ticket_pdf 
+                        ${entry.ticket_pdf
                             ? `<button class="btn-pdf" onclick="viewPdf('${entry._id}', false)">
                                 <i class="fas fa-file-pdf"></i>
-                               </button>` 
+                               </button>`
                             : '-'}
                     </td>
                     <td>
-                        <button class="btn-delete" onclick="deleteHistoryEntry('${entry._id}', '${month}')" 
+                        <button class="btn-delete" onclick="deleteHistoryEntry('${entry._id}', '${month}')"
                                 title="Delete this entry">
                             <i class="fas fa-trash"></i>
                         </button>

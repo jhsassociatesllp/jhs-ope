@@ -5,3 +5,4 @@ passlib[bcrypt]
 motor 
 python-dotenv
 python-multipart
+openpyxl
