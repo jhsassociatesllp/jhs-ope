@@ -368,6 +368,54 @@ async def recompute_month_status(employee_id: str, payroll_month: str):
     )
 
 
+async def recompute_total_amount(employee_id: str, payroll_month: str):
+    """
+    Recompute Status.approval_status[i].total_amount for payroll_month from
+    OPE_data's currently-active (pending/approved) entries only. Call this
+    right after move_entries_to_rejected so a mid-flight reject (e.g. approving
+    5 of 10 entries and rejecting the other 5 in the same batch) immediately
+    drops the rejected amount out of the displayed total, instead of it staying
+    inflated until the next resubmission.
+
+    Skips any month whose total was manually overridden via
+    PUT /api/ope/manager/edit-total-amount (last_edited_by set) - that's a
+    deliberate, audited business decision and must never be silently
+    overwritten.
+    """
+    status_doc = await db["Status"].find_one({"employeeId": employee_id})
+    if not status_doc:
+        return
+
+    ps_index = None
+    for i, p in enumerate(status_doc.get("approval_status", [])):
+        if p.get("payroll_month") == payroll_month:
+            ps_index = i
+            ps = p
+            break
+
+    if ps_index is None or ps.get("last_edited_by"):
+        return
+
+    ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
+    active_entries = []
+    if ope_doc:
+        for data_item in ope_doc.get("Data", []):
+            if payroll_month in data_item:
+                active_entries = data_item[payroll_month]
+                break
+
+    new_total = sum(
+        float(e.get("amount", 0))
+        for e in active_entries
+        if (e.get("status") or "").lower() in ["pending", "approved"]
+    )
+
+    await db["Status"].update_one(
+        {"employeeId": employee_id},
+        {"$set": {f"approval_status.{ps_index}.total_amount": new_total}}
+    )
+
+
 async def advance_level_if_ready(
     employee_id: str,
     payroll_month: str,
@@ -2317,6 +2365,7 @@ async def reject_employee_entries(
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         for month_range, entry_ids in entry_ids_by_month.items():
             await move_entries_to_rejected(employee_code, month_range, entry_ids)
+            await recompute_total_amount(employee_code, month_range)
 
         # ✅ Update Status collection: keep the L1 audit-trail fields, let
         # recompute_month_status be the single source of truth for overall_status
@@ -3802,6 +3851,7 @@ async def reject_single_entry(
 
         # ✅ Move the now-rejected entry out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, found_month_range, [entry_id])
+        await recompute_total_amount(employee_id, found_month_range)
 
         # ✅ Record the rejection on the Status doc's L1 sub-object + top-level
         # audit fields, then recompute counts + overall_status and advance the
@@ -4123,6 +4173,7 @@ async def manager_reject_month(
 
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, month_range, entry_ids)
+        await recompute_total_amount(employee_id, month_range)
 
         # ✅ Record the rejection on the Status doc's L1 sub-object + top-level
         # audit fields, then recompute counts + overall_status and advance the
@@ -4713,6 +4764,7 @@ async def hr_reject_employee(
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         for month_range, entry_ids in entry_ids_by_month.items():
             await move_entries_to_rejected(employee_code, month_range, entry_ids)
+            await recompute_total_amount(employee_code, month_range)
 
         if status_doc:
             approval_status = status_doc.get("approval_status", [])
@@ -4886,6 +4938,7 @@ async def hr_reject_single_entry(
 
         # ✅ Move the now-rejected entry out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, payroll_month, [entry_id])
+        await recompute_total_amount(employee_id, payroll_month)
 
         if status_doc:
             for i, ps in enumerate(status_doc.get("approval_status", [])):
@@ -5192,6 +5245,7 @@ async def hr_reject_month(
 
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, month_range, entry_ids)
+        await recompute_total_amount(employee_id, month_range)
 
         if status_doc:
             for i, ps in enumerate(status_doc.get("approval_status", [])):
@@ -6100,6 +6154,7 @@ async def partner_reject_employee(
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         for month_range, entry_ids in entry_ids_by_month.items():
             await move_entries_to_rejected(employee_code, month_range, entry_ids)
+            await recompute_total_amount(employee_code, month_range)
 
         if status_doc:
             approval_status_array = status_doc.get("approval_status", [])
@@ -6467,6 +6522,7 @@ async def partner_reject_single_entry(
 
         # ✅ Move the now-rejected entry out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, payroll_month, [entry_id])
+        await recompute_total_amount(employee_id, payroll_month)
 
         # ✅ Record the rejection on the Status doc's current level, then
         # recompute counts + overall_status and advance the level if nothing
@@ -6832,6 +6888,7 @@ async def partner_reject_month(
 
         # ✅ Move the now-rejected entries out of OPE_data into Reject_OPE_data
         await move_entries_to_rejected(employee_id, month_range, entry_ids)
+        await recompute_total_amount(employee_id, month_range)
 
         if status_doc:
             for i, ps in enumerate(status_doc.get("approval_status", [])):

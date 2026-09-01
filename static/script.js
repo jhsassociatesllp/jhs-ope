@@ -7273,15 +7273,32 @@ window.showRejectedEmployeeModal = async function(employeeId) {
         employeeEntries = employeeEntries.filter(e => e.month_range === selectedMonth);
         console.log(`✅ After month filter: ${employeeEntries.length} entries`);
     }
-    
+
     if (employeeEntries.length === 0) {
         showErrorPopup('No rejected entries found for this employee');
         return;
     }
-    
+
+    // ✅ Fetch edited totals from Status collection ONCE (same pattern as
+    // showPendingEmployeeModal) - statusEntries is used below to detect a
+    // manually-edited total_amount for a given month.
+    const token = localStorage.getItem('access_token');
+    let statusEntries = [];
+    try {
+        const statusRes = await fetch(`${API_URL}/api/ope/status/${employeeId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            statusEntries = statusData.status_entries || [];
+        }
+    } catch(e) {
+        console.warn('Could not fetch status data:', e);
+    }
+
     // Group by month
     const groupedByMonth = {};
-    
+
     employeeEntries.forEach(entry => {
         const month = entry.month_range || 'Unknown';
         if (!groupedByMonth[month]) {
