@@ -3221,7 +3221,6 @@ async def submit_final_entries(
         partner_name = emp.get("Partner", "")
         
         new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
-
             
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
 
@@ -3230,6 +3229,7 @@ async def submit_final_entries(
         existing_month_index = -1
         existing_current_level = None
         reopened_after_completion = False
+
 
         if status_doc:
             approval_status = status_doc.get("approval_status", [])
