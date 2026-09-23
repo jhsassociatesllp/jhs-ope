@@ -45,20 +45,6 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-  'june-july-2026':{
-    start: '2026-06-21',
-    end: '2026-07-20',
-    display: 'June 2026 - July 2026'
-  },
-  'july-august-2026':{
-    start: '2026-07-21',
-    end: '2026-08-20',
-    display: 'July 2026 - August 2026',
-    // Fixed dates for this period (agreed cutoffs) instead of the usual
-    // +7/+5 day formula below - see computeSubmissionDeadline/computeApprovalDeadline.
-    submitDeadline: '2026-09-02',
-    approveDeadline: '2026-09-05'
-  },
   'august-september-2026':{
     start: '2026-08-21',
     end: '2026-09-20',
