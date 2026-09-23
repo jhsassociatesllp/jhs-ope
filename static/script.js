@@ -45,25 +45,10 @@ document.head.appendChild(style);
 
 // Month range configuration with date ranges
 const monthRanges = {
-    'mar-april-2026': {
-    start: '2026-03-21', 
-    end: '2026-04-20', 
-    display: 'Mar 2026 - April 2026' 
-  },
-   'april-may-2026': {
-    start: '2026-04-21', 
-    end: '2026-05-20', 
-    display: 'April 2026 - May 2026' 
-  },
-  'may-june-2026': {
-    start: '2026-05-21', 
-    end: '2026-06-20', 
-    display: 'May 2026 - June 2026' 
-  },
   'june-july-2026':{
-    start: '2026-06-21', 
-    end: '2026-07-20', 
-    display: 'June 2026 - July 2026' 
+    start: '2026-06-21',
+    end: '2026-07-20',
+    display: 'June 2026 - July 2026'
   },
   'july-august-2026':{
     start: '2026-07-21',
@@ -73,6 +58,20 @@ const monthRanges = {
     // +7/+5 day formula below - see computeSubmissionDeadline/computeApprovalDeadline.
     submitDeadline: '2026-09-02',
     approveDeadline: '2026-09-05'
+  },
+  'august-september-2026':{
+    start: '2026-08-21',
+    end: '2026-09-20',
+    display: 'August 2026 - September 2026',
+    // Agreed cutoff for this period instead of the usual +7 day formula -
+    // no separate approve-by date was given, so approval still follows the
+    // default +5-days-after-submission formula below.
+    submitDeadline: '2026-09-26'
+  },
+  'september-october-2026':{
+    start: '2026-09-21',
+    end: '2026-10-20',
+    display: 'September 2026 - October 2026'
   }
 };
 
