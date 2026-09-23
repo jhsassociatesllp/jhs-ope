@@ -3221,7 +3221,8 @@ async def submit_final_entries(
         partner_name = emp.get("Partner", "")
         
         new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
-        
+
+            
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
 
         existing_total = 0
