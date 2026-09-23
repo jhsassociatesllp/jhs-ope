@@ -50,11 +50,26 @@ app = FastAPI(default_response_class=SafeJSONResponse)
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- Static file caching ----------
+# StaticFiles (mounted below) sends Last-Modified/ETag but no Cache-Control, so
+# browsers fall back to their own heuristic caching for script.js/index.html -
+# a plain refresh can keep serving a stale, already-cached copy after a
+# deploy, only fixed by a hard refresh. "no-cache" forces the browser to
+# always revalidate with the server on every load (still efficient: it gets a
+# fast 304 when nothing changed, thanks to the existing ETag/Last-Modified),
+# so a normal refresh always reflects the latest deployed files.
+@app.middleware("http")
+async def no_cache_for_static_files(request: Request, call_next):
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 # ---------- Mongo Connection ----------
 client = AsyncIOMotorClient(MONGO_URI)
