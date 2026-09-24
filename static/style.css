@@ -2705,3 +2705,511 @@ body {
         max-width: none;
     }
 }
+
+/* ============================================
+   MOBILE FRIENDLY LAYOUT (phones, <= 768px)
+   Loaded last so it refines the earlier responsive rules.
+   ============================================ */
+@media (max-width: 768px) {
+    html, body {
+        overflow-x: hidden;
+    }
+
+    /* Top bar so the menu button never covers page content */
+    body::before {
+        content: 'JHS OPE';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        padding-left: 72px;
+        background: var(--sidebar-bg);
+        color: white;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.3px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 999;
+    }
+
+    .mobile-menu-toggle {
+        top: 8px;
+        left: 12px;
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
+        border-radius: 10px;
+    }
+
+    .sidebar {
+        width: 270px;
+        max-width: 85vw;
+    }
+
+    .main-content {
+        padding: 76px 12px 24px;
+    }
+
+    .page-header {
+        margin-bottom: 18px;
+    }
+
+    .page-header h1 {
+        font-size: 21px;
+        gap: 8px;
+    }
+
+    .card {
+        border-radius: 14px;
+    }
+
+    .card-header {
+        padding: 14px 16px;
+    }
+
+    .card-header h2 {
+        font-size: 17px;
+    }
+
+    .card-body {
+        padding: 16px;
+    }
+
+    .details-grid {
+        gap: 10px;
+    }
+
+    .month-dropdown-container select,
+    .month-filter select {
+        width: 100%;
+        max-width: 100%;
+        font-size: 16px;
+    }
+
+    /* ---------- Entry table -> one card per entry ---------- */
+    .entry-form-card .table-container {
+        overflow: visible;
+        border: none;
+        border-radius: 0;
+        margin-bottom: 12px;
+    }
+
+    .entry-form-card .entry-table {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        border: none;
+        background: transparent;
+    }
+
+    .entry-form-card .entry-table thead {
+        display: none;
+    }
+
+    .entry-form-card .entry-table tbody {
+        display: block;
+    }
+
+    .entry-form-card .entry-table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 10px;
+        padding: 14px;
+        margin-bottom: 16px;
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    .entry-form-card .entry-table tbody tr:hover {
+        transform: none;
+    }
+
+    .entry-form-card .entry-table tbody td {
+        display: block;
+        min-width: 0;
+        width: auto;
+        padding: 0;
+        border: none;
+        text-align: left;
+        overflow: visible;
+    }
+
+    .entry-form-card .entry-table tbody td::before {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+
+    .entry-form-card .entry-table tbody td:nth-child(1) {
+        grid-column: 1 / -1;
+        order: 0;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed var(--border-color);
+        font-size: 15px;
+        color: var(--primary-dark);
+    }
+    .entry-form-card .entry-table tbody td:nth-child(1)::before { content: 'Entry #'; display: inline; margin: 0 4px 0 0; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--primary-dark); }
+    .entry-form-card .entry-table tbody td:nth-child(2) { display: none; }
+    .entry-form-card .entry-table tbody td:nth-child(3) { order: 1; }
+    .entry-form-card .entry-table tbody td:nth-child(3)::before { content: 'Date *'; }
+    .entry-form-card .entry-table tbody td:nth-child(12) { order: 2; }
+    .entry-form-card .entry-table tbody td:nth-child(12)::before { content: 'Amount (₹) *'; }
+    .entry-form-card .entry-table tbody td:nth-child(5) { order: 3; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(5)::before { content: 'Client Name *'; }
+    .entry-form-card .entry-table tbody td:nth-child(6) { order: 4; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(6)::before { content: 'Project Name *'; }
+    .entry-form-card .entry-table tbody td:nth-child(7) { order: 5; }
+    .entry-form-card .entry-table tbody td:nth-child(7)::before { content: 'Project ID *'; }
+    .entry-form-card .entry-table tbody td:nth-child(8) { order: 6; }
+    .entry-form-card .entry-table tbody td:nth-child(8)::before { content: 'Project Type *'; }
+    .entry-form-card .entry-table tbody td:nth-child(9) { order: 7; }
+    .entry-form-card .entry-table tbody td:nth-child(9)::before { content: 'Travel From *'; }
+    .entry-form-card .entry-table tbody td:nth-child(10) { order: 8; }
+    .entry-form-card .entry-table tbody td:nth-child(10)::before { content: 'Travel To *'; }
+    .entry-form-card .entry-table tbody td:nth-child(11) { order: 9; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(11)::before { content: 'Mode of Travel *'; }
+    .entry-form-card .entry-table tbody td:nth-child(13) { order: 10; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(13)::before { content: 'Remarks'; }
+    .entry-form-card .entry-table tbody td:nth-child(14) { order: 11; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(14)::before { content: 'Ticket PDF'; }
+    .entry-form-card .entry-table tbody td:nth-child(4) { order: 12; grid-column: 1 / -1; }
+    .entry-form-card .entry-table tbody td:nth-child(15) { order: 13; grid-column: 1 / -1; }
+
+    .entry-form-card .entry-table td input[type="text"],
+    .entry-form-card .entry-table td input[type="date"],
+    .entry-form-card .entry-table td input[type="number"],
+    .entry-form-card .entry-table td select,
+    .entry-form-card .entry-table td input[type="file"] {
+        width: 100%;
+        min-width: 0;
+        padding: 10px 12px;
+        font-size: 16px;
+    }
+
+    .entry-form-card .entry-table .sd-wrap {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .entry-form-card .entry-table .sd-input {
+        min-width: 0;
+        padding: 10px 30px 10px 12px;
+        font-size: 16px;
+    }
+
+    .entry-form-card .entry-table .sd-panel {
+        max-width: calc(100vw - 24px);
+    }
+
+    .entry-form-card .table-action-btns {
+        gap: 10px;
+    }
+
+    .entry-form-card .table-action-btns .copy-btn,
+    .entry-form-card .table-action-btns .paste-btn,
+    .entry-form-card .entry-table .delete-row-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+
+    .entry-form-card .entry-table .delete-row-btn {
+        width: 100%;
+    }
+
+    .entry-buttons-container {
+        gap: 10px;
+    }
+
+    .entry-buttons-container .btn,
+    .btn-submit {
+        width: 100%;
+        padding: 14px;
+    }
+
+    /* Deadline banners */
+    .deadline-banner {
+        font-size: 13px;
+        padding: 10px 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .main-content {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .card-body {
+        padding: 14px;
+    }
+}
+
+/* ---- Mobile: sidebar header, summary tiles and approval tables as cards ---- */
+@media (max-width: 768px) {
+    .sidebar-header {
+        padding: 12px 20px 16px 72px;
+        min-height: 60px;
+    }
+
+    .sidebar .subtitle {
+        margin-left: 0;
+    }
+
+    .nav-item {
+        padding: 14px 18px;
+        min-height: 48px;
+    }
+
+    .dashboard-summary-tiles {
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    .dashboard-summary-tiles .stat-item {
+        min-width: 0;
+        padding: 10px 6px;
+    }
+
+    .dashboard-summary-tiles .stat-label {
+        font-size: 11px;
+    }
+
+    .dashboard-summary-tiles .stat-value {
+        font-size: 20px;
+    }
+
+    #pendingTableSection .card-body,
+    #approveTableSection .card-body,
+    #rejectTableSection .card-body,
+    #statusTableSection .card-body {
+        padding: 12px;
+    }
+
+    #pendingTableSection .table-wrapper,
+    #approveTableSection .table-wrapper,
+    #rejectTableSection .table-wrapper,
+    #statusTableSection .table-wrapper {
+        display: block;
+        overflow: visible;
+        padding: 0;
+    }
+
+    #pendingTableSection .history-table,
+    #approveTableSection .history-table,
+    #rejectTableSection .history-table,
+    #statusTableSection .history-table {
+        display: block;
+        width: 100% !important;
+        min-width: 0;
+        border: none;
+        background: transparent;
+    }
+
+    #pendingTableSection .history-table thead,
+    #approveTableSection .history-table thead,
+    #rejectTableSection .history-table thead,
+    #statusTableSection .history-table thead {
+        display: none;
+    }
+
+    #pendingTableSection .history-table tbody,
+    #approveTableSection .history-table tbody,
+    #rejectTableSection .history-table tbody,
+    #statusTableSection .history-table tbody {
+        display: block;
+    }
+
+    #pendingTableSection .history-table tbody tr,
+    #approveTableSection .history-table tbody tr,
+    #rejectTableSection .history-table tbody tr,
+    #statusTableSection .history-table tbody tr {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px;
+        margin-bottom: 12px;
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+
+    #pendingTableSection .history-table tbody td,
+    #approveTableSection .history-table tbody td,
+    #rejectTableSection .history-table tbody td,
+    #statusTableSection .history-table tbody td {
+        display: block;
+        width: auto !important;
+        min-width: 0;
+        padding: 0 !important;
+        border: none;
+        text-align: left !important;
+    }
+
+    #pendingTableSection .history-table tbody td::before,
+    #approveTableSection .history-table tbody td::before,
+    #rejectTableSection .history-table tbody td::before,
+    #statusTableSection .history-table tbody td::before {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+
+    #pendingTableSection .history-table tbody td:nth-child(1)::before,
+    #approveTableSection .history-table tbody td:nth-child(1)::before,
+    #rejectTableSection .history-table tbody td:nth-child(1)::before { content: 'Employee ID'; }
+    #pendingTableSection .history-table tbody td:nth-child(2)::before,
+    #approveTableSection .history-table tbody td:nth-child(2)::before,
+    #rejectTableSection .history-table tbody td:nth-child(2)::before { content: 'Employee Name'; }
+    #pendingTableSection .history-table tbody td:nth-child(3)::before { content: 'Status'; }
+    #approveTableSection .history-table tbody td:nth-child(3)::before,
+    #rejectTableSection .history-table tbody td:nth-child(3)::before { content: 'Action'; }
+    #pendingTableSection .history-table tbody td:nth-child(4)::before { content: 'Action'; }
+
+    #statusTableSection .history-table tbody td:nth-child(1)::before { content: 'Payroll Month'; }
+    #statusTableSection .history-table tbody td:nth-child(2)::before { content: 'Total Amount (₹)'; }
+    #statusTableSection .history-table tbody td:nth-child(3)::before { content: 'Overall Status'; }
+    #statusTableSection .history-table tbody td:nth-child(4)::before { content: 'Approval Tracker'; }
+
+    #pendingTableSection .history-table tbody td:last-child > div,
+    #approveTableSection .history-table tbody td:last-child > div,
+    #rejectTableSection .history-table tbody td:last-child > div {
+        justify-content: stretch !important;
+    }
+
+    #pendingTableSection .history-table tbody td:last-child button,
+    #approveTableSection .history-table tbody td:last-child button,
+    #rejectTableSection .history-table tbody td:last-child button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    /* Status page tracker stacks vertically */
+    .approval-tracker {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    .approval-tracker .approval-level {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .approval-tracker .approval-arrow {
+        align-self: center;
+        transform: rotate(90deg);
+    }
+
+    /* Search / filter inputs */
+    .search-filter input,
+    .month-filter select {
+        font-size: 16px;
+    }
+}
+
+/* ---- Mobile: approval popups (Pending / Approve / Reject / History details) ---- */
+@media (max-width: 768px) {
+    .modal-overlay[style*="z-index: 99999"] {
+        padding: 8px !important;
+        align-items: flex-start !important;
+    }
+
+    .modal-overlay[style*="z-index: 99999"] > div {
+        width: 100% !important;
+        max-height: 94vh !important;
+        margin-top: 4px;
+    }
+
+    .modal-overlay[style*="z-index: 99999"] > div > div[style*="padding: 30px"] {
+        padding: 14px !important;
+    }
+
+    .modal-overlay[style*="z-index: 99999"] h2 {
+        font-size: 18px !important;
+    }
+
+    .modal-overlay[style*="z-index: 99999"] div[style*="display: flex"] {
+        flex-wrap: wrap;
+    }
+
+    .modal-overlay[style*="z-index: 99999"] div[style*="overflow-x: auto"] {
+        overflow-x: visible !important;
+    }
+
+    .modal-overlay table.mobile-card-table,
+    .modal-overlay table.mobile-card-table tbody,
+    .modal-overlay table.mobile-card-table tr,
+    .modal-overlay table.mobile-card-table td {
+        display: block;
+        width: 100% !important;
+    }
+
+    .modal-overlay table.mobile-card-table thead {
+        display: none;
+    }
+
+    .modal-overlay table.mobile-card-table tr {
+        margin: 0 0 10px;
+        padding: 10px 12px;
+        background: #fff;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 10px;
+    }
+
+    .modal-overlay table.mobile-card-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 0 !important;
+        border: none !important;
+        text-align: right !important;
+        max-width: none !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        word-break: break-word;
+    }
+
+    .modal-overlay table.mobile-card-table td::before {
+        content: attr(data-label);
+        flex: 0 0 34%;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+    }
+
+    .modal-overlay table.mobile-card-table td > button {
+        margin-right: 0 !important;
+    }
+}
+
+@media (max-width: 768px) {
+    #statusTableSection .status-badge-container {
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    #statusTableSection .amount-edit-info {
+        align-items: flex-start;
+        text-align: left;
+    }
+}

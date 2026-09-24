@@ -12184,3 +12184,28 @@ document.addEventListener('DOMContentLoaded', function() {
     showBackLogoutConfirm();
   });
 });
+
+
+// ============================================
+// MOBILE: label table cells so popup tables can render as cards on phones
+// ============================================
+function labelTableCellsForMobile(root) {
+  root.querySelectorAll('table').forEach(table => {
+    const heads = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    if (heads.length === 0) return;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      Array.from(tr.children).forEach((td, i) => {
+        if (heads[i] && !td.hasAttribute('data-label')) td.setAttribute('data-label', heads[i]);
+      });
+    });
+    table.classList.add('mobile-card-table');
+  });
+}
+
+new MutationObserver(mutations => {
+  mutations.forEach(m => m.addedNodes.forEach(node => {
+    if (node.nodeType === 1 && node.classList && node.classList.contains('modal-overlay')) {
+      labelTableCellsForMobile(node);
+    }
+  }));
+}).observe(document.body, { childList: true });
