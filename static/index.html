@@ -8,7 +8,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=20260924" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -159,6 +159,24 @@
             <h2><i class="fas fa-plus-circle"></i> New Entry Submission</h2>
           </div>
           <div class="card-body">
+            <div class="excel-toolbar">
+              <div class="excel-toolbar-info">
+                <div class="excel-toolbar-icon"><i class="fas fa-file-excel"></i></div>
+                <div class="excel-toolbar-text">
+                  <strong>Excel Import / Export</strong>
+                  <span>Download your entries as an Excel sheet, or upload a filled sheet to fill the table.</span>
+                </div>
+              </div>
+              <div class="excel-buttons-container">
+                <button type="button" class="btn btn-excel-export" onclick="exportEntriesToExcel()" title="Download the entries in the table as an Excel file">
+                  <i class="fas fa-file-arrow-down"></i> Export Excel
+                </button>
+                <button type="button" class="btn btn-excel-upload" onclick="document.getElementById('excelUploadInput').click()" title="Upload an Excel file to fill the table">
+                  <i class="fas fa-file-arrow-up"></i> Upload Excel
+                </button>
+                <input type="file" id="excelUploadInput" accept=".xlsx,.xls" style="display: none" onchange="handleExcelUpload(event)" />
+              </div>
+            </div>
             <div class="table-container">
               <table class="entry-table" id="entryTable">
                 <thead>
@@ -320,6 +338,17 @@
         <div class="page-header">
           <h1><i class="fas fa-chart-line"></i> Approval Status Tracker</h1>
           <p>Track your expense approval progress</p>
+        </div>
+
+        <div id="statusLimitCard" class="status-limit-card" style="display: none">
+          <div class="status-limit-icon"><i class="fas fa-wallet"></i></div>
+          <div class="status-limit-text">
+            <span>Your OPE Limit</span>
+            <strong id="statusOpeLimitValue">-</strong>
+          </div>
+          <p class="status-limit-hint">
+            Total within this limit needs 2-level approval. Above it, 3-level approval is required.
+          </p>
         </div>
 
         <div id="statusLoadingDiv" class="loading-container">
@@ -1262,6 +1291,8 @@
       </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+    <script src="script.js?v=20260924"></script>
   </body>
 </html>

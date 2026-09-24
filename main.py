@@ -64,11 +64,26 @@ app.add_middleware(
 # always revalidate with the server on every load (still efficient: it gets a
 # fast 304 when nothing changed, thanks to the existing ETag/Last-Modified),
 # so a normal refresh always reflects the latest deployed files.
+
+
+# @app.middleware("http")
+# async def no_cache_for_static_files(request: Request, call_next):
+#     response = await call_next(request)
+#     if not request.url.path.startswith("/api/"):
+#         response.headers["Cache-Control"] = "no-cache"
+#     return response
+
 @app.middleware("http")
 async def no_cache_for_static_files(request: Request, call_next):
     response = await call_next(request)
+
     if not request.url.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
     return response
 
 # ---------- Mongo Connection ----------
@@ -931,7 +946,7 @@ async def get_employee_details(employee_code: str, current_user=Depends(get_curr
         "partner": emp.get("Partner"),
         "reporting_manager_code": emp.get("ReportingEmpCode"),
         "reporting_manager_name": emp.get("ReportingEmpName"),
-        "ope_limit": emp.get("OPE Limit")
+        "ope_limit": emp.get("OPE LIMIT", emp.get("OPE Limit"))
     }
 
 
@@ -4395,10 +4410,14 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
             raise HTTPException(status_code=403, detail="Access denied")
         
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
+
+        # Employee's own OPE limit from Employee_details (shown on the Status page)
+        emp_doc = await db["Employee_details"].find_one({"EmpID": employee_code})
+        emp_ope_limit = emp_doc.get("OPE LIMIT", emp_doc.get("OPE Limit")) if emp_doc else None
         
         if not status_doc:
             print(f"📭 No status document found for {employee_code}")
-            return {"status_entries": []}
+            return {"status_entries": [], "ope_limit": emp_ope_limit}
         
         approval_status = status_doc.get("approval_status", [])
         
@@ -4555,7 +4574,7 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         print(f"✅ Returning {len(status_entries)} status entries")
         print(f"{'='*60}\n")
         
-        return {"status_entries": status_entries}
+        return {"status_entries": status_entries, "ope_limit": emp_ope_limit}
         
     except Exception as e:
         print(f"\n❌❌ ERROR fetching status:")
@@ -8967,6 +8986,10 @@ async def export_duplicate_claims_excel(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
  
+
+@app.get("/", include_in_schema=False)
+async def serve_home():
+    return FileResponse("static/index.html")
 
 # ---------- Serve static HTML ----------
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

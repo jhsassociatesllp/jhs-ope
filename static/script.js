@@ -9262,6 +9262,21 @@ window.loadDashboardSummary = loadDashboardSummary;
 // ============================================
 let allStatusData = [];
 
+// Show the employee's own OPE limit (from Employee_details) at the top of the Status page
+function updateStatusLimitCard(limit) {
+    const card = document.getElementById('statusLimitCard');
+    const valueEl = document.getElementById('statusOpeLimitValue');
+    const num = Number(limit);
+    window.statusOpeLimit = (limit === null || limit === undefined || isNaN(num)) ? null : num;
+    if (!card || !valueEl) return;
+    if (window.statusOpeLimit === null) {
+        card.style.display = 'none';
+        return;
+    }
+    valueEl.textContent = '₹' + window.statusOpeLimit.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    card.style.display = 'flex';
+}
+
 async function loadStatusData(token, empCode) {
     try {
         console.log("📊 Loading status data for:", empCode);
@@ -9283,6 +9298,7 @@ async function loadStatusData(token, empCode) {
         console.log("✅ Raw status response:", data);
         
         allStatusData = data.status_entries || [];
+        updateStatusLimitCard(data.ope_limit);
 
         console.log("✅ Status data loaded:", allStatusData.length);
         console.log("📦 Status entries:", allStatusData);
@@ -10005,7 +10021,7 @@ function displayStatusTable(data) {
                     ${statusBadge}
                     <div class="status-info" style="margin-top: 8px; font-size: 12px; color: #6b7280;">
                         Levels: <strong>${totalLevels}</strong> | 
-                        Limit: <strong>₹${(entry.limit || 0).toFixed(0)}</strong>
+                        Limit: <strong>₹${Number(entry.limit ?? window.statusOpeLimit ?? 0).toFixed(0)}</strong>
                     </div>
                     ${isRejected && rejectionReason ? `
                         <div class="rejection-reason-box" style="
@@ -11604,3 +11620,567 @@ function filterRejectTable() {
 window.filterPendingTable = filterPendingTable;
 window.filterApproveTable = filterApproveTable;
 window.filterRejectTable = filterRejectTable;
+
+
+// ============================================
+// EXCEL EXPORT / UPLOAD (OPE entry table)
+// ============================================
+const EXCEL_COLUMNS = [
+  { header: 'Date', key: 'date', width: 14 },
+  { header: 'Client Name', key: 'client', width: 28 },
+  { header: 'Project Name', key: 'projectName', width: 32 },
+  { header: 'Project ID', key: 'projectId', width: 16 },
+  { header: 'Project Type', key: 'projectType', width: 18 },
+  { header: 'Travel From', key: 'from', width: 20 },
+  { header: 'Travel To', key: 'to', width: 20 },
+  { header: 'Mode of Travel', key: 'mode', width: 24 },
+  { header: 'Amount (₹)', key: 'amount', width: 14 },
+  { header: 'Remarks', key: 'remarks', width: 30 }
+];
+
+// Dropdown choices for the Excel sheet - keep in sync with the selects in addNewEntryRow()
+const EXCEL_PROJECT_TYPES = [
+  'Concurrent', 'KYC', 'IFC', 'Statutory', 'Internal', 'Cyber Security', 'Consulting', 'Outsourcing', 'Other'
+];
+const EXCEL_TRAVEL_MODES = [
+  'Metro Recharge', 'Metro Pass', 'Metro Tickets', 'Shared Auto', 'Shared Taxi', 'Meter Auto', 'Taxi / Cab',
+  'Bus Tickets', 'Bus Pass', 'Train Pass - 1st Class', 'Train Pass - 2nd Class', 'Train Ticket',
+  'Food Expence', 'Mobile Top Up', 'Mobile Recharge', 'Wifi', 'Other'
+];
+const EXCEL_MAX_ENTRY_ROWS = 500;
+
+// normalised header text -> internal field name
+const EXCEL_HEADER_ALIASES = {
+  date: 'date',
+  clientname: 'client', client: 'client',
+  projectname: 'projectName',
+  projectid: 'projectId', projectcode: 'projectId',
+  projecttype: 'projectType',
+  travelfrom: 'from', from: 'from', locationfrom: 'from',
+  travelto: 'to', to: 'to', locationto: 'to',
+  modeoftravel: 'mode', travelmode: 'mode', mode: 'mode',
+  amount: 'amount',
+  remarks: 'remarks', remark: 'remarks'
+};
+
+const EXCEL_REQUIRED_FIELDS = {
+  date: 'Date', client: 'Client Name', projectName: 'Project Name', projectType: 'Project Type',
+  from: 'Travel From', to: 'Travel To', mode: 'Mode of Travel', amount: 'Amount (₹)'
+};
+
+function excelNormalizeKey(value) {
+  return String(value === null || value === undefined ? '' : value).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function excelEscapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
+}
+
+function excelPad(n) {
+  return String(n).padStart(2, '0');
+}
+
+function isoToDisplayDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : (iso || '');
+}
+
+function buildIsoDate(year, month, day) {
+  const y = Number(year), m = Number(month), d = Number(day);
+  const check = new Date(Date.UTC(y, m - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+  return `${y}-${excelPad(m)}-${excelPad(d)}`;
+}
+
+// Returns 'yyyy-mm-dd', '' when blank, or null when the value is not a valid date
+function parseExcelDate(value) {
+  if (value === null || value === undefined || value === '') return '';
+
+  if (typeof value === 'number') {
+    const d = new Date(Math.round((value - 25569) * 86400000));
+    return buildIsoDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+
+  const text = String(value).trim();
+  if (!text) return '';
+
+  let m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(text);
+  if (m) return buildIsoDate(m[3], m[2], m[1]);
+
+  m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(text);
+  if (m) return buildIsoDate(m[1], m[2], m[3]);
+
+  return null;
+}
+
+function readEntryRow(row) {
+  const rowId = row.dataset.rowId;
+
+  const textField = (key, cellClass) => {
+    const wrap = row.querySelector(`.cell-${cellClass}-${rowId} .sd-wrap`);
+    if (wrap && wrap._sd) return (wrap._sd.getLabel() || '').trim();
+    const el = row.querySelector(`input[name="${key}_${rowId}"]`);
+    return el ? el.value.trim() : '';
+  };
+  const inputValue = (name) => {
+    const el = row.querySelector(`input[name="${name}_${rowId}"]`);
+    return el ? el.value.trim() : '';
+  };
+  const selectText = (name) => {
+    const sel = row.querySelector(`select[name="${name}_${rowId}"]`);
+    return sel && sel.value ? sel.options[sel.selectedIndex].text : '';
+  };
+
+  const amountRaw = inputValue('amount');
+  const amount = amountRaw !== '' && !isNaN(parseFloat(amountRaw)) ? parseFloat(amountRaw) : '';
+
+  return {
+    date: isoToDisplayDate(inputValue('date')),
+    client: textField('client', 'client'),
+    projectName: textField('projectname', 'projectname'),
+    projectId: inputValue('projectid'),
+    projectType: selectText('projecttype'),
+    from: inputValue('locationfrom'),
+    to: inputValue('locationto'),
+    mode: selectText('travelmode'),
+    amount: amount,
+    remarks: inputValue('remarks')
+  };
+}
+
+function isEntryDataEmpty(entry) {
+  return ['client', 'projectName', 'projectId', 'projectType', 'from', 'to', 'mode', 'amount', 'remarks']
+    .every(key => entry[key] === '' || entry[key] === null || entry[key] === undefined);
+}
+
+async function exportEntriesToExcel() {
+  if (typeof ExcelJS === 'undefined') {
+    showErrorPopup('Excel library could not be loaded. Please check your internet connection and refresh the page.');
+    return;
+  }
+
+  const entries = [];
+  document.querySelectorAll('#entryTableBody tr').forEach(row => {
+    const entry = readEntryRow(row);
+    if (!isEntryDataEmpty(entry)) entries.push(entry);
+  });
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('OPE Entries', { views: [{ state: 'frozen', ySplit: 1 }] });
+  ws.columns = EXCEL_COLUMNS;
+  ws.getColumn('date').numFmt = '@';
+
+  const headerRow = ws.getRow(1);
+  headerRow.height = 22;
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+
+  entries.forEach(e => ws.addRow(e));
+
+  // Hidden sheet holding the dropdown choices, so users can only pick listed values
+  const lists = wb.addWorksheet('Lists', { state: 'hidden' });
+  EXCEL_PROJECT_TYPES.forEach((v, i) => { lists.getCell(i + 1, 1).value = v; });
+  EXCEL_TRAVEL_MODES.forEach((v, i) => { lists.getCell(i + 1, 2).value = v; });
+
+  const typeColumn = EXCEL_COLUMNS.findIndex(c => c.key === 'projectType') + 1;
+  const modeColumn = EXCEL_COLUMNS.findIndex(c => c.key === 'mode') + 1;
+  const lastRow = Math.max(EXCEL_MAX_ENTRY_ROWS, entries.length) + 1;
+  const dropdown = (formula) => ({
+    type: 'list',
+    allowBlank: true,
+    formulae: [formula],
+    showErrorMessage: true,
+    errorStyle: 'stop',
+    errorTitle: 'Invalid selection',
+    error: 'Please select a value from the dropdown list.'
+  });
+  for (let r = 2; r <= lastRow; r++) {
+    ws.getCell(r, typeColumn).dataValidation = dropdown(`Lists!$A$1:$A$${EXCEL_PROJECT_TYPES.length}`);
+    ws.getCell(r, modeColumn).dataValidation = dropdown(`Lists!$B$1:$B$${EXCEL_TRAVEL_MODES.length}`);
+  }
+
+  const monthSelect = document.getElementById('monthRange');
+  const monthKey = monthSelect ? monthSelect.value : '';
+  const monthLabel = monthKey && monthRanges[monthKey]
+    ? '_' + monthRanges[monthKey].display.replace(/\s*-\s*/g, '_to_').replace(/\s+/g, '_')
+    : '';
+
+  try {
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `OPE_Entries${monthLabel}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    console.error('❌ Excel export failed:', err);
+    showErrorPopup('Could not create the Excel file. Please try again.');
+    return;
+  }
+
+  if (entries.length === 0) {
+    showSuccessPopup('No entries filled yet - an empty Excel template was downloaded.');
+  } else {
+    showSuccessPopup(`${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} exported to Excel.`);
+  }
+}
+window.exportEntriesToExcel = exportEntriesToExcel;
+
+function setExcelSelectValue(select, raw) {
+  const key = excelNormalizeKey(raw);
+  if (!select || !key) return false;
+  for (const opt of select.options) {
+    if (!opt.value) continue;
+    if (excelNormalizeKey(opt.value) === key || excelNormalizeKey(opt.text) === key) {
+      select.value = opt.value;
+      return true;
+    }
+  }
+  return false;
+}
+
+function setExcelCustomDropdown(wrap, text) {
+  if (!wrap || !wrap._sd) return;
+  wrap._sd.setValue(text, text);
+  const visible = wrap.querySelector('.sd-input');
+  const hidden = wrap.querySelector('input[type="hidden"]');
+  if (visible) {
+    visible.classList.add('sd-custom-input');
+    visible.addEventListener('input', () => { if (hidden) hidden.value = visible.value; });
+  }
+}
+
+function resolveExcelClientAndProject(entry) {
+  const clients = window.allClientsList || [];
+  const projects = window.allProjectsList || [];
+
+  const clientKey = excelNormalizeKey(entry.client);
+  const projectKey = excelNormalizeKey(entry.projectName);
+  const idKey = excelNormalizeKey(entry.projectId);
+
+  let client = clientKey
+    ? clients.find(c => excelNormalizeKey(c.client_name) === clientKey || excelNormalizeKey(c.client_code) === clientKey) || null
+    : null;
+
+  let project = null;
+  if (!clientKey || client) {
+    const pool = client ? projects.filter(p => p.client_code === client.client_code) : projects;
+    if (projectKey) {
+      project = pool.find(p => excelNormalizeKey(p.project_name) === projectKey || excelNormalizeKey(p.project_code) === projectKey) || null;
+    }
+    if (!project && idKey) {
+      project = pool.find(p => excelNormalizeKey(p.project_code) === idKey) || null;
+    }
+    if (project && !client) {
+      client = clients.find(c => c.client_code === project.client_code) || null;
+    }
+  }
+  return { client, project };
+}
+
+function fillEntryRowFromExcel(row, entry) {
+  const rowId = row.dataset.rowId;
+  const problems = [];
+
+  if (entry.dateIso) {
+    const dateInput = row.querySelector(`input[name="date_${rowId}"]`);
+    if (dateInput) dateInput.value = entry.dateIso;
+  }
+
+  if (entry.projectType && !setExcelSelectValue(row.querySelector(`select[name="projecttype_${rowId}"]`), entry.projectType)) {
+    problems.push(`Project Type "${entry.projectType}" is not a valid option`);
+  }
+  if (entry.mode && !setExcelSelectValue(row.querySelector(`select[name="travelmode_${rowId}"]`), entry.mode)) {
+    problems.push(`Mode of Travel "${entry.mode}" is not a valid option`);
+  }
+
+  const setInput = (name, value) => {
+    const el = row.querySelector(`input[name="${name}_${rowId}"]`);
+    if (el) el.value = value;
+  };
+  setInput('locationfrom', entry.from);
+  setInput('locationto', entry.to);
+  setInput('remarks', entry.remarks);
+  setInput('amount', entry.amountNum > 0 ? entry.amountNum : '');
+
+  const clientWrap = row.querySelector(`.cell-client-${rowId} .sd-wrap`);
+  const projectWrap = row.querySelector(`.cell-projectname-${rowId} .sd-wrap`);
+  const projectIdInput = row.querySelector(`input[name="projectid_${rowId}"]`);
+  const { client, project } = resolveExcelClientAndProject(entry);
+
+  if (client) {
+    clientWrap._sd.setValue(client.client_code, client.client_name);
+    projectWrap._sd.setOptions(getProjectOptionsForClient(client.client_code));
+  } else if (entry.client) {
+    setExcelCustomDropdown(clientWrap, entry.client);
+    projectWrap._sd.setOptions([]);
+  }
+
+  if (project) {
+    projectWrap._sd.setValue(project.project_code, project.project_name);
+    projectIdInput.value = project.project_code;
+    projectIdInput.readOnly = true;
+    projectIdInput.classList.add('sd-readonly-field');
+    projectIdInput.classList.remove('sd-custom-input');
+  } else {
+    if (entry.projectName) setExcelCustomDropdown(projectWrap, entry.projectName);
+    projectIdInput.value = entry.projectId;
+    projectIdInput.readOnly = false;
+    projectIdInput.classList.remove('sd-readonly-field');
+    projectIdInput.classList.add('sd-custom-input');
+    projectIdInput.placeholder = 'Type project code';
+  }
+
+  return problems;
+}
+
+function showExcelImportSummary(title, bodyHtml, isWarning) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  const color = isWarning ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#10b981,#059669)';
+  const icon = isWarning ? '!' : '&#10003;';
+  overlay.innerHTML = `
+    <div style="background:white;padding:30px;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;max-width:520px;width:calc(100% - 40px);max-height:85vh;overflow-y:auto;box-sizing:border-box;">
+      <div style="width:70px;height:70px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:white;font-size:36px;font-weight:700;">${icon}</div>
+      <h2 style="font-size:21px;color:#1f2937;margin-bottom:10px;font-weight:600;">${excelEscapeHtml(title)}</h2>
+      <div style="color:#6b7280;font-size:14px;line-height:1.6;text-align:left;max-height:300px;overflow-y:auto;">${bodyHtml}</div>
+      <button type="button" style="margin-top:20px;padding:10px 28px;border:none;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:white;font-size:15px;font-weight:600;cursor:pointer;">OK</button>
+    </div>`;
+  const close = () => { if (document.body.contains(overlay)) document.body.removeChild(overlay); };
+  overlay.querySelector('button').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+}
+
+function handleExcelUpload(event) {
+  const input = event.target;
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+
+  if (typeof XLSX === 'undefined') {
+    showErrorPopup('Excel library could not be loaded. Please check your internet connection and refresh the page.');
+    return;
+  }
+
+  const monthSelect = document.getElementById('monthRange');
+  const monthRange = monthSelect ? monthSelect.value : '';
+  if (!monthRange) {
+    showErrorPopup('Please select month range first!');
+    return;
+  }
+
+  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+    showErrorPopup('Only Excel files (.xlsx or .xls) are allowed.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onerror = () => showErrorPopup('Could not read the selected file.');
+  reader.onload = (e) => {
+    try {
+      importEntriesFromWorkbook(e.target.result, monthRange);
+    } catch (err) {
+      console.error('❌ Excel import failed:', err);
+      showErrorPopup('Could not read this Excel file. Please upload the file exported from this table.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+window.handleExcelUpload = handleExcelUpload;
+
+function importEntriesFromWorkbook(buffer, monthRange) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const grid = ws ? XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }) : [];
+
+  // Locate the header row (first 10 rows) and map columns by header name
+  let headerIdx = -1;
+  let colMap = {};
+  for (let r = 0; r < Math.min(grid.length, 10); r++) {
+    const map = {};
+    let hits = 0;
+    grid[r].forEach((h, c) => {
+      const field = EXCEL_HEADER_ALIASES[excelNormalizeKey(h)];
+      if (field && map[field] === undefined) { map[field] = c; hits++; }
+    });
+    if (hits >= 3) { headerIdx = r; colMap = map; break; }
+  }
+  if (headerIdx < 0) {
+    showErrorPopup('Excel columns do not match the table.<br><br>Please upload the file exported using the <strong>Export Excel</strong> button.');
+    return;
+  }
+
+  const missing = Object.keys(EXCEL_REQUIRED_FIELDS).filter(f => colMap[f] === undefined).map(f => EXCEL_REQUIRED_FIELDS[f]);
+  if (missing.length > 0) {
+    showErrorPopup(`Missing column(s) in Excel:<br><strong>${excelEscapeHtml(missing.join(', '))}</strong>`);
+    return;
+  }
+
+  const cell = (row, field) => {
+    const idx = colMap[field];
+    if (idx === undefined) return '';
+    const v = row[idx];
+    return v === null || v === undefined ? '' : v;
+  };
+  const cellText = (row, field) => String(cell(row, field)).trim();
+
+  const imported = [];
+  for (let r = headerIdx + 1; r < grid.length; r++) {
+    const row = grid[r];
+    const entry = {
+      excelRow: r + 1,
+      dateRaw: cell(row, 'date'),
+      client: cellText(row, 'client'),
+      projectName: cellText(row, 'projectName'),
+      projectId: cellText(row, 'projectId'),
+      projectType: cellText(row, 'projectType'),
+      from: cellText(row, 'from'),
+      to: cellText(row, 'to'),
+      mode: cellText(row, 'mode'),
+      remarks: cellText(row, 'remarks')
+    };
+    const amountRaw = cell(row, 'amount');
+    entry.amountNum = typeof amountRaw === 'number' ? amountRaw : parseFloat(String(amountRaw).replace(/[₹,\s]/g, ''));
+
+    const hasData = String(entry.dateRaw).trim() !== '' || entry.client || entry.projectName || entry.projectId ||
+                    entry.projectType || entry.from || entry.to || entry.mode || entry.remarks ||
+                    String(amountRaw).trim() !== '';
+    if (hasData) imported.push(entry);
+  }
+
+  if (imported.length === 0) {
+    showErrorPopup('No entries found in the Excel file.');
+    return;
+  }
+
+  // Every dated row must fall inside the selected month range, otherwise nothing is loaded
+  const range = monthRanges[monthRange];
+  imported.forEach(entry => { entry.dateIso = parseExcelDate(entry.dateRaw); });
+  const badDates = imported.filter(e => e.dateIso === null || (e.dateIso && !isDateInMonthRange(e.dateIso, monthRange)));
+  if (badDates.length > 0) {
+    const datedEntries = imported.filter(e => e.dateIso);
+    const matchingKey = badDates.some(e => e.dateIso === null) ? null : Object.keys(monthRanges).find(key =>
+      key !== monthRange && datedEntries.every(e => isDateInMonthRange(e.dateIso, key)));
+
+    let intro;
+    if (matchingKey) {
+      intro = `This Excel sheet has entries for <strong>${excelEscapeHtml(monthRanges[matchingKey].display)}</strong>, but you have selected <strong>${excelEscapeHtml(range.display)}</strong>.`;
+    } else {
+      intro = `Some dates in this Excel sheet are not within <strong>${excelEscapeHtml(range.display)}</strong> (${isoToDisplayDate(range.start)} to ${isoToDisplayDate(range.end)}).`;
+    }
+    const shown = badDates.slice(0, 5).map(e => {
+      const label = e.dateIso === null ? `"${e.dateRaw}" (invalid date)` : isoToDisplayDate(e.dateIso);
+      return `<li>Excel row ${e.excelRow}: ${excelEscapeHtml(label)}</li>`;
+    }).join('');
+    const more = badDates.length > 5 ? `<li>...and ${badDates.length - 5} more</li>` : '';
+    showExcelImportSummary('Please select the correct Month Range',
+      `<p style="text-align:center;margin-bottom:10px;">${intro}</p>` +
+      `<p style="text-align:center;margin-bottom:10px;">Please select the correct month range, or correct the dates in the Excel sheet, and upload again. No entries were uploaded.</p>` +
+      `<ul style="padding-left:20px;">${shown}${more}</ul>`, true);
+    return;
+  }
+
+  // Drop untouched blank rows, keep everything the user already filled/saved
+  const tbody = document.getElementById('entryTableBody');
+  tbody.querySelectorAll('tr').forEach(row => {
+    if (!row.dataset.savedEntryId && isEntryDataEmpty(readEntryRow(row))) row.remove();
+  });
+
+  const warnings = [];
+
+  imported.forEach(entry => {
+    entry.dateIso = entry.dateIso || '';
+
+    addNewEntryRow();
+    const row = tbody.lastElementChild;
+    const problems = fillEntryRowFromExcel(row, entry);
+
+    if (!(entry.amountNum > 0)) problems.push('Amount is missing or not a positive number');
+
+    problems.forEach(p => warnings.push(`Excel row ${entry.excelRow}: ${p}`));
+  });
+
+  // Renumber S.No for all rows
+  tbody.querySelectorAll('tr').forEach((r, i) => {
+    const sno = r.querySelector('td:first-child strong');
+    if (sno) sno.textContent = i + 1;
+  });
+
+  const summary = `<p style="text-align:center;margin-bottom:10px;">${imported.length} ${imported.length === 1 ? 'entry' : 'entries'} loaded into the table. Review them and click <strong>Save Entry</strong> to save.</p>`;
+  if (warnings.length > 0) {
+    const list = warnings.map(w => `<li>${excelEscapeHtml(w)}</li>`).join('');
+    showExcelImportSummary('Imported with warnings',
+      `${summary}<p style="margin-bottom:6px;"><strong>Please fix these in the table:</strong></p><ul style="padding-left:20px;">${list}</ul>`, true);
+  } else {
+    showExcelImportSummary('Excel Imported', summary, false);
+  }
+}
+
+
+// ============================================
+// BROWSER BACK BUTTON -> LOGOUT CONFIRMATION
+// ============================================
+function showBackLogoutConfirm() {
+  if (document.getElementById('backLogoutOverlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'backLogoutOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  overlay.innerHTML = `
+    <div style="background:white;padding:36px 32px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;max-width:400px;width:100%;box-sizing:border-box;animation:slideUp 0.3s ease;">
+      <div style="width:64px;height:64px;margin:0 auto 18px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;color:white;font-size:30px;">
+        <i class="fas fa-sign-out-alt"></i>
+      </div>
+      <h2 style="font-size:22px;color:#2d3748;margin-bottom:10px;">Are you sure you want to logout?</h2>
+      <p style="color:#718096;margin-bottom:26px;font-size:15px;">You will be logged out of your session.</p>
+      <div style="display:flex;gap:15px;justify-content:center;">
+        <button type="button" id="backLogoutYes" style="padding:12px 30px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 4px 15px rgba(239,68,68,0.35);">Yes</button>
+        <button type="button" id="backLogoutNo" style="padding:12px 30px;background:#f1f5f9;color:#4a5568;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;">No</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    if (document.body.contains(overlay)) document.body.removeChild(overlay);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
+  document.getElementById('backLogoutYes').addEventListener('click', () => {
+    localStorage.clear();
+    window.location.replace('login.html');
+  });
+  document.getElementById('backLogoutNo').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (!localStorage.getItem('access_token')) return;
+
+  const pushGuard = () => history.pushState({ jhsBackGuard: true }, '', window.location.href);
+
+  // Extra history entry so the Back button lands on this page instead of leaving it.
+  // Browsers skip entries added before any user interaction, so add another on first interaction.
+  pushGuard();
+  const onFirstInteraction = () => {
+    ['pointerdown', 'keydown', 'touchstart'].forEach(evt => document.removeEventListener(evt, onFirstInteraction, true));
+    pushGuard();
+  };
+  ['pointerdown', 'keydown', 'touchstart'].forEach(evt => document.addEventListener(evt, onFirstInteraction, true));
+
+  window.addEventListener('popstate', function() {
+    pushGuard();
+    showBackLogoutConfirm();
+  });
+});
