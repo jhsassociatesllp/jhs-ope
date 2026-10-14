@@ -8978,7 +8978,8 @@ async function approveEmployee(employeeId) {
       modals.forEach(modal => modal.remove());
       
       await loadPendingData(token, currentEmpCode);
-      
+      await loadDashboardSummary(); // keep KPI tiles in sync with the refreshed list
+
     } else {
       const errorData = await response.json();
       showErrorPopup(errorData.detail || 'Approval failed');
@@ -9079,7 +9080,8 @@ const endpoint = isHR
       modals.forEach(modal => modal.remove());
       
       await loadPendingData(token, currentEmpCode);
-      
+      await loadDashboardSummary();
+
     } else {
       const errorData = await response.json();
       showErrorPopup(errorData.detail || 'Rejection failed');

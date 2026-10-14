@@ -281,7 +281,7 @@ async def move_entries_back_to_active(employee_id: str, month_range: str, entry_
     return len(moved_entries)
 
 
-async def recompute_month_status(employee_id: str, payroll_month: str):
+async def recompute_month_status(employee_id: str, payroll_month: str, marker_override: str = None):
     """
     Recompute the pending/approved/rejected picture for ONE employee's
     payroll_month, scoped to whichever level (L1/L2/L3) Status.approval_status[]
@@ -340,6 +340,11 @@ async def recompute_month_status(employee_id: str, payroll_month: str):
         marker_field = "hr_approved"
     else:
         marker_field = None
+
+    # Callers that know the acting role (e.g. the HR endpoint) can force the
+    # marker so a missing/mismatched level_name can't leave the month pending.
+    if marker_override:
+        marker_field = marker_override
 
     ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
     active_entries = []
@@ -1788,7 +1793,9 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
                         for data_item in data_array:
                             if payroll_month in data_item:
                                 for entry in data_item[payroll_month]:
-                                    if entry.get("status", "").lower() == "approved":
+                                    # Skip entries HR already signed off on - same rule the
+                                    # dashboard KPI uses, so list and KPI always agree.
+                                    if entry.get("status", "").lower() == "approved" and not entry.get("hr_approved"):
                                         pending_entries.append({
                                             "_id": str(entry.get("_id", "")),
                                             "month_range": payroll_month,
@@ -3428,11 +3435,17 @@ async def submit_final_entries(
                 # and/or rejected, nothing left to route). Fresh entries need their
                 # own L1 review, so reopen the month instead of leaving it frozen on
                 # the old terminal status (e.g. still showing "Rejected" forever).
-                reopened_after_completion = existing_current_level == "Completed"
+                # The same applies when the month had already moved past L1 (waiting
+                # at Partner/HR): the new entries are "pending" at L1, so leaving
+                # current_level at L2/L3 hides them from the manager AND from HR
+                # (HR only lists "approved" entries) - they would be stuck forever.
+                reopened_after_completion = existing_current_level in ("Completed", "L2", "L3")
                 if reopened_after_completion:
                     update_fields[f"approval_status.{existing_month_index}.current_level"] = "L1"
                     update_fields[f"approval_status.{existing_month_index}.overall_status"] = "pending"
-                    print(f"🔄 Month was 'Completed' - reopening at L1 for the newly submitted entries")
+                    if existing_current_level in ("L2", "L3"):
+                        update_fields[f"approval_status.{existing_month_index}.L1.status"] = False
+                    print(f"🔄 Month was at '{existing_current_level}' - reopening at L1 for the newly submitted entries")
 
                 if is_reporting_manager:
                     update_fields[f"approval_status.{existing_month_index}.limit"] = 0
@@ -4679,7 +4692,7 @@ async def hr_approve_employee(
         # of truth, replaces the old inline overall_status/current_level logic
         for month_range in payroll_months_approved:
             level_key = level_key_by_month.get(month_range, "L2")
-            await recompute_month_status(employee_code, month_range)
+            await recompute_month_status(employee_code, month_range, marker_override="hr_approved")
             await advance_level_if_ready(employee_code, month_range, level_key, hr_emp_code, "HR", approval_remark)
 
         hr_approved_doc = await db["HR_Approved"].find_one({"HR_Code": hr_emp_code})
