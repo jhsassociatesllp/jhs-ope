@@ -9,7 +9,7 @@
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" type="image/png" href="/static/jhs_logo.jpg" />
-    <link rel="stylesheet" href="auth.css?v=2" />
+    <link rel="stylesheet" href="auth.css?v=3" />
 </head>
 <body>
     <div class="auth-page">
@@ -18,7 +18,7 @@
           <img src="jhs_logo_square.png" alt="JHS" />
           <span>JHS OPE</span>
         </div>
-        <h1>Hey, <em>Hello!</em></h1>
+        <h1 id="authGreeting">Good <em>day!</em></h1>
         <p>Submit, track and approve your payroll expense (OPE) claims in one place.</p>
         <ul class="auth-points">
           <li>Monthly OPE submission</li>
@@ -258,6 +258,16 @@ overlay.addEventListener('click', function(e) {
             }
 
         });
+    </script>
+    <script>
+      // Greeting follows the time in India (IST), whatever the visitor's device clock/timezone says.
+      (function () {
+        var hour = Number(new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false })
+          .format(new Date())) % 24;
+        var part = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+        var h = document.getElementById('authGreeting');
+        if (h) h.innerHTML = 'Good <em>' + part + '!</em>';
+      })();
     </script>
 </body>
 </html>
