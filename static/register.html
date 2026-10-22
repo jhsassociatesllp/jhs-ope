@@ -4,376 +4,36 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>jhs-OP - Register</title>
-    <!-- Google Fonts: Poppins -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <!-- Font Awesome for icons -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
     <link rel="icon" type="image/png" href="/static/jhs_logo.jpg" />
-    <style>
-      /* Global Styles */
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: "Poppins", sans-serif;
-      }
-      html{
-        overflow-x: hidden;
-        overflow-y: hidden;
-      }
-
-      body {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        position: relative;
-        overflow-y: auto;
-        padding: 30px 20px;
-      }
-
-      /* Animated Background */
-      body::before {
-        content: "";
-        position: absolute;
-        width: 500px;
-        height: 500px;
-        background: linear-gradient(
-          135deg,
-          rgba(255, 255, 255, 0.1),
-          rgba(255, 255, 255, 0.05)
-        );
-        border-radius: 50%;
-        top: -250px;
-        right: -250px;
-        animation: float 6s ease-in-out infinite;
-      }
-
-      body::after {
-        content: "";
-        position: absolute;
-        width: 400px;
-        height: 400px;
-        background: linear-gradient(
-          135deg,
-          rgba(255, 255, 255, 0.1),
-          rgba(255, 255, 255, 0.05)
-        );
-        border-radius: 50%;
-        bottom: -200px;
-        left: -200px;
-        animation: float 8s ease-in-out infinite;
-      }
-
-      @keyframes float {
-        0%,
-        100% {
-          transform: translateY(0px) rotate(0deg);
-        }
-        50% {
-          transform: translateY(-20px) rotate(5deg);
-        }
-      }
-
-      .card {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        padding: 35px 30px;
-        border-radius: 30px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        width: 100%;
-        max-width: 440px;
-        text-align: center;
-        position: relative;
-        z-index: 1;
-        animation: slideUp 0.6s ease-out;
-        margin: auto;
-      }
-
-      @keyframes slideUp {
-        from {
-          opacity: 0;
-          transform: translateY(30px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .logo {
-        width: 65px;
-        height: 65px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 20px;
-        margin: 0 auto 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-        animation: pulse 2s ease-in-out infinite;
-      }
-
-      .logo i {
-        font-size: 32px;
-        color: white;
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.05);
-        }
-      }
-
-      .title {
-        font-size: 26px;
-        font-weight: 700;
-        margin-bottom: 6px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
-
-      .subtitle {
-        font-size: 14px;
-        color: #888;
-        margin-bottom: 25px;
-      }
-
-      .input-group {
-        position: relative;
-        margin-bottom: 18px;
-        text-align: left;
-      }
-
-      .input-group label {
-        display: block;
-        font-size: 13px;
-        font-weight: 500;
-        color: #555;
-        margin-bottom: 6px;
-        margin-left: 5px;
-      }
-
-      .input-group input {
-        width: 100%;
-        padding: 13px 45px;
-        border: 2px solid #e8e8e8;
-        border-radius: 12px;
-        font-size: 14px;
-        transition: all 0.3s ease;
-        background: #f9f9f9;
-      }
-
-      .input-group input:focus {
-        border-color: #667eea;
-        background: white;
-        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-        outline: none;
-      }
-
-      .input-group input:hover {
-        border-color: #667eea;
-        background: white;
-      }
-
-      .input-group .icon {
-        position: absolute;
-        left: 16px;
-        bottom: 15px;
-        color: #999;
-        font-size: 16px;
-        transition: color 0.3s;
-      }
-
-      .input-group input:focus ~ .icon {
-        color: #667eea;
-      }
-
-      .input-group .toggle-password {
-        position: absolute;
-        right: 16px;
-        bottom: 15px;
-        color: #999;
-        cursor: pointer;
-        font-size: 16px;
-        transition: color 0.3s;
-      }
-
-      .input-group .toggle-password:hover {
-        color: #667eea;
-      }
-
-      .error {
-        color: #ff4757;
-        font-size: 13px;
-        margin-top: 6px;
-        display: none;
-        margin-left: 5px;
-      }
-
-      .input-group.invalid input {
-        border-color: #ff4757;
-        background: #fff5f5;
-      }
-
-      .input-group.invalid .icon {
-        color: #ff4757;
-      }
-
-      .input-group.valid input {
-        border-color: #2ed573;
-      }
-
-      .input-group.valid .icon {
-        color: #2ed573;
-      }
-
-      .validation-rules {
-        text-align: left;
-        margin-bottom: 18px;
-        padding: 12px 15px;
-        background: #f9f9f9;
-        border-radius: 12px;
-        border: 2px solid #e8e8e8;
-      }
-
-      .validation-rules li {
-        list-style: none;
-        margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        font-size: 12px;
-        color: #666;
-      }
-
-      .validation-rules li:last-child {
-        margin-bottom: 0;
-      }
-
-      .validation-rules li i {
-        margin-right: 8px;
-        font-size: 13px;
-        color: #ddd;
-        transition: color 0.3s;
-      }
-
-      .validation-rules li.valid i {
-        color: #2ed573;
-      }
-
-      .validation-rules li.valid {
-        color: #2ed573;
-      }
-
-      .btn {
-        width: 100%;
-        padding: 14px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: none;
-        border-radius: 12px;
-        color: #fff;
-        font-size: 16px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-        position: relative;
-        overflow: hidden;
-      }
-
-      .btn::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.3),
-          transparent
-        );
-        transition: left 0.5s;
-      }
-
-      .btn:hover::before {
-        left: 100%;
-      }
-
-      .btn:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
-      }
-
-      .btn:active {
-        transform: translateY(-1px);
-      }
-
-      .login-link {
-        margin-top: 20px;
-        font-size: 14px;
-        color: #888;
-      }
-
-      .login-link a {
-        color: #667eea;
-        text-decoration: none;
-        font-weight: 600;
-        transition: color 0.3s;
-      }
-
-      .login-link a:hover {
-        color: #764ba2;
-      }
-
-      /* Responsive */
-      @media (max-width: 480px) {
-        /* body {
-          padding: 20px 15px;
-        } */
-        
-
-        .card {
-          padding: 35px 25px;
-        }
-
-        .title {
-          font-size: 24px;
-        }
-
-        .logo {
-          width: 60px;
-          height: 60px;
-        }
-
-        .logo i {
-          font-size: 30px;
-        }
-      }
-    </style>
+    <link rel="stylesheet" href="auth.css?v=2" />
   </head>
   <body>
-    <div class="card">
-      <div class="logo">
-        <i class="fas fa-user-plus"></i>
-      </div>
-      <h2 class="title">Create Account</h2>
-      <p class="subtitle">Register to get started</p>
-      <form id="registerForm">
+    <div class="auth-page">
+      <section class="auth-hero">
+        <div class="auth-brand">
+          <img src="jhs_logo_square.png" alt="JHS" />
+          <span>JHS OPE</span>
+        </div>
+        <h1>Join <em>JHS OPE</em></h1>
+        <p>Create your login using your employee code. Your code must already exist in Employee Details.</p>
+        <ul class="auth-points">
+          <li>Secure employee login</li>
+          <li>Submit OPE every payroll month</li>
+          <li>Track every approval stage</li>
+        </ul>
+      </section>
+
+      <main class="card">
+        <h2 class="title">Create Account</h2>
+        <p class="subtitle">Register with your employee code to get started</p>
+        <form id="registerForm">
         <div class="input-group">
           <label for="employeeCode">Employee Code</label>
           <input
@@ -382,7 +42,6 @@
             placeholder="Enter your employee code"
             required
           />
-          <i class="fas fa-user icon"></i>
           <div class="error" id="employeeCodeError">
             Employee Code is required.
           </div>
@@ -395,7 +54,6 @@
             placeholder="Create a strong password"
             required
           />
-          <i class="fas fa-lock icon"></i>
           <i class="fas fa-eye toggle-password" id="togglePassword"></i>
           <div class="error" id="passwordError">
             Password does not meet requirements.
@@ -410,7 +68,7 @@
             placeholder="Re-enter your password"
             required
           />
-          <!-- <i class="fas fa-lock icon"></i> -->
+          <!-- -->
           <i class="fas fa-eye toggle-password" id="toggleConfirmPassword"></i>
           <div class="error" id="confirmPasswordError">
             Passwords do not match.
@@ -425,9 +83,10 @@
         </ul>
         <button type="submit" class="btn">Register</button>
       </form>
-      <div class="login-link">
+        <div class="login-link">
         Already have an account? <a href="login.html">Login</a>
       </div>
+      </main>
     </div>
 
     <script>
@@ -584,13 +243,13 @@
     <div style="
       width: 80px;
       height: 80px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #2f5bff 0%, #2146d8 100%);
       border-radius: 50%;
       margin: 0 auto 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 10px 30px rgba(47, 91, 255, 0.4);
     ">
       <i class="fas fa-check" style="font-size: 40px; color: white;"></i>
     </div>
