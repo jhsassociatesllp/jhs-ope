@@ -6,3 +6,4 @@ motor
 python-dotenv
 python-multipart
 openpyxl
+tzdata

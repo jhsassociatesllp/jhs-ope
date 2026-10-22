@@ -9,6 +9,8 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="style.css?v=20260924" />
+    <link rel="stylesheet" href="react/ope-react.css?v=6" />
+    <link rel="stylesheet" href="theme.css?v=13" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -19,7 +21,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <i class="fas fa-briefcase"></i>
+          <img src="jhs_logo_square.png" alt="JHS" class="brand-logo" />
           <h2>JHS OPE</h2>
         </div>
         <p class="subtitle">Employee Portal</p>
@@ -52,6 +54,15 @@
           <li id="navReject" class="nav-item">
             <i class="fas fa-times-circle"></i>
             <span>Reject</span>
+          </li>
+          <!-- HR / Admin only: shown by the React layer after a server-side role check -->
+          <li id="navReports" class="nav-item" style="display: none">
+            <i class="fas fa-file-excel"></i>
+            <span>HR Report</span>
+          </li>
+          <li id="navAccess" class="nav-item" style="display: none">
+            <i class="fas fa-lock-open"></i>
+            <span>Resubmission</span>
           </li>
         </ul>
       </nav>
@@ -127,6 +138,8 @@
             </div>
           </div>
         </div>
+
+        <div data-ope-react="lock-banner"></div>
 
         <!-- Month Selection Card -->
         <div class="card month-selection-card">
@@ -343,11 +356,11 @@
         <div id="statusLimitCard" class="status-limit-card" style="display: none">
           <div class="status-limit-icon"><i class="fas fa-wallet"></i></div>
           <div class="status-limit-text">
-            <span>Your OPE Limit</span>
+            <span>Standard OPE Limit</span>
             <strong id="statusOpeLimitValue">-</strong>
           </div>
           <p class="status-limit-hint">
-            Total within this limit needs 2-level approval. Above it, 3-level approval is required.
+            Total within the limit needs 2-level approval. Above it, 3-level approval is required. The limit that applied to each month is shown against that month below.
           </p>
         </div>
 
@@ -384,6 +397,16 @@
           <i class="fas fa-inbox"></i>
           <p>No submitted entries yet</p>
         </div>
+      </section>
+
+      <!-- HR Report Section (HR / Admin) -->
+      <section id="reportsSection" class="content-section">
+        <div data-ope-react="hr-report" data-ope-role="hr"></div>
+      </section>
+
+      <!-- Resubmission Access Section (HR / Admin) -->
+      <section id="accessSection" class="content-section">
+        <div data-ope-react="access-control" data-ope-role="hr"></div>
       </section>
 
       <!-- Pending Section -->
@@ -1293,6 +1316,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-    <script src="script.js?v=20261014"></script>
+    <script src="script.js?v=20261020b"></script>
+    <script src="react/ope-react.js?v=6"></script>
   </body>
 </html>

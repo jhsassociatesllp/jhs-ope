@@ -18,6 +18,12 @@ from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, F
 from starlette.requests import Request
 from fastapi.responses import JSONResponse
 import json
+import ope_features
+from ope_features import (
+    audited_action, guarded_submit, guarded_save, guard_entry_change,
+    apply_month_policy_limit, write_audit,
+)
+from ope_features.common import approver_in_scope, can_view_employee, find_bucket as _find_bucket, safe_num as _safe_num
 
 # Load env vars
 load_dotenv()
@@ -46,6 +52,10 @@ class SafeJSONResponse(JSONResponse):
 
 # ---------- FastAPI app ----------
 app = FastAPI(default_response_class=SafeJSONResponse)
+
+# Compress large JSON (e.g. the HR Approve tab) - several times smaller on the wire
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # CORS
 app.add_middleware(
@@ -85,6 +95,15 @@ async def no_cache_for_static_files(request: Request, call_next):
         response.headers["Expires"] = "0"
 
     return response
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    return response
+
 
 # ---------- Mongo Connection ----------
 client = AsyncIOMotorClient(MONGO_URI)
@@ -880,11 +899,70 @@ async def serve_pdf(file_id: str, current_user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="PDF not found")
 
 
+# ---------- Stage-aware Approve / Reject tab filters ----------
+# The Approve tab of a Reporting Manager / Partner / HR must list only entries that
+# THAT stage has approved, and the Reject tab only what that person rejected.
+# Entries merely forwarded to them (approved by an earlier stage) stay in Pending.
+def _valid_stage(stage):
+    if stage in (None, ""):
+        return None
+    if stage not in ("manager", "partner", "hr"):
+        raise HTTPException(status_code=400, detail="Invalid stage")
+    return stage
+
+
+def _approved_by_stage(entry: dict, stage: str) -> bool:
+    if stage == "manager":
+        return bool(entry.get("L1_approved")) and str(entry.get("L1_approver_code") or "").upper() != "SYSTEM"
+    if stage == "partner":
+        return bool(entry.get("L2_approved") or entry.get("partner_approved"))
+    return bool(entry.get("hr_approved"))
+
+
+def _rejected_by_actor(entry: dict, actor: str) -> bool:
+    return str(entry.get("rejected_by") or "").strip().upper() == actor
+
+
+def _submitted_total(ps, ope_doc, rej_doc):
+    """Amount the employee originally submitted for a month (never the reviewer-edited figure)."""
+    month = ps.get("payroll_month")
+    entries = list(_find_bucket(ope_doc, month)) + list(_find_bucket(rej_doc, month))
+    if not entries:
+        return ps.get("original_total", ps.get("total_amount"))
+    return round(sum(_safe_num(e.get("original_amount", e.get("amount"))) for e in entries), 2)
+
+
+# ---------- Login throttling ----------
+# After 8 failed logins for one employee code within 10 minutes, further attempts
+# are refused for the rest of the window (in-process; the app runs one worker).
+_login_failures: dict = {}
+_LOGIN_MAX_FAILS = 8
+_LOGIN_WINDOW = timedelta(minutes=10)
+
+
+def _throttle_check(code: str):
+    key = code.strip().upper()
+    now = datetime.utcnow()
+    hits = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_WINDOW]
+    _login_failures[key] = hits
+    if len(hits) >= _LOGIN_MAX_FAILS:
+        raise HTTPException(status_code=429, detail="Too many failed login attempts. Please try again in a few minutes.")
+
+
+def _throttle_fail(code: str):
+    _login_failures.setdefault(code.strip().upper(), []).append(datetime.utcnow())
+
+
 # ---------- Auth endpoints ----------
 
 @app.post("/api/register")
 async def register(user: UserCreate):
     print("📌 Incoming register data:", user.employee_code)
+
+    # Only people who exist in Employee Details may create a login; otherwise anyone
+    # could claim a manager's, partner's or HR's employee code before they register.
+    if not await db["Employee_details"].find_one({"EmpID": user.employee_code.strip().upper()}):
+        raise HTTPException(status_code=400, detail="Employee code not found. Please check it or contact HR.")
 
     existing = await user_collection.find_one({"employee_code": user.employee_code})
     print("📌 Existing user:", existing)
@@ -911,12 +989,20 @@ async def register(user: UserCreate):
 
 @app.post("/api/login", response_model=Token)
 async def login(user: UserLogin):
+    _throttle_check(user.employee_code)
     db_user = await get_user_by_employee_code(user.employee_code)
     if not db_user:
+        _throttle_fail(user.employee_code)
         raise HTTPException(status_code=401, detail="Incorrect employee code or password")
 
     if not verify_password(user.password, db_user["password_hash"]):
+        _throttle_fail(user.employee_code)
         raise HTTPException(status_code=401, detail="Incorrect employee code or password")
+    _login_failures.pop(user.employee_code.strip().upper(), None)
+    try:  # restricted employees: make sure this payroll month's HR record exists (login is never blocked)
+        await ope_features.ensure_restricted_month(user.employee_code)
+    except Exception as _e:
+        print(f"restricted month check failed: {_e}")
 
     access_token = create_access_token(
         data={"sub": user.employee_code}
@@ -937,6 +1023,8 @@ async def read_current_user(current_user=Depends(get_current_user)):
 # Employee Details Fetch from Backend
 @app.get("/api/employee/{employee_code}")
 async def get_employee_details(employee_code: str, current_user=Depends(get_current_user)):
+    if not await can_view_employee(current_user["employee_code"], employee_code):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     emp = await db["Employee_details"].find_one({"EmpID": employee_code})
 
@@ -1399,6 +1487,7 @@ async def get_ope_history(employee_code: str, current_user=Depends(get_current_u
 
 # ---------- UPDATE ENTRY ----------
 @app.put("/api/ope/update/{entry_id}")
+@guard_entry_change("update")
 async def update_ope_entry(
     entry_id: str,
     update_data: dict,
@@ -1459,6 +1548,7 @@ async def update_ope_entry(
 
 # ---------- DELETE ENTRY ----------
 @app.delete("/api/ope/delete/{entry_id}")
+@guard_entry_change("delete")
 async def delete_ope_entry(
     entry_id: str,
     delete_data: dict,
@@ -2035,6 +2125,7 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
 @app.get("/api/ope/approved/{employee_code}")
 async def get_employee_approved(
     employee_code: str, 
+    stage: Optional[str] = None,
     current_user=Depends(get_current_user)
 ):
     try:
@@ -2047,13 +2138,16 @@ async def get_employee_approved(
         print(f"   Current user: {current_emp_code}")
         print(f"{'='*60}\n")
         
+        stage = _valid_stage(stage)
         is_hr = (current_emp_code == "JHS729")
         is_own_data = (current_emp_code == employee_code)
         is_manager = await db["Reporting_managers"].find_one(
             {"ReportingEmpCode": current_emp_code}
         )
         
-        if not (is_hr or is_own_data or is_manager):
+        if not (is_hr or is_own_data
+                or (is_manager and await approver_in_scope(current_emp_code, "manager", employee_code))
+                or await approver_in_scope(current_emp_code, "partner", employee_code)):
             print(f"❌ Access denied - Not HR, not own data, and not a manager")
             raise HTTPException(status_code=403, detail="Access denied")
         
@@ -2081,6 +2175,8 @@ async def get_employee_approved(
                     print(f"      Entry ID: {entry.get('_id')}, Status: '{entry_status}'")
                     
                     if entry_status == "approved":
+                        if stage and not _approved_by_stage(entry, stage):
+                            continue  # forwarded to this stage but not yet decided: stays in Pending
                         approval_remark = entry.get("approval_remark") or entry.get("remark") or ""
                         
                         approved_entries.append({
@@ -2127,6 +2223,7 @@ async def get_employee_approved(
 @app.get("/api/ope/rejected/{employee_code}")
 async def get_employee_rejected(
     employee_code: str, 
+    stage: Optional[str] = None,
     current_user=Depends(get_current_user)
 ):
     try:
@@ -2139,13 +2236,16 @@ async def get_employee_rejected(
         print(f"   Current user: {current_emp_code}")
         print(f"{'='*60}\n")
         
+        stage = _valid_stage(stage)
         is_hr = (current_emp_code == "JHS729")
         is_own_data = (current_emp_code == employee_code)
         is_manager = await db["Reporting_managers"].find_one(
             {"ReportingEmpCode": current_emp_code}
         )
         
-        if not (is_hr or is_own_data or is_manager):
+        if not (is_hr or is_own_data
+                or (is_manager and await approver_in_scope(current_emp_code, "manager", employee_code))
+                or await approver_in_scope(current_emp_code, "partner", employee_code)):
             print(f"❌ Access denied")
             raise HTTPException(status_code=403, detail="Access denied")
         
@@ -2171,6 +2271,9 @@ async def get_employee_rejected(
                 for entry in entries:
                     entry_status = entry.get("status", "").lower()
                     print(f"      Entry ID: {entry.get('_id')}, Status: '{entry_status}'")
+
+                    if stage and not _rejected_by_actor(entry, current_emp_code):
+                        continue  # rejected by someone else: not shown on this person's Reject tab
 
                     rejected_entries.append({
                         "_id": str(entry.get("_id", "")),
@@ -2330,6 +2433,7 @@ async def get_employee_rejected(
 
 
 @app.post("/api/ope/manager/reject/{employee_code}")
+@audited_action("manager", "reject")
 async def reject_employee_entries(
     employee_code: str,
     request: Request,
@@ -2537,8 +2641,18 @@ async def edit_total_amount(
         if not employee_id or not month_range or new_total is None:
             raise HTTPException(status_code=400, detail="Missing required fields")
         
+        if isinstance(new_total, bool) or not isinstance(new_total, (int, float)) or not math.isfinite(new_total):
+            raise HTTPException(status_code=400, detail="Total amount must be a finite number")
         if new_total <= 0:
             raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
+        if not is_hr:
+            _emp_key = str(employee_id).strip().upper()
+            _in_scope = (
+                (is_manager and await approver_in_scope(user_emp_code, "manager", _emp_key))
+                or (is_partner and await approver_in_scope(user_emp_code, "partner", _emp_key))
+            )
+            if not _in_scope:
+                raise HTTPException(status_code=403, detail="You are not the assigned approver for this employee")
         
         current_time = datetime.utcnow().isoformat()
         
@@ -2580,6 +2694,12 @@ async def edit_total_amount(
                 )
                 found = True
                 print(f"✅ Updated Status total: ₹{old_total} → ₹{new_total}")
+                await write_audit(
+                    employeeId=employee_id, payroll_month=month_range, action="amount_edited",
+                    submission_version=ps.get("submission_version", 1), stage=user_role,
+                    actor_id=user_emp_code, actor_name=user_name, actor_role=user_role,
+                    original_amount=ps.get("original_total", old_total), stage_amount=new_total,
+                    remark=f"Month total changed from {old_total} to {new_total}")
                 break
         
         if not found:
@@ -2646,8 +2766,12 @@ async def edit_entry_amount(
         if not entry_id or not employee_id or new_amount is None:
             raise HTTPException(status_code=400, detail="Missing required fields")
         
+        if isinstance(new_amount, bool) or not isinstance(new_amount, (int, float)) or not math.isfinite(new_amount):
+            raise HTTPException(status_code=400, detail="Amount must be a finite number")
         if new_amount <= 0:
             raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        if not is_hr and not await approver_in_scope(user_emp_code, "manager", str(employee_id).strip().upper()):
+            raise HTTPException(status_code=403, detail="You are not the assigned approver for this employee")
         
         emp = await db["Employee_details"].find_one({"EmpID": employee_id})
         if not emp:
@@ -2682,6 +2806,7 @@ async def edit_entry_amount(
                                 {"employeeId": employee_id},
                                 {"$set": {
                                     f"Data.{i}.{month_range}.{j}.amount": new_amount,
+                                    f"Data.{i}.{month_range}.{j}.original_amount": entry.get("original_amount", old_amount),
                                     f"Data.{i}.{month_range}.{j}.updated_time": current_time,
                                     f"Data.{i}.{month_range}.{j}.amount_edited_by": user_emp_code,
                                     f"Data.{i}.{month_range}.{j}.amount_edited_by_role": user_role,
@@ -2692,6 +2817,11 @@ async def edit_entry_amount(
                             updated = True
                             edited_in_active_collection = (collection_name == "OPE_data")
                             print(f"✅ Amount updated in {collection_name}: ₹{old_amount} → ₹{new_amount}")
+                            await write_audit(
+                                employeeId=employee_id, payroll_month=month_range, action="amount_edited",
+                                stage=user_role, actor_id=user_emp_code, actor_name=user_emp_code, actor_role=user_role,
+                                original_amount=entry.get("original_amount", old_amount), stage_amount=new_amount,
+                                remark=f"Entry {entry_id} amount changed from {old_amount} to {new_amount}")
                             break
                     if updated:
                         break
@@ -2755,6 +2885,7 @@ async def edit_entry_amount(
 # ==================================================
 
 @app.post("/api/ope/save-temp")
+@guarded_save
 async def save_temp_entry(
     date: str = Form(...),
     client: str = Form(...),
@@ -2808,6 +2939,10 @@ async def save_temp_entry(
                     month2 = month_map.get(parts[1], parts[1].capitalize())
                     year = parts[2]
                     return f"{month1} {year} - {month2} {year}"
+                elif len(parts) == 4:  # year-crossing period, e.g. december-january-2026-2027
+                    month1 = month_map.get(parts[0], parts[0].capitalize())
+                    month2 = month_map.get(parts[1], parts[1].capitalize())
+                    return f"{month1} {parts[2]} - {month2} {parts[3]}"
                 elif len(parts) == 2:
                     month = month_map.get(parts[0], parts[0].capitalize())
                     year = parts[1]
@@ -2818,6 +2953,9 @@ async def save_temp_entry(
                 return month_str
         
         formatted_month_range = format_month_range(month_range)
+        _month_emp = await apply_month_policy_limit(emp, formatted_month_range)
+        if _month_emp.get("OPE LIMIT") is not None:
+            actual_ope_limit = float(_month_emp["OPE LIMIT"])
         
         # Get existing temp entries for this month
         temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
@@ -3171,6 +3309,7 @@ async def delete_temp_entry(
 # SUBMIT ALL ENTRIES - COMPLETE UPDATED VERSION
 # ============================================
 @app.post("/api/ope/submit-final")
+@guarded_submit
 async def submit_final_entries(
     request: Request,
     current_user=Depends(get_current_user)
@@ -3200,6 +3339,10 @@ async def submit_final_entries(
                     month2 = month_map.get(parts[1], parts[1].capitalize())
                     year = parts[2]
                     return f"{month1} {year} - {month2} {year}"
+                elif len(parts) == 4:  # year-crossing period, e.g. december-january-2026-2027
+                    month1 = month_map.get(parts[0], parts[0].capitalize())
+                    month2 = month_map.get(parts[1], parts[1].capitalize())
+                    return f"{month1} {parts[2]} - {month2} {parts[3]}"
                 elif len(parts) == 2:
                     month = month_map.get(parts[0], parts[0].capitalize())
                     year = parts[1]
@@ -3233,6 +3376,7 @@ async def submit_final_entries(
         emp = await db["Employee_details"].find_one({"EmpID": employee_code})
         if not emp:
             raise HTTPException(status_code=404, detail="Employee details not found")
+        emp = await apply_month_policy_limit(emp, formatted_month_range)
         
         # Check if submitter is a Reporting Manager
         is_reporting_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": employee_code})
@@ -3614,6 +3758,7 @@ async def submit_final_entries(
 
 
 @app.post("/api/ope/manager/approve/{employee_code}")
+@audited_action("manager", "approve")
 async def approve_employee_entries(
     employee_code: str,
     request: Request,
@@ -3805,6 +3950,7 @@ async def get_rejected_employees_list(current_user=Depends(get_current_user)):
 
 
 @app.post("/api/ope/manager/reject-single")
+@audited_action("manager", "reject")
 async def reject_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -3975,6 +4121,7 @@ async def reject_single_entry(
     
 
 @app.post("/api/ope/manager/approve-single")
+@audited_action("manager", "approve")
 async def approve_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -4151,6 +4298,7 @@ async def approve_single_entry(
 
 
 @app.post("/api/ope/manager/reject-month")
+@audited_action("manager", "reject")
 async def manager_reject_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -4289,6 +4437,7 @@ async def manager_reject_month(
 
 
 @app.post("/api/ope/manager/approve-month")
+@audited_action("manager", "approve")
 async def manager_approve_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -4419,9 +4568,18 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         is_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": current_emp_code})
         is_partner = await db["Partner"].find_one({"PartnerEmpCode": current_emp_code})
 
-        if current_emp_code != employee_code and not is_hr and not is_manager and not is_partner:
+        if current_emp_code != employee_code and not is_hr and not (
+            (is_manager and await approver_in_scope(current_emp_code, "manager", employee_code))
+            or (is_partner and await approver_in_scope(current_emp_code, "partner", employee_code))
+        ):
             raise HTTPException(status_code=403, detail="Access denied")
         
+        if current_emp_code == employee_code:
+            try:  # restricted employee viewing own status: make sure this month's record exists
+                await ope_features.ensure_restricted_month(employee_code)
+            except Exception as _e:
+                print(f"restricted month check failed: {_e}")
+
         status_doc = await db["Status"].find_one({"employeeId": employee_code})
 
         # Employee's own OPE limit from Employee_details (shown on the Status page)
@@ -4437,6 +4595,8 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         print(f"✅ Found {len(approval_status)} payroll months")
         
         status_entries = []
+        _ope_doc_for_totals = await db["OPE_data"].find_one({"employeeId": employee_code})
+        _rej_doc_for_totals = await db["Reject_OPE_data"].find_one({"employeeId": employee_code})
         
         for ps_index, ps in enumerate(approval_status):
             print(f"\n{'─'*40}")
@@ -4547,6 +4707,8 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
                 },
                 "current_level": current_level,
                 "overall_status": overall_status,
+                "restricted": bool(ps.get("restricted")),
+                "submitted_amount": _submitted_total(ps, _ope_doc_for_totals, _rej_doc_for_totals),
                 "submission_date": ps.get("submission_date"),
                 "is_rejected": is_rejected,
                 "rejected_level": rejected_level,
@@ -4589,6 +4751,8 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
         
         return {"status_entries": status_entries, "ope_limit": emp_ope_limit}
         
+    except HTTPException as he:
+        raise he
     except Exception as e:
         print(f"\n❌❌ ERROR fetching status:")
         print(f"   {str(e)}")
@@ -4599,6 +4763,7 @@ async def get_employee_status(employee_code: str, current_user=Depends(get_curre
 # HR API
 
 @app.post("/api/ope/hr/approve/{employee_code}")
+@audited_action("hr", "approve")
 async def hr_approve_employee(
     employee_code: str,
     request: Request,
@@ -4739,6 +4904,7 @@ async def hr_approve_employee(
         raise HTTPException(status_code=500, detail=str(e))        
 
 @app.post("/api/ope/hr/reject/{employee_code}")
+@audited_action("hr", "reject")
 async def hr_reject_employee(
     employee_code: str,
     request: Request,
@@ -4882,6 +5048,7 @@ async def hr_reject_employee(
     
 
 @app.post("/api/ope/hr/reject-single")
+@audited_action("hr", "reject")
 async def hr_reject_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -5060,6 +5227,7 @@ async def hr_reject_single_entry(
 
 
 @app.post("/api/ope/hr/approve-single")
+@audited_action("hr", "approve")
 async def hr_approve_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -5224,6 +5392,7 @@ async def hr_approve_single_entry(
 
 
 @app.post("/api/ope/hr/reject-month")
+@audited_action("hr", "reject")
 async def hr_reject_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -5357,6 +5526,7 @@ async def hr_reject_month(
 
 
 @app.post("/api/ope/hr/approve-month")
+@audited_action("hr", "approve")
 async def hr_approve_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -5896,6 +6066,7 @@ async def get_partner_pending(current_user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/ope/partner/approve/{employee_code}")
+@audited_action("partner", "approve")
 async def partner_approve_employee(
     employee_code: str,
     request: Request,
@@ -6075,7 +6246,8 @@ async def partner_approve_employee(
     
 
 @app.get("/api/debug/partner-pending/{partner_code}")
-async def debug_partner_pending(partner_code: str):
+async def debug_partner_pending(partner_code: str, current_user=Depends(get_current_user)):
+    await verify_admin(current_user)
     partner_code = partner_code.strip().upper()
     
     pending = await db["Pending"].find_one({"ReportingEmpCode": partner_code})
@@ -6107,6 +6279,7 @@ async def debug_partner_pending(partner_code: str):
 
 
 @app.post("/api/ope/partner/reject/{employee_code}")
+@audited_action("partner", "reject")
 async def partner_reject_employee(
     employee_code: str,
     request: Request,
@@ -6409,7 +6582,8 @@ async def get_partner_rejected_list(current_user=Depends(get_current_user)):
     
 
 @app.get("/api/debug/check-partner-data/{employee_code}")
-async def debug_check_partner_data(employee_code: str):
+async def debug_check_partner_data(employee_code: str, current_user=Depends(get_current_user)):
+    await verify_admin(current_user)
     try:
         partner_code = employee_code.strip().upper()
         
@@ -6446,6 +6620,7 @@ async def debug_check_partner_data(employee_code: str):
 
 
 @app.post("/api/ope/partner/reject-single")
+@audited_action("partner", "reject")
 async def partner_reject_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -6663,6 +6838,7 @@ async def partner_reject_single_entry(
 
 
 @app.post("/api/ope/partner/approve-single")
+@audited_action("partner", "approve")
 async def partner_approve_single_entry(
     request: Request,
     current_user=Depends(get_current_user)
@@ -6858,6 +7034,7 @@ async def partner_approve_single_entry(
 
 
 @app.post("/api/ope/partner/reject-month")
+@audited_action("partner", "reject")
 async def partner_reject_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -7005,6 +7182,7 @@ async def partner_reject_month(
 
 
 @app.post("/api/ope/partner/approve-month")
+@audited_action("partner", "approve")
 async def partner_approve_month(
     request: Request,
     current_user=Depends(get_current_user)
@@ -8999,6 +9177,9 @@ async def export_duplicate_claims_excel(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
  
+
+# New OPE features (audit trail, submission lock/reopen, monthly uploads, HR report, detail view)
+ope_features.install(app, db, get_current_user)
 
 @app.get("/", include_in_schema=False)
 async def serve_home():

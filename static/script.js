@@ -8,6 +8,35 @@ window.allClientsList  = [];   // deduplicated clients
 // API_URL = "http://127.0.0.1:8000";
 API_URL = "";
 
+// Which approval stage the logged-in person acts at; the Approve / Reject tabs
+// ask the server for only that stage's own decisions.
+function currentApproverStage() {
+  const code = (localStorage.getItem('employee_code') || '').trim().toUpperCase();
+  if (code === 'JHS729') return 'hr';
+  return localStorage.getItem('is_partner') === 'true' ? 'partner' : 'manager';
+}
+window.currentApproverStage = currentApproverStage;
+
+// ---------- IST display helper ----------
+// The API stores timestamps in UTC (naive ISO strings such as "2026-10-18T10:15:00").
+// Parse them as UTC and always show them in Indian Standard Time, whatever the
+// viewer's device timezone is, e.g. "18 Oct 2026, 03:45 PM IST".
+function formatIST(value) {
+  if (!value) return '';
+  let s = String(value).trim();
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += 'Z';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return String(value);
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true
+  }).formatToParts(d).reduce((a, p) => (a[p.type] = p.value, a), {});
+  return `${parts.day} ${parts.month} ${parts.year}, ${parts.hour}:${parts.minute} ${String(parts.dayPeriod || '').toUpperCase()} IST`;
+}
+window.formatIST = formatIST;
+
+
+
  
 // Add CSS animations for popups
 const style = document.createElement('style');
@@ -74,6 +103,43 @@ const monthRanges = {
     display: 'September 2026 - October 2026'
   }
 };
+
+// The month list is maintained by the Admin (Admin Panel > Payroll Months). The object above is
+// only the fallback used if the server cannot be reached; on load it is replaced by the server's list.
+async function loadPayrollMonthsFromServer() {
+  const token = localStorage.getItem('access_token');
+  if (!token) return;
+  try {
+    const res = await fetch(`${API_URL}/api/ope/payroll-months`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.configured) return;
+    Object.keys(monthRanges).forEach((k) => delete monthRanges[k]);
+    data.months.forEach((m) => {
+      monthRanges[m.key] = { start: m.start, end: m.end, display: m.display };
+      if (m.submit_deadline) monthRanges[m.key].submitDeadline = m.submit_deadline;
+      if (m.approve_deadline) monthRanges[m.key].approveDeadline = m.approve_deadline;
+    });
+    const select = document.getElementById('monthRange');
+    if (select) {
+      const current = select.value;
+      select.innerHTML = '<option value="" disabled>Select Your Month</option>';
+      data.months.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m.key;
+        opt.textContent = m.display;
+        select.appendChild(opt);
+      });
+      select.value = monthRanges[current] ? current : '';
+      if (!select.value) select.selectedIndex = 0;
+    }
+    if (typeof updateSubmitDeadlineBanner === 'function') updateSubmitDeadlineBanner();
+  } catch (e) {
+    console.warn('Could not load payroll months, using built-in list', e);
+  }
+}
+window.loadPayrollMonthsFromServer = loadPayrollMonthsFromServer;
+loadPayrollMonthsFromServer();
 
 // ============================================
 // DEADLINE CONFIGURATION (informational banners only — does NOT block any action)
@@ -2606,6 +2672,9 @@ function openEntryModal(rowId) {
     const row   = document.querySelector(`tr[data-row-id="${rowId}"]`);
     if (!row) return;
 
+    // make sure the searchable Client / Project fields exist even if the project list loaded late
+    if (!window._modalClientWrap && typeof buildProjectFieldsModal === 'function') buildProjectFieldsModal();
+
     // ── NEW: always sync dropdown options with latest loaded data ────────
     if (window._modalClientWrap?._sd) {
         window._modalClientWrap._sd.setOptions(getClientOptions());
@@ -2843,52 +2912,146 @@ pdfInput.addEventListener('change', function(e) {
         }
       }
       
-      // showSuccessPopup('Entry updated successfully in the form!');
       closeEntryModal();
+      refreshDuplicateMarks();
     });
   }
 });
 
-// Copy Row Data
-function copyRow(rowId) {
+// ---------------------------------------------------------------------------
+// Copy / Paste a row, and duplicate-entry detection
+// ---------------------------------------------------------------------------
+// Copy takes everything about the row except its date and ticket PDF (each entry keeps its
+// own date). The copy stays in memory, so it can be pasted into as many other rows as needed.
+function readRowFields(rowId) {
   const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
-  if (!row) return;
-  
-  copiedRowData = {
-    client: row.querySelector(`input[name="client_${rowId}"]`).value,
-    projectid: row.querySelector(`input[name="projectid_${rowId}"]`).value,
-    projectname: row.querySelector(`input[name="projectname_${rowId}"]`).value,
-    projecttype: row.querySelector(`select[name="projecttype_${rowId}"]`).value,
-    locationfrom: row.querySelector(`input[name="locationfrom_${rowId}"]`).value,
-    locationto: row.querySelector(`input[name="locationto_${rowId}"]`).value,
-    travelmode: row.querySelector(`select[name="travelmode_${rowId}"]`).value,
-    remarks: row.querySelector(`input[name="remarks_${rowId}"]`).value
+  if (!row) return null;
+  const val = (sel) => (row.querySelector(sel)?.value || '').trim();
+  return {
+    date: val(`input[name="date_${rowId}"]`),
+    client: getDropdownValue(`client_${rowId}`) || '',
+    projectName: getDropdownValue(`projectname_${rowId}`) || '',
+    projectId: getDropdownValue(`projectid_${rowId}`) || '',
+    projectType: val(`select[name="projecttype_${rowId}"]`),
+    locationFrom: val(`input[name="locationfrom_${rowId}"]`),
+    locationTo: val(`input[name="locationto_${rowId}"]`),
+    travelMode: val(`select[name="travelmode_${rowId}"]`),
+    amount: val(`input[name="amount_${rowId}"]`),
+    remarks: val(`input[name="remarks_${rowId}"]`),
   };
-  
-  // showSuccessPopup('Row data copied!');
 }
 
-// Paste Row Data
+// Put client / project values into a row's dropdowns (hidden value + the visible text).
+function setRowDropdowns(rowId, client, projectName, projectId) {
+  const clientHidden = document.getElementById(`client_${rowId}`);
+  const clientVisible = document.querySelector(`.cell-client-${rowId} .sd-input`);
+  const nameHidden = document.getElementById(`projectname_${rowId}`);
+  const nameVisible = document.querySelector(`.cell-projectname-${rowId} .sd-input`);
+  const idInput = document.getElementById(`projectid_${rowId}`);
+  if (clientHidden) clientHidden.value = client;
+  if (clientVisible) clientVisible.value = client;
+  if (nameHidden) nameHidden.value = projectName;
+  if (nameVisible) nameVisible.value = projectName;
+  if (idInput) idInput.value = projectId;
+  // keep the project list filtered to the pasted client, like picking the client by hand
+  const cOpt = (window.allClientsList || []).find((c) => c.client_name === client || c.client_code === client);
+  const nameWrap = document.querySelector(`.cell-projectname-${rowId} .sd-wrap`);
+  if (cOpt && nameWrap && nameWrap._sd) nameWrap._sd.setOptions(getProjectOptionsForClient(cOpt.client_code));
+}
+
+function copyRow(rowId) {
+  const f = readRowFields(rowId);
+  if (!f) return;
+  copiedRowData = f;
+  document.querySelectorAll('#entryTableBody .copy-btn').forEach((b) => b.classList.remove('is-copied'));
+  const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+  const btn = row && row.querySelector('.copy-btn');
+  if (btn) {
+    btn.classList.add('is-copied');
+    const old = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+    setTimeout(() => { btn.innerHTML = old; }, 1400);
+  }
+}
+
 function pasteRow(rowId) {
   if (!copiedRowData) {
-    showErrorPopup('No data copied yet!');
+    showErrorPopup('Copy a row first, then paste it into another row.');
     return;
   }
-  
   const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
   if (!row) return;
-  
-  row.querySelector(`input[name="client_${rowId}"]`).value = copiedRowData.client;
-  row.querySelector(`input[name="projectid_${rowId}"]`).value = copiedRowData.projectid;
-  row.querySelector(`input[name="projectname_${rowId}"]`).value = copiedRowData.projectname;
-  row.querySelector(`select[name="projecttype_${rowId}"]`).value = copiedRowData.projecttype;
-  row.querySelector(`input[name="locationfrom_${rowId}"]`).value = copiedRowData.locationfrom;
-  row.querySelector(`input[name="locationto_${rowId}"]`).value = copiedRowData.locationto;
-  row.querySelector(`select[name="travelmode_${rowId}"]`).value = copiedRowData.travelmode;
-  row.querySelector(`input[name="remarks_${rowId}"]`).value = copiedRowData.remarks;
-  
-  // showSuccessPopup('Data pasted successfully!');
+  const d = copiedRowData;
+  setRowDropdowns(rowId, d.client, d.projectName, d.projectId);
+  const set = (sel, v) => { const el = row.querySelector(sel); if (el) el.value = v; };
+  set(`select[name="projecttype_${rowId}"]`, d.projectType);
+  set(`input[name="locationfrom_${rowId}"]`, d.locationFrom);
+  set(`input[name="locationto_${rowId}"]`, d.locationTo);
+  set(`select[name="travelmode_${rowId}"]`, d.travelMode);
+  set(`input[name="amount_${rowId}"]`, d.amount);
+  set(`input[name="remarks_${rowId}"]`, d.remarks);
+  const btn = row.querySelector('.paste-btn');
+  if (btn) {
+    const old = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-check"></i> Pasted';
+    setTimeout(() => { btn.innerHTML = old; }, 1400);
+  }
+  refreshDuplicateMarks();
 }
+window.copyRow = copyRow;
+window.pasteRow = pasteRow;
+
+// Two rows are the same claim when date, client, project, route, mode and amount all match.
+function rowSignature(f) {
+  const t = (v) => String(v || '').trim().toLowerCase();
+  return [t(f.date), t(f.client), t(f.projectId), t(f.projectName), t(f.projectType),
+    t(f.locationFrom), t(f.locationTo), t(f.travelMode), Number(parseFloat(f.amount) || 0).toFixed(2)].join('|');
+}
+
+// -> array of groups; each group is the 1-based row numbers that are identical to each other
+function findDuplicateRows() {
+  const rows = [...document.querySelectorAll('#entryTableBody tr')];
+  const groups = new Map();
+  rows.forEach((row, i) => {
+    const f = readRowFields(row.dataset.rowId);
+    if (!f || !f.date || !f.client || !f.projectId || !f.projectName || !f.projectType ||
+        !f.locationFrom || !f.locationTo || !f.travelMode || !(parseFloat(f.amount) > 0)) return; // incomplete rows are not compared
+    const key = rowSignature(f);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ no: i + 1, row });
+  });
+  return [...groups.values()].filter((g) => g.length > 1);
+}
+
+function refreshDuplicateMarks() {
+  document.querySelectorAll('#entryTableBody tr.dup-row').forEach((r) => { r.classList.remove('dup-row'); r.removeAttribute('title'); });
+  const groups = findDuplicateRows();
+  groups.forEach((g) => g.forEach(({ no, row }) => {
+    row.classList.add('dup-row');
+    row.title = `Duplicate: identical to row ${g.filter((x) => x.no !== no).map((x) => x.no).join(', ')}`;
+  }));
+  return groups;
+}
+
+// Returns true (and tells the user) when the table holds identical rows.
+function blockIfDuplicateRows() {
+  const groups = refreshDuplicateMarks();
+  if (!groups.length) return false;
+  const list = groups.map((g) => `rows ${g.map((x) => x.no).join(' and ')}`).join('; ');
+  showErrorPopup(`⚠️ Duplicate entries found!\n\nThese entries are identical: ${list}.\n\nChange or delete the duplicate row(s) before saving or submitting.`);
+  groups[0][0].row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+window.blockIfDuplicateRows = blockIfDuplicateRows;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const body = document.getElementById('entryTableBody');
+  if (!body) return;
+  let t;
+  const later = () => { clearTimeout(t); t = setTimeout(refreshDuplicateMarks, 250); };
+  body.addEventListener('input', later);
+  body.addEventListener('change', later);
+});
 
 // Delete Entry Row
 async function deleteEntryRow(rowId) {
@@ -3154,6 +3317,9 @@ async function saveAllEntries() {
     showErrorPopup('No entries to save!');
     return;
   }
+
+  // identical rows (saved or not) are never allowed
+  if (blockIfDuplicateRows()) return;
   
   const saveBtn = document.querySelector('.btn-primary');
   if (saveBtn) {
@@ -3554,6 +3720,8 @@ async function submitAllEntries() {
     showErrorPopup('Please save your entries first using "Save Entry" button before submitting!');
     return;
   }
+
+  if (blockIfDuplicateRows()) return;
   
   // Confirmation
   const confirmSubmit = await showConfirmPopup(
@@ -3654,6 +3822,7 @@ Your entries are now under review.`);
       
       // Reset month selection
       monthRangeSelect.value = '';
+      if (window.OPEReact) window.OPEReact.notifySubmitted();
       
     } else {
       const errorData = await response.json();
@@ -5305,6 +5474,10 @@ window.showPendingEmployeeModal = async function(employeeId) {
                               style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
                             ${totalDisplayHTML}
                         </span>
+                        <button type="button" onclick="OPEReact.openDetail('${employeeId}', '${monthRange}')"
+                                style="background: rgba(255,255,255,0.3); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-list-check"></i> Amounts &amp; Timeline
+                        </button>
                         <button onclick="editTotalAmount('${employeeId}', '${monthRange}', ${statusTotal})"
                                 style="
                                     background: rgba(255,255,255,0.3); color: white;
@@ -5689,6 +5862,22 @@ let allApproveData = [];
 //     }
 // }
 
+// One request for the whole Approve / Reject tab (was one request per employee).
+// Returns null when the server cannot answer so the caller can fall back to the old per-employee path.
+async function fetchStageEntries(kind) {
+  try {
+    const token = localStorage.getItem('access_token');
+    const res = await fetch(`${API_URL}/api/ope/stage-entries?kind=${kind}&stage=${currentApproverStage()}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data.entries) ? data.entries : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function loadApproveData(token, empCode) {
     try {
         console.log("🔍 Loading approve data for:", empCode);
@@ -5696,6 +5885,18 @@ async function loadApproveData(token, empCode) {
         document.getElementById('approveLoadingDiv').style.display = 'block';
         document.getElementById('approveTableSection').style.display = 'none';
         document.getElementById('approveNoDataDiv').style.display = 'none';
+
+        const fast = await fetchStageEntries('approved');
+        if (fast !== null) {
+            allApproveData = fast;
+            if (allApproveData.length === 0) {
+                showApproveNoData();
+            } else {
+                populateApproveMonthFilter();
+                displayApproveEmployeeTable(allApproveData);
+            }
+            return;
+        }
 
         // ✅ CHECK IF USER IS HR
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
@@ -5764,7 +5965,7 @@ async function loadApproveData(token, empCode) {
             
             try {
                 const response = await fetch(
-                    `${API_URL}/api/ope/approved/${empCodeLoop}`, 
+                    `${API_URL}/api/ope/approved/${empCodeLoop}?stage=${currentApproverStage()}`, 
                     {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }
@@ -6056,9 +6257,19 @@ window.showApprovedEmployeeModal = async function(employeeId) {
                         <i class="fas fa-calendar-alt"></i>
                         ${monthRange}
                     </h3>
-                    <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                        ${totalDisplayHTML}
-                    </span>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            ${totalDisplayHTML}
+                        </span>
+                        <button type="button" onclick="OPEReact.openDetail('${employeeId}', '${monthRange}')"
+                                style="background: rgba(255,255,255,0.3); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-list-check"></i> Amounts &amp; Timeline
+                        </button>
+                        <button type="button" onclick="tabRejectApprovedMonth('${employeeId}', '${monthRange}')"
+                                style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-ban"></i> Reject Month
+                        </button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table class="history-detail-table">
@@ -6075,6 +6286,7 @@ window.showApprovedEmployeeModal = async function(employeeId) {
                                 <th>Amount</th>
                                 <th>Approved By</th>
                                 <th>Approval Remark</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -6115,6 +6327,12 @@ window.showApprovedEmployeeModal = async function(employeeId) {
                                 <span class="remark-text">${remark.substring(0, 30)}${remark.length > 30 ? '...' : ''}</span>
                                </div>` 
                             : '<span class="no-remark">-</span>'}
+                    </td>
+                    <td>
+                        <button type="button" onclick="tabRejectApprovedEntry('${entry._id}', '${employeeId}')"
+                                style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
                     </td>
                 </tr>
             `;
@@ -6375,11 +6593,7 @@ function displayApproveTable(data) {
             <td style="color: #059669; font-weight: 600;">${approverName}</td>
             <td style="color: #6b7280; font-size: 13px;">
                 ${entry.approved_date 
-                    ? new Date(entry.approved_date).toLocaleDateString('en-IN', {
-                        day: '2-digit', 
-                        month: 'short', 
-                        year: 'numeric'
-                      })
+                    ? formatIST(entry.approved_date)
                     : '-'}
             </td>
             <td style="text-align: center;">
@@ -6505,11 +6719,7 @@ function displayApproveTable(data) {
             <td style="color: #059669; font-weight: 600;">${approverName}</td>
             <td style="color: #6b7280; font-size: 13px;">
                 ${entry.approved_date 
-                    ? new Date(entry.approved_date).toLocaleDateString('en-IN', {
-                        day: '2-digit', 
-                        month: 'short', 
-                        year: 'numeric'
-                      })
+                    ? formatIST(entry.approved_date)
                     : '-'}
             </td>
             <td style="text-align: center;">
@@ -6786,9 +6996,15 @@ function showApprovedEmployeeModal(employeeId) {
                         <i class="fas fa-calendar-alt"></i>
                         ${monthRange}
                     </h3>
-                    <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                        Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
-                    </span>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        </span>
+                        <button type="button" onclick="OPEReact.openDetail('${employeeId}', '${monthRange}')"
+                                style="background: rgba(255,255,255,0.3); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-list-check"></i> Amounts &amp; Timeline
+                        </button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse;">
@@ -7049,6 +7265,18 @@ async function loadRejectData(token, empCode) {
         document.getElementById('rejectTableSection').style.display = 'none';
         document.getElementById('rejectNoDataDiv').style.display = 'none';
 
+        const fast = await fetchStageEntries('rejected');
+        if (fast !== null) {
+            allRejectData = fast;
+            if (allRejectData.length === 0) {
+                showRejectNoData();
+            } else {
+                populateRejectMonthFilter();
+                displayRejectEmployeeTable(allRejectData);
+            }
+            return;
+        }
+
         // ✅ CHECK IF USER IS HR
         const isHR = (empCode.trim().toUpperCase() === "JHS729");
         
@@ -7114,7 +7342,7 @@ async function loadRejectData(token, empCode) {
             
             try {
                 const response = await fetch(
-                    `${API_URL}/api/ope/rejected/${empCodeLoop}`, 
+                    `${API_URL}/api/ope/rejected/${empCodeLoop}?stage=${currentApproverStage()}`, 
                     {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }
@@ -7416,6 +7644,14 @@ const totalDisplayHTML = wasEdited ? `
                                 onmouseout="this.style.background='rgba(255, 255, 255, 0.3)'; this.style.transform='translateY(0)'">
                             <i class="fas fa-edit"></i> Edit Total
                         </button>
+                        <button type="button" onclick="OPEReact.openDetail('${employeeId}', '${monthRange}')"
+                                style="background: rgba(255,255,255,0.3); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-list-check"></i> Amounts &amp; Timeline
+                        </button>
+                        <button type="button" onclick="tabApproveRejectedMonth('${employeeId}', '${monthRange}')"
+                                style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-check-double"></i> Approve Month
+                        </button>
                     </div>
                 </div>
                 <div style="overflow-x: auto;">
@@ -7471,6 +7707,10 @@ const totalDisplayHTML = wasEdited ? `
                                 onmouseover="this.style.transform='translateY(-2px)'"
                                 onmouseout="this.style.transform='translateY(0)'">
                             <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button type="button" onclick="tabApproveRejectedEntry('${entry._id}', '${employeeId}')"
+                                style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-top: 6px;">
+                            <i class="fas fa-check"></i> Approve
                         </button>
                     </td>
                     <td style="padding: 12px; font-size: 13px; color: #dc2626; font-weight: 600;">${entry.rejector_name || entry.rejected_by || '-'}</td>
@@ -7636,7 +7876,7 @@ function displayRejectTable(data) {
                     : '<span style="color: #9ca3af; font-size: 13px;">No PDF</span>'}
             </td>
             <td style="color: #dc2626; font-weight: 600;">${entry.rejected_by || '-'}</td>
-            <td style="color: #6b7280; font-size: 13px;">${entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</td>
+            <td style="color: #6b7280; font-size: 13px;">${entry.rejected_date ? formatIST(entry.rejected_date) : '-'}</td>
             <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dc2626; font-weight: 500;" title="${entry.rejection_reason || '-'}">
                 ${entry.rejection_reason || '-'}
             </td>
@@ -7758,9 +7998,15 @@ function showRejectedEmployeeModal(employeeId) {
                         <i class="fas fa-calendar-alt"></i>
                         ${monthRange}
                     </h3>
-                    <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
-                        Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
-                    </span>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <span style="background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 8px; font-weight: 600;">
+                            Total: ₹${totalAmount.toFixed(2)} | Entries: ${entries.length}
+                        </span>
+                        <button type="button" onclick="OPEReact.openDetail('${employeeId}', '${monthRange}')"
+                                style="background: rgba(255,255,255,0.3); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                            <i class="fas fa-list-check"></i> Amounts &amp; Timeline
+                        </button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse;">
@@ -8087,6 +8333,98 @@ async function approveRejectedEntry(entryId, employeeId) {
     showErrorPopup('Network error during approval');
   }
 }
+
+// ============================================
+// Approve / Reject tab actions (entry or whole month) - role aware
+// Month actions call the existing single-entry endpoints one entry at a time, so every
+// entry goes through the same server-side checks (scope, stage, level) as before.
+// ============================================
+function approverApiBase() {
+  const code = (localStorage.getItem('employee_code') || '').trim().toUpperCase();
+  if (code === 'JHS729') return `${API_URL}/api/ope/hr`;
+  return localStorage.getItem('is_partner') === 'true' ? `${API_URL}/api/ope/partner` : `${API_URL}/api/ope/manager`;
+}
+
+async function runEntryActions(kind, employeeId, entryIds, extra) {
+  const token = localStorage.getItem('access_token');
+  const url = `${approverApiBase()}/${kind === 'approve' ? 'approve-single' : 'reject-single'}`;
+  let ok = 0;
+  const failures = [];
+  for (const entryId of entryIds) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_id: entryId, employee_id: employeeId, ...extra })
+      });
+      if (res.ok) { ok++; continue; }
+      const err = await res.json().catch(() => ({}));
+      failures.push(err.detail || `Request failed (${res.status})`);
+    } catch (e) {
+      failures.push('Network error');
+    }
+  }
+  return { ok, failures };
+}
+
+async function finishTabAction(which, employeeId, verb, result, total) {
+  const token = localStorage.getItem('access_token');
+  const empCode = localStorage.getItem('employee_code');
+  document.querySelectorAll('.modal-overlay').forEach((m) => m.remove());
+  if (which === 'reject') {
+    await loadRejectData(token, empCode);
+    await loadDashboardSummary();
+  } else {
+    await loadApproveData(token, empCode);
+    await loadDashboardSummary();
+  }
+  if (result.failures.length === 0) {
+    showSuccessPopup(`${verb} ${result.ok} ${result.ok === 1 ? 'entry' : 'entries'} successfully.`);
+  } else {
+    showErrorPopup(`${verb} ${result.ok} of ${total}. ${result.failures[0]}`);
+  }
+  const stillThere = which === 'reject' ? allRejectData : allApproveData;
+  if (stillThere.some((e) => e.employee_id === employeeId)) {
+    if (which === 'reject') showRejectedEmployeeModal(employeeId);
+    else showApprovedEmployeeModal(employeeId);
+  }
+}
+
+// Reject tab: approve (override the rejection of) one entry / a whole month
+async function tabApproveRejectedEntry(entryId, employeeId) {
+  const remark = await showApproveRemarkPopup();
+  if (remark === null) return;
+  const result = await runEntryActions('approve', employeeId, [entryId], { remark });
+  await finishTabAction('reject', employeeId, 'Approved', result, 1);
+}
+async function tabApproveRejectedMonth(employeeId, monthRange) {
+  const ids = [...new Set(allRejectData.filter((e) => e.employee_id === employeeId && e.month_range === monthRange).map((e) => e._id))];
+  if (!ids.length) return;
+  const remark = await showApproveRemarkPopup();
+  if (remark === null) return;
+  const result = await runEntryActions('approve', employeeId, ids, { remark });
+  await finishTabAction('reject', employeeId, 'Approved', result, ids.length);
+}
+
+// Approve tab: reject one entry / a whole month that this stage approved
+async function tabRejectApprovedEntry(entryId, employeeId) {
+  const reason = await showRejectReasonPopup();
+  if (!reason) return;
+  const result = await runEntryActions('reject', employeeId, [entryId], { reason });
+  await finishTabAction('approve', employeeId, 'Rejected', result, 1);
+}
+async function tabRejectApprovedMonth(employeeId, monthRange) {
+  const ids = [...new Set(allApproveData.filter((e) => e.employee_id === employeeId && e.month_range === monthRange).map((e) => e._id))];
+  if (!ids.length) return;
+  const reason = await showRejectReasonPopup();
+  if (!reason) return;
+  const result = await runEntryActions('reject', employeeId, ids, { reason });
+  await finishTabAction('approve', employeeId, 'Rejected', result, ids.length);
+}
+window.tabApproveRejectedEntry = tabApproveRejectedEntry;
+window.tabApproveRejectedMonth = tabApproveRejectedMonth;
+window.tabRejectApprovedEntry = tabRejectApprovedEntry;
+window.tabRejectApprovedMonth = tabRejectApprovedMonth;
 
 function showRejectNoData() {
     document.getElementById('rejectLoadingDiv').style.display = 'none';
@@ -9356,9 +9694,7 @@ async function loadStatusData(token, empCode) {
 //         const wasEdited = entry.original_total && entry.original_total !== entry.total_amount;
 //         const editedBy = entry.last_edited_by_name || entry.last_edited_by;
 //         const editedByRole = entry.last_edited_by_role;
-//         const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
-//             day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-//         }) : null;
+//         const editedDate = entry.last_edited_date ? formatIST(entry.last_edited_date) : null;
         
 //         // Generate amount display with edit info
 //         let amountDisplay = `<span class="amount-current">₹${(entry.total_amount || 0).toFixed(2)}</span>`;
@@ -9383,9 +9719,7 @@ async function loadStatusData(token, empCode) {
 //         // Generate rejection info if rejected
 //         let rejectionHTML = '';
 //         if (isRejected) {
-//             const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
-//                 day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-//             }) : null;
+//             const rejectedDate = entry.rejected_date ? formatIST(entry.rejected_date) : null;
             
 //             rejectionHTML = `
 //                 <div class="rejection-info">
@@ -9441,12 +9775,12 @@ async function loadStatusData(token, empCode) {
 //                     ` : ''}
 //                     ${l1Status && L1.approved_date ? `
 //                         <div class="level-date">
-//                             ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             ${formatIST(L1.approved_date)}
 //                         </div>
 //                     ` : ''}
 //                     ${l1Rejected && L1.rejected_date ? `
 //                         <div class="level-date rejected">
-//                             ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             ${formatIST(L1.rejected_date)}
 //                         </div>
 //                     ` : ''}
 //                 </div>
@@ -9490,12 +9824,12 @@ async function loadStatusData(token, empCode) {
 //                     ` : ''}
 //                     ${l2Status && L2.approved_date ? `
 //                         <div class="level-date">
-//                             ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             ${formatIST(L2.approved_date)}
 //                         </div>
 //                     ` : ''}
 //                     ${l2Rejected && L2.rejected_date ? `
 //                         <div class="level-date rejected">
-//                             ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                             ${formatIST(L2.rejected_date)}
 //                         </div>
 //                     ` : ''}
 //                 </div>
@@ -9540,12 +9874,12 @@ async function loadStatusData(token, empCode) {
 //                         ` : ''}
 //                         ${l3Status && L3.approved_date ? `
 //                             <div class="level-date">
-//                                 ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                                 ${formatIST(L3.approved_date)}
 //                             </div>
 //                         ` : ''}
 //                         ${l3Rejected && L3.rejected_date ? `
 //                             <div class="level-date rejected">
-//                                 ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+//                                 ${formatIST(L3.rejected_date)}
 //                             </div>
 //                         ` : ''}
 //                     </div>
@@ -9670,9 +10004,7 @@ function displayStatusTable(data) {
         const wasEdited = entry.original_total && entry.original_total !== actualTotal;
         const editedBy = entry.last_edited_by_name || entry.last_edited_by;
         const editedByRole = entry.last_edited_by_role;
-        const editedDate = entry.last_edited_date ? new Date(entry.last_edited_date).toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-        }) : null;
+        const editedDate = entry.last_edited_date ? formatIST(entry.last_edited_date) : null;
         
         // ✅ SHOW EDIT HISTORY ONLY IF EDITED BY RM/PARTNER/HR
         let amountDisplay = `<span class="amount-current">₹${actualTotal.toFixed(2)}</span>`;
@@ -9695,9 +10027,7 @@ function displayStatusTable(data) {
         // Generate rejection info if rejected
         let rejectionHTML = '';
         if (isRejected) {
-            const rejectedDate = entry.rejected_date ? new Date(entry.rejected_date).toLocaleDateString('en-IN', {
-                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            }) : null;
+            const rejectedDate = entry.rejected_date ? formatIST(entry.rejected_date) : null;
             
             rejectionHTML = `
                 <div class="rejection-info">
@@ -9764,24 +10094,14 @@ function displayStatusTable(data) {
                             <i class="fas fa-list-ol"></i> ${l1ApprovedCount} Approved · ${l1RejectedCount} Rejected${l1PendingCount ? ` · ${l1PendingCount} Pending` : ''}
                         </div>
                     ` : ''}
-                    ${l1Rejected && L1.rejection_reason ? `
-                        <div class="level-reason" title="${L1.rejection_reason}">
-                            <i class="fas fa-comment"></i> ${L1.rejection_reason.substring(0, 20)}${L1.rejection_reason.length > 20 ? '...' : ''}
-                        </div>
-                    ` : ''}
-                    ${l1Status && !l1IsPartial && L1.approval_remark ? `
-                        <div class="level-reason" title="${L1.approval_remark}">
-                            <i class="fas fa-comment-dots"></i> ${L1.approval_remark.substring(0, 20)}${L1.approval_remark.length > 20 ? '...' : ''}
-                        </div>
-                    ` : ''}
                     ${l1Status && L1.approved_date ? `
                         <div class="level-date">
-                            ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            ${formatIST(L1.approved_date)}
                         </div>
                     ` : ''}
                     ${l1Rejected && L1.rejected_date ? `
                         <div class="level-date rejected">
-                            ${new Date(L1.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            ${formatIST(L1.rejected_date)}
                         </div>
                     ` : ''}
                 </div>
@@ -9836,24 +10156,14 @@ function displayStatusTable(data) {
                             <i class="fas fa-list-ol"></i> ${l2ApprovedCount} Approved · ${l2RejectedCount} Rejected${l2PendingCount ? ` · ${l2PendingCount} Pending` : ''}
                         </div>
                     ` : ''}
-                    ${l2Rejected && L2.rejection_reason ? `
-                        <div class="level-reason" title="${L2.rejection_reason}">
-                            <i class="fas fa-comment"></i> ${L2.rejection_reason.substring(0, 20)}${L2.rejection_reason.length > 20 ? '...' : ''}
-                        </div>
-                    ` : ''}
-                    ${l2Status && !l2IsPartial && L2.approval_remark ? `
-                        <div class="level-reason" title="${L2.approval_remark}">
-                            <i class="fas fa-comment-dots"></i> ${L2.approval_remark.substring(0, 20)}${L2.approval_remark.length > 20 ? '...' : ''}
-                        </div>
-                    ` : ''}
                     ${l2Status && L2.approved_date ? `
                         <div class="level-date">
-                            ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            ${formatIST(L2.approved_date)}
                         </div>
                     ` : ''}
                     ${l2Rejected && L2.rejected_date ? `
                         <div class="level-date rejected">
-                            ${new Date(L2.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                            ${formatIST(L2.rejected_date)}
                         </div>
                     ` : ''}
                 </div>
@@ -9909,24 +10219,14 @@ function displayStatusTable(data) {
                                 <i class="fas fa-list-ol"></i> ${l3ApprovedCount} Approved · ${l3RejectedCount} Rejected${l3PendingCount ? ` · ${l3PendingCount} Pending` : ''}
                             </div>
                         ` : ''}
-                        ${l3Rejected && L3.rejection_reason ? `
-                            <div class="level-reason" title="${L3.rejection_reason}">
-                                <i class="fas fa-comment"></i> ${L3.rejection_reason.substring(0, 20)}${L3.rejection_reason.length > 20 ? '...' : ''}
-                            </div>
-                        ` : ''}
-                        ${l3Status && !l3IsPartial && L3.approval_remark ? `
-                            <div class="level-reason" title="${L3.approval_remark}">
-                                <i class="fas fa-comment-dots"></i> ${L3.approval_remark.substring(0, 20)}${L3.approval_remark.length > 20 ? '...' : ''}
-                            </div>
-                        ` : ''}
                         ${l3Status && L3.approved_date ? `
                             <div class="level-date">
-                                ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                                ${formatIST(L3.approved_date)}
                             </div>
                         ` : ''}
                         ${l3Rejected && L3.rejected_date ? `
                             <div class="level-date rejected">
-                                ${new Date(L3.rejected_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short'})}
+                                ${formatIST(L3.rejected_date)}
                             </div>
                         ` : ''}
                     </div>
@@ -10003,83 +10303,25 @@ function displayStatusTable(data) {
                     gap: 6px;
                     box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
                 ">
-                    <i class="fas fa-clock"></i> IN PROGRESS
+                    <i class="fas fa-clock"></i> ${entry.restricted ? 'PENDING HR APPROVAL' : 'IN PROGRESS'}
                 </span>
             `;
         }
         
         row.innerHTML = `
-            <td><strong>${entry.payroll_month || '-'}</strong></td>
+            <td>
+                <strong>${entry.payroll_month || '-'}</strong>
+                ${entry.limit ? `<div style="font-size: 12px; color: #64748b; margin-top: 4px;">OPE limit for this month: ₹${Number(entry.limit).toLocaleString('en-IN')}</div>` : ''}
+                <button type="button" class="opr-detail-btn" onclick="OPEReact.openDetail('${entry.employeeId}', '${entry.payroll_month}')">
+                    <i class="fas fa-list-check"></i> Amounts &amp; timeline
+                </button>
+            </td>
             <td class="amount-column">
-                ${amountDisplay}
-                ${entry.amount_edit_history && entry.amount_edit_history.length > 1 ? `
-                    <button class="view-history-btn" onclick='showEditHistory(${JSON.stringify(entry.payroll_month)})'>
-                        <i class="fas fa-history"></i> View History
-                    </button>
-                ` : ''}
+                <span class="amount-current">₹${Number(entry.submitted_amount != null ? entry.submitted_amount : (entry.original_total != null ? entry.original_total : actualTotal)).toFixed(2)}</span>
             </td>
             <td>
                 <div class="status-badge-container">
                     ${statusBadge}
-                    <div class="status-info" style="margin-top: 8px; font-size: 12px; color: #6b7280;">
-                        Levels: <strong>${totalLevels}</strong> | 
-                        Limit: <strong>₹${Number(entry.limit ?? window.statusOpeLimit ?? 0).toFixed(0)}</strong>
-                    </div>
-                    ${isRejected && rejectionReason ? `
-                        <div class="rejection-reason-box" style="
-                            margin-top: 12px;
-                            padding: 12px;
-                            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-                            border-left: 4px solid #ef4444;
-                            border-radius: 8px;
-                            text-align: left;
-                        ">
-                            <div style="
-                                display: flex;
-                                align-items: center;
-                                gap: 8px;
-                                margin-bottom: 6px;
-                                color: #dc2626;
-                                font-weight: 600;
-                                font-size: 13px;
-                            ">
-                                <i class="fas fa-exclamation-circle"></i>
-                                <span>Rejection Reason</span>
-                            </div>
-                            <div style="
-                                color: #991b1b;
-                                font-size: 13px;
-                                line-height: 1.5;
-                                word-wrap: break-word;
-                            ">
-                                ${rejectionReason}
-                            </div>
-                            <div style="
-                                margin-top: 8px;
-                                font-size: 11px;
-                                color: #dc2626;
-                                display: flex;
-                                align-items: center;
-                                gap: 6px;
-                            ">
-                                <i class="fas fa-user"></i>
-                                <span>Rejected by: <strong>${rejectedByName || 'Unknown'}</strong> at ${rejectedLevel || 'Unknown'} level</span>
-                            </div>
-                        </div>
-                    ` : ''}
-                    ${isRejected ? `
-                        <div class="rejection-summary" style="margin-top: 10px; cursor: pointer;" 
-                             onclick='showRejectionDetails(${JSON.stringify({
-                                rejected_by: entry.rejected_by_name || entry.rejected_by,
-                                level: entry.rejected_level,
-                                date: entry.rejected_date,
-                                reason: entry.rejection_reason
-                             })})'>
-                            <span style="color: #ef4444; font-size: 12px; text-decoration: underline;">
-                                <i class="fas fa-info-circle"></i> Click for full rejection details
-                            </span>
-                        </div>
-                    ` : ''}
                 </div>
             </td>
             <td>
@@ -10119,9 +10361,7 @@ function showRejectionDetails(rejectionData) {
         animation: slideUp 0.3s ease;
     `;
 
-    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
-        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    }) : 'Unknown';
+    const rejectedDate = rejectionData.date ? formatIST(rejectionData.date) : 'Unknown';
 
     popup.innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
@@ -10271,7 +10511,7 @@ function generateStatusTracker(L1, L2, L3, currentLevel) {
                             color: ${L1.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'};
                             margin-top: 2px;
                         ">
-                            ${new Date(L1.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
+                            ${formatIST(L1.approved_date)}
                         </div>
                     ` : ''}
                 </div>
@@ -10316,7 +10556,7 @@ function generateStatusTracker(L1, L2, L3, currentLevel) {
                             color: ${L2.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'};
                             margin-top: 2px;
                         ">
-                            ${new Date(L2.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
+                            ${formatIST(L2.approved_date)}
                         </div>
                     ` : ''}
                 </div>
@@ -10361,7 +10601,7 @@ function generateStatusTracker(L1, L2, L3, currentLevel) {
                             color: ${L3.status ? 'rgba(255,255,255,0.85)' : '#94a3b8'};
                             margin-top: 2px;
                         ">
-                            ${new Date(L3.approved_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'})}
+                            ${formatIST(L3.approved_date)}
                         </div>
                     ` : ''}
                 </div>
@@ -10501,9 +10741,7 @@ function showEditHistory(payrollMonth) {
         );
 
         sortedHistory.forEach(edit => {
-            const editDate = new Date(edit.edited_date).toLocaleDateString('en-IN', {
-                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-            });
+            const editDate = formatIST(edit.edited_date);
             
             historyHTML += `
                 <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -11323,9 +11561,7 @@ function showRejectionDetails(rejectionData) {
         animation: slideUp 0.3s ease;
     `;
 
-    const rejectedDate = rejectionData.date ? new Date(rejectionData.date).toLocaleDateString('en-IN', {
-        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    }) : 'Unknown';
+    const rejectedDate = rejectionData.date ? formatIST(rejectionData.date) : 'Unknown';
 
     popup.innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">

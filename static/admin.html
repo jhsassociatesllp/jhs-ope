@@ -9,6 +9,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="react/ope-react.css?v=6">
     <style>
         * {
             margin: 0;
@@ -186,6 +187,7 @@
         /* TAB SYSTEM */
         .tab-bar {
             display: flex;
+            flex-wrap: wrap;
             gap: 4px;
             background: white;
             border-radius: 16px;
@@ -1103,20 +1105,50 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="theme.css?v=12">
 </head>
 
-<body>
+<body class="admin-page">
 
     <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
-                <i class="fas fa-shield-halved"></i>
+                <img src="jhs_logo_square.png" alt="JHS" class="brand-logo">
                 <h2>Admin Panel</h2>
             </div>
             <div class="subtitle">Control Dashboard</div>
         </div>
         <nav class="sidebar-nav">
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="dashboard">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </button>
+            <button class="tab-btn" data-tab="client-analysis">
+                <i class="fas fa-building"></i> Client-wise OPE Analysis
+            </button>
+            <!-- <button class="tab-btn" data-tab="project-analysis">
+                <i class="fas fa-project-diagram"></i> Project-wise Analysis
+            </button> -->
+            <button class="tab-btn" data-tab="advanced-analysis">
+                <i class="fas fa-magnifying-glass-chart"></i> Advanced Analysis
+            </button>
+            <button class="tab-btn" data-tab="download-reports">
+                <i class="fas fa-file-excel"></i> Download Reports
+            </button>
+            <button class="tab-btn" data-tab="payroll-months">
+                <i class="fas fa-calendar-days"></i> Payroll Months
+            </button>
+            <button class="tab-btn" data-tab="monthly-uploads">
+                <i class="fas fa-calendar-check"></i> Monthly Uploads
+            </button>
+            <button class="tab-btn" data-tab="resubmission">
+                <i class="fas fa-lock-open"></i> Resubmission Access
+            </button>
+            <button class="tab-btn" data-tab="hr-report">
+                <i class="fas fa-table-list"></i> HR Report
+            </button>
+        </div>
             <ul>
                 <li class="nav-item switch-btn" id="btnSwitchToPortal">
                     <i class="fas fa-arrow-left"></i>
@@ -1142,24 +1174,6 @@
     <!-- MAIN CONTENT -->
     <main class="main-content">
 
-        <!-- TAB BAR -->
-        <div class="tab-bar">
-            <button class="tab-btn active" data-tab="dashboard">
-                <i class="fas fa-chart-line"></i> Dashboard
-            </button>
-            <button class="tab-btn" data-tab="client-analysis">
-                <i class="fas fa-building"></i> Client-wise OPE Analysis
-            </button>
-            <!-- <button class="tab-btn" data-tab="project-analysis">
-                <i class="fas fa-project-diagram"></i> Project-wise Analysis
-            </button> -->
-            <button class="tab-btn" data-tab="advanced-analysis">
-                <i class="fas fa-magnifying-glass-chart"></i> Advanced Analysis
-            </button>
-            <button class="tab-btn" data-tab="download-reports">
-                <i class="fas fa-file-excel"></i> Download Reports
-            </button>
-        </div>
 
         <!-- ══════════════════════════════════════════
          TAB 1: DASHBOARD
@@ -1476,6 +1490,19 @@
         <!-- ══════════════════════════════════════════
          TAB 5: DOWNLOAD REPORTS
     ══════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-payroll-months">
+            <div data-ope-react="payroll-months"></div>
+        </div>
+        <div class="tab-content" id="tab-monthly-uploads">
+            <div data-ope-react="monthly-uploads"></div>
+        </div>
+        <div class="tab-content" id="tab-resubmission">
+            <div data-ope-react="access-control"></div>
+        </div>
+        <div class="tab-content" id="tab-hr-report">
+            <div data-ope-react="hr-report"></div>
+        </div>
+
         <div class="tab-content" id="tab-download-reports">
             <div class="reports-grid">
 
@@ -1586,6 +1613,7 @@
         </div>
     </div>
 
+    <script src="react/ope-react.js?v=6"></script>
     <script>
         const API_URL = '';
         let chartPartner = null, chartPayroll = null, chartClient = null;
