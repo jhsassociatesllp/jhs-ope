@@ -23,7 +23,10 @@ from ope_features import (
     audited_action, guarded_submit, guarded_save, guard_entry_change,
     apply_month_policy_limit, write_audit,
 )
-from ope_features.common import approver_in_scope, can_view_employee, find_bucket as _find_bucket, safe_num as _safe_num
+from ope_features.common import (
+    approver_in_scope, can_view_employee, employee_ope_limit,
+    find_bucket as _find_bucket, safe_num as _safe_num,
+)
 
 # Load env vars
 load_dotenv()
@@ -2915,7 +2918,7 @@ async def save_temp_entry(
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
         
-        actual_ope_limit = emp.get("OPE LIMIT")
+        actual_ope_limit = employee_ope_limit(emp)
         
         if actual_ope_limit is None:
             print(f"⚠️ OPE Limit not found in database, using default")
@@ -2954,8 +2957,8 @@ async def save_temp_entry(
         
         formatted_month_range = format_month_range(month_range)
         _month_emp = await apply_month_policy_limit(emp, formatted_month_range)
-        if _month_emp.get("OPE LIMIT") is not None:
-            actual_ope_limit = float(_month_emp["OPE LIMIT"])
+        if employee_ope_limit(_month_emp) is not None:
+            actual_ope_limit = employee_ope_limit(_month_emp)
         
         # Get existing temp entries for this month
         temp_doc = await db["Temp_OPE_data"].find_one({"employeeId": employee_code})
@@ -3482,7 +3485,7 @@ async def submit_final_entries(
             if not reporting_manager_code:
                 raise HTTPException(status_code=400, detail="No reporting manager assigned")
             
-            ope_limit = emp.get("OPE LIMIT")
+            ope_limit = employee_ope_limit(emp)
             
             if ope_limit is None:
                 ope_limit = 1500

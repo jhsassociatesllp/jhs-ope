@@ -300,3 +300,24 @@ async def test_entry_identical_to_a_submitted_one_is_refused(client, db):
     r = await save_entry(client, "EMP001", MONTH_A, 500, project="P0")   # same as the submitted P0 / 500
     assert r.status_code == 409 and "Duplicate" in r.json()["detail"]
     assert (await save_entry(client, "EMP001", MONTH_A, 501, project="P0")).status_code == 200  # different amount
+
+
+async def test_limit_is_read_from_employee_details_whatever_the_column_spelling(client, db):
+    """Employee_details in production stores the limit as 'OPE Limit' (not 'OPE LIMIT')."""
+    await db["Employee_details"].update_one({"EmpID": "EMP001"}, {"$rename": {"OPE LIMIT": "OPE Limit"}})
+    await db["Employee_details"].update_one({"EmpID": "EMP001"}, {"$set": {"OPE Limit": 2000}})
+    assert (await save_and_submit(client, "EMP001", amounts=(1000, 774))).status_code == 200   # 1774 <= 2000
+    st = await db["Status"].find_one({"employeeId": "EMP001"})
+    ps = st["approval_status"][0]
+    assert ps["limit"] == 2000 and ps["total_levels"] == 2 and ps["ope_label"] == "Less"
+    row = (await client.get("/api/ope/status/EMP001", headers=token("EMP001"))).json()
+    assert row["ope_limit"] == 2000 and row["status_entries"][0]["limit"] == 2000
+
+
+async def test_employee_ope_limit_helper_variants():
+    from ope_features.common import employee_ope_limit
+    assert employee_ope_limit({"OPE Limit": 2000}) == 2000.0
+    assert employee_ope_limit({"OPE LIMIT": "2,500"}) == 2500.0
+    assert employee_ope_limit({"ope_limit": 1800}) == 1800.0
+    assert employee_ope_limit({"OPE LIMIT": "", "OPE Limit": 900}) == 900.0
+    assert employee_ope_limit({"Name": "x"}) is None and employee_ope_limit(None) is None

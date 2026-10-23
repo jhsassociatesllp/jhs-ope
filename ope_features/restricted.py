@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
 from .common import (
-    IST, RESTRICTED, build_month_label, db, fmt_ist, is_restricted, now_utc, parse_amount,
+    IST, RESTRICTED, employee_ope_limit, build_month_label, db, fmt_ist, is_restricted, now_utc, parse_amount,
     require_admin,
 )
 from .uploads import create_fixed_submission
@@ -43,7 +43,7 @@ async def ensure_month_record(employee_id: str, month: Optional[str] = None) -> 
     amount = r.get("ope_limit")
     if amount is None:
         emp = await db()["Employee_details"].find_one({"EmpID": employee_id}) or {}
-        amount = emp.get("OPE LIMIT", emp.get("OPE Limit"))
+        amount = employee_ope_limit(emp)
     try:
         amount = parse_amount(amount, allow_zero=False)
     except ValueError:
@@ -105,7 +105,7 @@ async def upsert_restriction(actor: str, employee_id: str, ope_limit, active: bo
     emp = await db()["Employee_details"].find_one({"EmpID": employee_id})
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found in Employee Details")
-    limit = emp.get("OPE LIMIT", emp.get("OPE Limit")) if ope_limit in (None, "") else ope_limit
+    limit = employee_ope_limit(emp) if ope_limit in (None, "") else ope_limit
     try:
         limit = parse_amount(limit, allow_zero=False)
     except ValueError as ex:

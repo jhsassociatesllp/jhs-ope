@@ -164,6 +164,27 @@ async def is_restricted(employee_id: str):
     return await db()[RESTRICTED].find_one({"employee_id": str(employee_id).strip().upper(), "active": True})
 
 
+def employee_ope_limit(emp):
+    """OPE limit from an Employee_details document, whichever way the column is spelled
+    ("OPE LIMIT", "OPE Limit", "ope_limit"...). None when the employee has no usable limit."""
+    if not emp:
+        return None
+    raw = None
+    for key in ("OPE LIMIT", "OPE Limit"):
+        if emp.get(key) not in (None, ""):
+            raw = emp[key]
+            break
+    if raw is None:
+        for k, v in emp.items():
+            if str(k).strip().lower().replace("_", " ") == "ope limit" and v not in (None, ""):
+                raw = v
+                break
+    try:
+        return float(str(raw).replace(",", "").strip()) if raw is not None else None
+    except ValueError:
+        return None
+
+
 # ----------------------------------------------------------------- roles
 async def is_admin(code: str) -> bool:
     doc = await db()["Admin"].find_one({})
