@@ -159,6 +159,14 @@ Controls the **Month Range** list employees see on the OPE form.
 3. **Hide / Show** controls whether employees see the month. Hidden months keep all data and reports, but employees cannot start a new submission for them.
 Employees see the change the next time they open or refresh the portal.
 
+### 6.1c Team Reports (new) — Admin Panel → *Team Reports*
+Download OPE data **Partner wise** or **Reporting Manager wise**, with the supporting details.
+1. Choose **Partner wise** or **Reporting Manager wise**.
+2. Pick one person (or *All*), a **payroll month** (or *All months*) and optionally a **status**.
+3. The “What you will get” cards show how many employees, records, expense entries and ticket PDFs match.
+4. **Download Excel report** — three sheets: *Summary* (per partner / manager), *Employee Months* (limit, submitted and approved amounts, status, IST times, remarks) and *Entries (supporting)* (every expense entry with approver, remarks, rejection reason and the ticket file name).
+5. **Download supporting tickets (ZIP)** — the ticket PDFs in folders *Partner or Manager / Employee / Month*. Each file name matches the “Ticket file (in ZIP)” column of the Excel. One ZIP holds up to 600 tickets; pick one person or month to get more.
+
 ### 6.2 Resubmission Access and HR Report
 Same screens as HR (tabs *Resubmission Access* and *HR Report* in the Admin Panel).
 

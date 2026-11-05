@@ -9,7 +9,7 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="react/ope-react.css?v=6">
+    <link rel="stylesheet" href="react/ope-react.css?v=7">
     <style>
         * {
             margin: 0;
@@ -1105,7 +1105,7 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="theme.css?v=12">
+    <link rel="stylesheet" href="theme.css?v=14">
 </head>
 
 <body class="admin-page">
@@ -1135,6 +1135,9 @@
             </button>
             <button class="tab-btn" data-tab="download-reports">
                 <i class="fas fa-file-excel"></i> Download Reports
+            </button>
+            <button class="tab-btn" data-tab="team-reports">
+                <i class="fas fa-people-group"></i> Team Reports
             </button>
             <button class="tab-btn" data-tab="payroll-months">
                 <i class="fas fa-calendar-days"></i> Payroll Months
@@ -1490,6 +1493,9 @@
         <!-- ══════════════════════════════════════════
          TAB 5: DOWNLOAD REPORTS
     ══════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-team-reports">
+            <div data-ope-react="team-reports"></div>
+        </div>
         <div class="tab-content" id="tab-payroll-months">
             <div data-ope-react="payroll-months"></div>
         </div>
@@ -1613,7 +1619,7 @@
         </div>
     </div>
 
-    <script src="react/ope-react.js?v=6"></script>
+    <script src="react/ope-react.js?v=7"></script>
     <script>
         const API_URL = '';
         let chartPartner = null, chartPayroll = null, chartClient = null;

@@ -6,6 +6,7 @@ import AccessControl from './pages/AccessControl.jsx';
 import HrReport from './pages/HrReport.jsx';
 import MonthlyUploads from './pages/MonthlyUploads.jsx';
 import PayrollMonths from './pages/PayrollMonths.jsx';
+import TeamReports from './pages/TeamReports.jsx';
 import LockBanner from './components/LockBanner.jsx';
 import TopBar from './components/TopBar.jsx';
 import SubmissionDetail from './components/SubmissionDetail.jsx';
@@ -27,6 +28,7 @@ const PAGES = {
   'access-control': AccessControl,
   'monthly-uploads': MonthlyUploads,
   'payroll-months': PayrollMonths,
+  'team-reports': TeamReports,
   'lock-banner': LockBanner,
 };
 

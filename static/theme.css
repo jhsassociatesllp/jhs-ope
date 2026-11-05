@@ -69,7 +69,7 @@ body #navReports i { color: #6ee7f9; } body #navAccess i { color: #c9a8ff; }
 body .sidebar .tab-btn[data-tab="dashboard"] i { color: #7fb0ff; } body .sidebar .tab-btn[data-tab="client-analysis"] i { color: #6ee7a8; }
 body .sidebar .tab-btn[data-tab="advanced-analysis"] i { color: #c9a8ff; } body .sidebar .tab-btn[data-tab="download-reports"] i { color: #ffc27a; }
 body .sidebar .tab-btn[data-tab="payroll-months"] i { color: #ffd45e; } body .sidebar .tab-btn[data-tab="monthly-uploads"] i { color: #6ee7f9; }
-body .sidebar .tab-btn[data-tab="resubmission"] i { color: #ff8cc0; } body .sidebar .tab-btn[data-tab="hr-report"] i { color: #52e085; }
+body .sidebar .tab-btn[data-tab="team-reports"] i { color: #7ee0c0; } body .sidebar .tab-btn[data-tab="resubmission"] i { color: #ff8cc0; } body .sidebar .tab-btn[data-tab="hr-report"] i { color: #52e085; }
 body .nav-item.active i, body .sidebar .tab-btn.active i { color: #fff !important; }
 body .nav-item.logout { color: #ffa3af !important; }
 body .nav-item.logout i { color: #ff8796; background: rgba(255, 90, 110, .16); }
