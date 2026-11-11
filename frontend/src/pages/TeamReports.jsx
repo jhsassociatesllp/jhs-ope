@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api, download, qs } from '../api.js';
 import { inr } from '../format.js';
 import MonthSelect from '../components/MonthSelect.jsx';
@@ -9,24 +9,27 @@ const STATUSES = [['', 'All statuses'], ['approved', 'Approved'], ['pending', 'P
 
 export default function TeamReports() {
   const [groupBy, setGroupBy] = useState('partner');
-  const [person, setPerson] = useState('');
+  const [partner, setPartner] = useState('');
+  const [manager, setManager] = useState('');
   const [month, setMonth] = useState('');       // '' = all months
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
 
-  const options = useAsync(() => api(`/api/admin/team-report/options?${qs({ group_by: groupBy })}`), [groupBy]);
-  useEffect(() => { setPerson(''); }, [groupBy]);
+  // the Reporting Manager list follows the chosen Partner
+  const options = useAsync(() => api(`/api/admin/team-report/options?${qs({ group_by: groupBy, partner })}`), [groupBy, partner]);
+  const pickPartner = (v) => { setPartner(v); setManager(''); };
+  const filters = { group_by: groupBy, partner, manager, month, status };
   const preview = useAsync(
-    () => api(`/api/admin/team-report/preview?${qs({ group_by: groupBy, person, month, status })}`),
-    [groupBy, person, month, status],
+    () => api(`/api/admin/team-report/preview?${qs(filters)}`),
+    [groupBy, partner, manager, month, status],
   );
 
   const run = async (kind) => {
     setBusy(kind); setErr(''); setNote('');
     try {
-      await download(`/api/admin/team-report/${kind}?${qs({ group_by: groupBy, person, month, status })}`,
+      await download(`/api/admin/team-report/${kind}?${qs(filters)}`,
         kind === 'excel' ? 'OPE_report.xlsx' : 'OPE_tickets.zip');
       setNote(kind === 'excel' ? 'Excel report downloaded.' : 'Supporting tickets downloaded.');
     } catch (e) {
@@ -56,10 +59,19 @@ export default function TeamReports() {
           </div>
           <div className="opr-row">
             <label className="opr-field opr-grow">
-              <span>{groupBy === 'partner' ? 'Partner' : 'Reporting Manager'}</span>
-              <select value={person} onChange={(e) => setPerson(e.target.value)} disabled={options.loading}>
-                <option value="">All {groupBy === 'partner' ? 'partners' : 'reporting managers'}</option>
-                {(options.data ? options.data.people : []).map((x) => (
+              <span>Partner</span>
+              <select value={partner} onChange={(e) => pickPartner(e.target.value)}>
+                <option value="">All partners</option>
+                {(options.data ? options.data.partners : []).map((x) => (
+                  <option key={x.code} value={x.code}>{x.name} ({x.code}) · {x.employees} employees</option>
+                ))}
+              </select>
+            </label>
+            <label className="opr-field opr-grow">
+              <span>Reporting Manager</span>
+              <select value={manager} onChange={(e) => setManager(e.target.value)}>
+                <option value="">{partner ? 'All reporting managers under this partner' : 'All reporting managers'}</option>
+                {(options.data ? options.data.managers : []).map((x) => (
                   <option key={x.code} value={x.code}>{x.name} ({x.code}) · {x.employees} employees</option>
                 ))}
               </select>

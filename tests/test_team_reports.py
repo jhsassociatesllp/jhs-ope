@@ -102,3 +102,33 @@ async def test_tickets_zip_contains_files_named_like_the_excel(client, db, monke
     # no tickets attached in another selection -> clear message
     r = await get(client, "ADM01", "/api/admin/team-report/tickets", group_by="manager", person="RM002", month=LABEL_A)
     assert r.status_code == 404
+
+
+async def test_managers_list_follows_the_chosen_partner(client, db):
+    allm = (await get(client, "ADM01", "/api/admin/team-report/options", group_by="partner")).json()["managers"]
+    assert {"RM001", "RM002"} <= {x["code"] for x in allm}
+    under = (await get(client, "ADM01", "/api/admin/team-report/options", group_by="partner", partner="PT001")).json()
+    assert {"RM001", "RM002"} <= {x["code"] for x in under["managers"]}
+    assert "PT001" in {x["code"] for x in under["partners"]}
+    none = (await get(client, "ADM01", "/api/admin/team-report/options", group_by="partner", partner="PT002")).json()
+    assert none["managers"] == []
+    # a manager whose employees all belong to another partner is not offered
+    await db["Employee_details"].update_one({"EmpID": "EMP003"}, {"$set": {"PartnerEmpCode": "PT002"}})
+    p1 = (await get(client, "ADM01", "/api/admin/team-report/options", partner="PT001")).json()["managers"]
+    p2 = (await get(client, "ADM01", "/api/admin/team-report/options", partner="PT002")).json()["managers"]
+    assert "RM002" not in {x["code"] for x in p1} and {x["code"] for x in p2} == {"RM002"}
+
+
+async def test_partner_and_manager_filters_combine(client, db):
+    await seed(client, db)
+    r = await get(client, "ADM01", "/api/admin/team-report/excel", group_by="partner", partner="PT001", manager="RM002")
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    months = list(wb["Employee Months"].iter_rows(min_row=2, values_only=True))
+    assert [m[2] for m in months] == ["EMP003"]
+    assert "RM002" in r.headers["content-disposition"] and "PT001" in r.headers["content-disposition"]
+    assert "Reporting Manager: RM002" in wb["Summary"]["A2"].value
+    pv = (await get(client, "ADM01", "/api/admin/team-report/preview", group_by="partner", partner="PT001", manager="RM001")).json()
+    assert pv["employees"] == 1 and pv["records"] == 2
+    await db["Employee_details"].update_one({"EmpID": "EMP003"}, {"$set": {"PartnerEmpCode": "PT002"}})
+    assert (await get(client, "ADM01", "/api/admin/team-report/excel", group_by="partner",
+                      partner="PT001", manager="RM002")).status_code == 404

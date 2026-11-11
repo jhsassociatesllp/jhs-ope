@@ -57,10 +57,28 @@ async def group_options(group_by: str) -> list:
     return sorted(out.values(), key=lambda x: str(x["name"]).lower())
 
 
-async def collect(group_by: str, code: str, month: str, status: str) -> dict:
-    """Everything the three sheets (and the ZIP) need, built once."""
+async def manager_options(partner: str = "") -> list:
+    """Reporting Managers that have employees under `partner` (all managers when no partner is chosen)."""
+    q = {"PartnerEmpCode": partner.strip().upper()} if partner else {}
+    out = {}
+    async for e in db()["Employee_details"].find(q, {"EmpID": 1, "ReportingEmpCode": 1, "ReportingEmpName": 1}):
+        code = str(e.get("ReportingEmpCode") or "").strip().upper()
+        if not code:
+            continue
+        o = out.setdefault(code, {"code": code, "name": e.get("ReportingEmpName") or code, "employees": 0})
+        o["employees"] += 1
+    return sorted(out.values(), key=lambda x: str(x["name"]).lower())
+
+
+async def collect(group_by: str, partner: str, manager: str, month: str, status: str) -> dict:
+    """Everything the three sheets (and the ZIP) need, built once.
+    `partner` and `manager` narrow the employees; both are optional and can be combined."""
     code_f, name_f = GROUPS[group_by]
-    q = {code_f: code.strip().upper()} if code else {}
+    q = {}
+    if partner:
+        q["PartnerEmpCode"] = partner.strip().upper()
+    if manager:
+        q["ReportingEmpCode"] = manager.strip().upper()
     emps = {e["EmpID"]: e async for e in db()["Employee_details"].find(q)}
     ids = list(emps)
     status_docs, ope, rej = [], {}, {}
@@ -121,7 +139,7 @@ async def collect(group_by: str, code: str, month: str, status: str) -> dict:
     entries.sort(key=lambda r: (str(r["group_name"]).lower(), r["employee_id"], r["payroll_month"] or "",
                                 str(r["e"].get("date") or "")))
     return {"group_by": group_by, "months": months, "entries": entries, "month": month,
-            "code": code, "status": status}
+            "partner": partner, "manager": manager, "status": status}
 
 
 def summarize(data: dict) -> list:
@@ -174,8 +192,9 @@ def build_workbook(data: dict, generated_by: str) -> bytes:
     ws.title = "Summary"
     ws["A1"] = f"OPE report by {label}"
     ws["A1"].font = Font(bold=True, size=14)
-    ws["A2"] = (f"Payroll month: {data['month'] or 'All months'}   |   Status: "
-                f"{BUCKET_LABEL.get(data['status'], 'All')}   |   Generated {fmt_ist(now_utc())} by {generated_by}")
+    ws["A2"] = (f"Partner: {data['partner'] or 'All'}   |   Reporting Manager: {data['manager'] or 'All'}   |   "
+                f"Payroll month: {data['month'] or 'All months'}   |   Status: {BUCKET_LABEL.get(data['status'], 'All')}   |   "
+                f"Generated {fmt_ist(now_utc())} by {generated_by}")
     cols = [(label + " code", "code", 14), (label, "name", 30), ("Employees", "employees", 12), ("Records", "records", 10),
             ("Submitted amount (INR)", "submitted", 22), ("HR approved amount (INR)", "hr", 24),
             ("Approved", "approved", 11), ("Pending", "pending", 10), ("Rejected", "rejected", 10),
@@ -274,6 +293,21 @@ async def build_tickets_zip(data: dict) -> tuple:
     return buf.getvalue(), included, notes
 
 
+def _scope(group_by: str, person: str, partner: str, manager: str):
+    """`person` is the older single-person filter: it means a partner in partner-wise mode and a
+    reporting manager in manager-wise mode. Explicit partner / manager values win."""
+    if person and group_by == "partner" and not partner:
+        partner = person
+    if person and group_by == "manager" and not manager:
+        manager = person
+    return partner.strip().upper(), manager.strip().upper()
+
+
+def _tag(group_by: str, partner: str, manager: str, month: str, ext: str) -> str:
+    name = f"OPE_{group_by}_wise_{_clean(partner or 'all')}_{_clean(manager or 'all')}_{_clean(month or 'all_months')}.{ext}"
+    return name.replace(" ", "_")
+
+
 def build_router(get_current_user) -> APIRouter:
     r = APIRouter()
 
@@ -285,45 +319,48 @@ def build_router(get_current_user) -> APIRouter:
             raise HTTPException(status_code=400, detail="group_by must be 'partner' or 'manager'")
 
     @r.get("/api/admin/team-report/options")
-    async def options(group_by: str = Query("partner"), u=Depends(get_current_user)):
+    async def options(group_by: str = Query("partner"), partner: str = "", u=Depends(get_current_user)):
+        """Partners, plus the Reporting Managers under the chosen partner (all managers if none chosen)."""
         await require_admin(code(u))
         check(group_by)
-        return {"people": await group_options(group_by)}
+        return {"people": await group_options(group_by), "partners": await group_options("partner"),
+                "managers": await manager_options(partner)}
 
     @r.get("/api/admin/team-report/preview")
-    async def preview_ep(group_by: str = Query("partner"), person: str = "", month: str = "", status: str = "",
-                         u=Depends(get_current_user)):
+    async def preview_ep(group_by: str = Query("partner"), person: str = "", partner: str = "", manager: str = "",
+                         month: str = "", status: str = "", u=Depends(get_current_user)):
         await require_admin(code(u))
         check(group_by)
-        return preview(await collect(group_by, person, month, status))
+        p, m = _scope(group_by, person, partner, manager)
+        return preview(await collect(group_by, p, m, month, status))
 
     @r.get("/api/admin/team-report/excel")
-    async def excel(group_by: str = Query("partner"), person: str = "", month: str = "", status: str = "",
-                    u=Depends(get_current_user)):
+    async def excel(group_by: str = Query("partner"), person: str = "", partner: str = "", manager: str = "",
+                    month: str = "", status: str = "", u=Depends(get_current_user)):
         await require_admin(code(u))
         check(group_by)
-        data = await collect(group_by, person, month, status)
+        p, m = _scope(group_by, person, partner, manager)
+        data = await collect(group_by, p, m, month, status)
         if not data["months"]:
             raise HTTPException(status_code=404, detail="No records match these filters")
         blob = build_workbook(data, code(u))
-        name = f"OPE_{group_by}_wise_{_clean(person or 'all')}_{_clean(month or 'all_months')}.xlsx".replace(" ", "_")
         return StreamingResponse(
             io.BytesIO(blob), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{name}"'})
+            headers={"Content-Disposition": f'attachment; filename="{_tag(group_by, p, m, month, "xlsx")}"'})
 
     @r.get("/api/admin/team-report/tickets")
-    async def tickets(group_by: str = Query("partner"), person: str = "", month: str = "", status: str = "",
-                      u=Depends(get_current_user)):
+    async def tickets(group_by: str = Query("partner"), person: str = "", partner: str = "", manager: str = "",
+                      month: str = "", status: str = "", u=Depends(get_current_user)):
         await require_admin(code(u))
         check(group_by)
-        data = await collect(group_by, person, month, status)
+        p, m = _scope(group_by, person, partner, manager)
+        data = await collect(group_by, p, m, month, status)
         if not any(x["e"].get("ticket_pdf") for x in data["entries"]):
             raise HTTPException(status_code=404, detail="No ticket PDFs are attached to the selected entries")
         blob, included, notes = await build_tickets_zip(data)
-        name = f"OPE_tickets_{group_by}_{_clean(person or 'all')}_{_clean(month or 'all_months')}.zip".replace(" ", "_")
         return StreamingResponse(
             io.BytesIO(blob), media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{name}"', "X-Tickets-Included": str(included),
-                     "X-Tickets-Skipped": str(len(notes))})
+            headers={"Content-Disposition": f'attachment; filename="{_tag(group_by, p, m, month, "zip")}"',
+                     "X-Tickets-Included": str(included), "X-Tickets-Skipped": str(len(notes))})
 
     return r
