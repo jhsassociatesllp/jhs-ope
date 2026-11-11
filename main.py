@@ -3590,8 +3590,10 @@ async def submit_final_entries(
                 if reopened_after_completion:
                     update_fields[f"approval_status.{existing_month_index}.current_level"] = "L1"
                     update_fields[f"approval_status.{existing_month_index}.overall_status"] = "pending"
-                    if existing_current_level in ("L2", "L3"):
-                        update_fields[f"approval_status.{existing_month_index}.L1.status"] = False
+                    # the new entries have cleared no level yet: drop the flags left over from
+                    # the finished cycle so the month does not read "L1 pending" while L1/L2 show approved
+                    update_fields[f"approval_status.{existing_month_index}.L1.status"] = False
+                    update_fields[f"approval_status.{existing_month_index}.L2.status"] = False
                     print(f"🔄 Month was at '{existing_current_level}' - reopening at L1 for the newly submitted entries")
 
                 if is_reporting_manager:
