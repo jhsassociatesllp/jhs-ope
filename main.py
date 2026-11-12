@@ -3426,11 +3426,19 @@ async def submit_final_entries(
         
         # Check if submitter is a Reporting Manager
         is_reporting_manager = await db["Reporting_managers"].find_one({"ReportingEmpCode": employee_code})
-        
+
         reporting_manager_code = emp.get("ReportingEmpCode", "").strip().upper()
         reporting_manager_name = emp.get("ReportingEmpName", "")
         partner_code = emp.get("PartnerEmpCode", "").strip().upper()
         partner_name = emp.get("Partner", "")
+
+        # Someone who manages a team but themselves reports to another (non-partner)
+        # manager is still reviewed by that manager first: only a manager who reports
+        # straight to the partner (or to nobody) skips the manager level.
+        if is_reporting_manager and reporting_manager_code and reporting_manager_code != partner_code \
+                and not await db["Partner"].find_one({"PartnerEmpCode": reporting_manager_code}):
+            print(f"👥 {employee_code} manages a team but reports to {reporting_manager_code} - using the regular employee flow")
+            is_reporting_manager = None
         
         new_entries_amount = sum(float(entry.get("amount", 0)) for entry in entries_to_submit)
             
