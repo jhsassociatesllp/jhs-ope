@@ -1626,6 +1626,28 @@ async def delete_ope_entry(
                                     next_level = await advance_level_if_ready(employee_code, month_range, current_level)
                                     await route_employee_to_next_level(employee_code, month_range, next_level)
 
+                                # Nothing pending left anywhere for this employee: drop them from
+                                # their manager's Pending list, otherwise they stay listed there
+                                # (and in Status as "L1 pending") with nothing to approve.
+                                fresh = await db["OPE_data"].find_one({"employeeId": employee_code})
+                                still_pending = any(
+                                    (e.get("status") or "").lower() == "pending"
+                                    for blk in (fresh or {}).get("Data", []) for rows in blk.values() for e in rows
+                                )
+                                if not still_pending:
+                                    emp_row = await db["Employee_details"].find_one({"EmpID": employee_code}) or {}
+                                    codes = {(emp_row.get("ReportingEmpCode") or "").strip().upper()}
+                                    status_now = await db["Status"].find_one({"employeeId": employee_code}) or {}
+                                    for ps in status_now.get("approval_status", []):
+                                        if ps.get("payroll_month") == month_range and ps.get("current_level") == "L1":
+                                            codes.add(((ps.get("L1") or {}).get("approver_code") or "").strip().upper())
+                                    codes.discard("")
+                                    if codes:
+                                        await db["Pending"].update_many(
+                                            {"ReportingEmpCode": {"$in": list(codes)}},
+                                            {"$pull": {"EmployeesCodes": employee_code}}
+                                        )
+
                             deleted = True
                             break
 
@@ -2057,6 +2079,27 @@ async def get_manager_pending_employees(current_user=Depends(get_current_user)):
             ).to_list(length=None)
 
             print(f"👥 Found {len(employees)} employees under manager")
+
+            # Employees routed to this manager through the Pending collection but
+            # not (or no longer) listed under them in Employee_details - e.g. the
+            # employee's reporting manager was changed after they submitted, or
+            # they are missing from Employee_details. Without this they sit in
+            # Pending forever and the manager's screen stays blank.
+            listed_codes = {emp.get("EmpID") for emp in employees}
+            routed_doc = await db["Pending"].find_one({"ReportingEmpCode": current_emp_code})
+            extra_codes = [c for c in (routed_doc or {}).get("EmployeesCodes", []) if c and c not in listed_codes]
+            if extra_codes:
+                known = {d.get("EmpID"): d for d in await db["Employee_details"].find({"EmpID": {"$in": extra_codes}}).to_list(length=None)}
+                names = {d.get("employeeId"): d.get("employeeName") for d in await db["Status"].find(
+                    {"employeeId": {"$in": extra_codes}}, {"employeeId": 1, "employeeName": 1}).to_list(length=None)}
+                for code in extra_codes:
+                    d = known.get(code) or {}
+                    employees.append({
+                        "EmpID": code,
+                        "Emp Name": d.get("Emp Name") or names.get(code) or code,
+                        "Designation Name": d.get("Designation Name", ""),
+                    })
+                print(f"➕ {len(extra_codes)} employee(s) added from the manager's Pending list: {extra_codes}")
 
             pending_employees = []
 
