@@ -57,7 +57,8 @@ async def stage_entries(actor: str, kind: str, stage: str) -> list:
                 for month, entries in item.items():
                     for e in entries:
                         if kind == "approved":
-                            if (e.get("status") or "").lower() != "approved" or not _approved_by_stage(e, stage):
+                            direct = stage == "hr" and e.get("hr_direct_approved") and (e.get("status") or "").lower() == "pending"
+                            if not direct and ((e.get("status") or "").lower() != "approved" or not _approved_by_stage(e, stage)):
                                 continue
                             remark = e.get("approval_remark") or e.get("remark") or ""
                             row = _common(e, doc, month)

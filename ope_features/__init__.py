@@ -14,7 +14,7 @@ from pymongo.errors import ConnectionFailure
 
 import asyncio
 
-from . import access, payroll_months, restricted, stage_lists, team_reports, uploads
+from . import access, partial_pending, payroll_months, restricted, stage_lists, team_reports, uploads
 from .access import apply_month_policy_limit, guarded_save, guarded_submit  # noqa: F401  (used by main.py)
 from .audit import AUDIT, audited_action, repair_decision_lists, event_to_api, guard_entry_change, write_audit  # noqa: F401
 from .common import (
@@ -22,6 +22,7 @@ from .common import (
     require_admin, require_hr_or_admin,
 )
 from .detail import build_detail
+from .partial_pending import ensure_hr_stage, months_not_at_hr  # noqa: F401  (used by main.py)
 from .reports import BUCKETS, build_report, export_xlsx
 from .restricted import ensure_month_record as ensure_restricted_month  # noqa: F401
 
@@ -66,6 +67,7 @@ def install(app, database, get_current_user) -> None:
     app.include_router(build_router(get_current_user))
     app.include_router(restricted.build_router(get_current_user))
     app.include_router(stage_lists.build_router(get_current_user))
+    app.include_router(partial_pending.build_router(get_current_user))
     app.include_router(team_reports.build_router(get_current_user))
     app.include_router(payroll_months.build_router(get_current_user))
 

@@ -548,12 +548,23 @@ async def advance_level_if_ready(
     else:
         next_level = "Completed"
 
+    hr_key = "L3" if total_levels == 3 else "L2"
+    hr_direct = bool(ps.get("hr_direct_approved"))
+    if hr_direct and next_level == hr_key and approved_count > 0:
+        # HR already approved this month directly: finish it here, never back into HR Pending
+        next_level = "Completed"
+
     current_time = datetime.utcnow().isoformat()
     update_fields = {
         f"approval_status.{ps_index}.{level_key}.status": approved_count > 0,
         f"approval_status.{ps_index}.{level_key}.approved_date": current_time,
         f"approval_status.{ps_index}.current_level": next_level
     }
+    if hr_direct and next_level == "Completed" and level_key != hr_key:
+        update_fields[f"approval_status.{ps_index}.{hr_key}.status"] = True
+        update_fields[f"approval_status.{ps_index}.{hr_key}.approver_code"] = ps.get("hr_direct_approved_by") or "JHS729"
+        update_fields[f"approval_status.{ps_index}.{hr_key}.approver_name"] = "HR"
+        update_fields[f"approval_status.{ps_index}.{hr_key}.approved_date"] = ps.get("hr_direct_approved_date")
     if approver_code:
         update_fields[f"approval_status.{ps_index}.{level_key}.approver_code"] = approver_code
     if approver_name:
@@ -2220,7 +2231,8 @@ async def get_employee_approved(
                     entry_status = entry.get("status", "").lower()
                     print(f"      Entry ID: {entry.get('_id')}, Status: '{entry_status}'")
                     
-                    if entry_status == "approved":
+                    if entry_status == "approved" or (
+                            stage == "hr" and entry_status == "pending" and entry.get("hr_direct_approved")):
                         if stage and not _approved_by_stage(entry, stage):
                             continue  # forwarded to this stage but not yet decided: stays in Pending
                         approval_remark = entry.get("approval_remark") or entry.get("remark") or ""
@@ -4866,9 +4878,12 @@ async def hr_approve_employee(
 
         data_array = ope_doc.get("Data", [])
         payroll_months_approved = set()
+        not_at_hr = await ope_features.months_not_at_hr(employee_code)  # never bypass RM / Partner
 
         for i, data_item in enumerate(data_array):
             for month_range, entries in data_item.items():
+                if month_range in not_at_hr:
+                    continue
                 for j, entry in enumerate(entries):
                     entry_status = entry.get("status", "").lower()
 
@@ -5354,6 +5369,8 @@ async def hr_approve_single_entry(
         if not payroll_month:
             raise HTTPException(status_code=404, detail="Entry not found or not eligible for approval")
 
+        await ope_features.ensure_hr_stage(employee_id, payroll_month, "approve")
+
         status_doc = await db["Status"].find_one({"employeeId": employee_id})
         level_key = "L2"
         if status_doc:
@@ -5581,6 +5598,74 @@ async def hr_reject_month(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/ope/hr/partial-pending/reject")
+@audited_action("hr", "reject")
+async def hr_partial_pending_reject(request: Request, current_user=Depends(get_current_user)):
+    """HR rejects a submission still waiting on Reporting Manager / Partner. The month ends
+    as Rejected (entries move to Reject_OPE_data -> HR Rejected); RM / Partner can no longer act."""
+    hr_emp_code = current_user["employee_code"].strip().upper()
+    if hr_emp_code != "JHS729":
+        raise HTTPException(status_code=403, detail="Only HR can reject from Partial Pending")
+    body = await request.json()
+    employee_id = str(body.get("employee_id") or "").strip().upper()
+    month = body.get("month_range") or body.get("payroll_month")
+    reason = str(body.get("reason") or "").strip()
+    if not employee_id or not month:
+        raise HTTPException(status_code=400, detail="employee_id and month_range are required")
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="A rejection reason is required")
+
+    status_doc = await db["Status"].find_one({"employeeId": employee_id})
+    idx = next((i for i, p in enumerate((status_doc or {}).get("approval_status", []))
+                if p.get("payroll_month") == month), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    ps = status_doc["approval_status"][idx]
+    hr_key = "L3" if ps.get("total_levels", 2) == 3 else "L2"
+    cur = ps.get("current_level")
+    if cur not in ("L1", "L2", "L3") or cur == hr_key or ps.get("hr_direct_approved"):
+        raise HTTPException(status_code=409, detail="This submission is not awaiting Reporting Manager / Partner approval.")
+    approver_code = (ps.get(cur) or {}).get("approver_code")
+    now = datetime.utcnow().isoformat()
+    pre = f"approval_status.{idx}"
+    # atomic claim so two HR sessions cannot both decide it
+    claim = await db["Status"].update_one(
+        {"employeeId": employee_id, f"{pre}.payroll_month": month, f"{pre}.current_level": cur},
+        {"$set": {f"{pre}.current_level": "Completed"}})
+    if not claim.modified_count:
+        raise HTTPException(status_code=409, detail="This submission was just updated. Refresh and retry.")
+
+    ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id}) or {}
+    entry_ids = []
+    for i, item in enumerate(ope_doc.get("Data", [])):
+        for j, e in enumerate(item.get(month, [])):
+            if (e.get("status") or "").lower() in ("pending", "approved"):
+                base = f"Data.{i}.{month}.{j}"
+                await db["OPE_data"].update_one({"employeeId": employee_id}, {"$set": {
+                    f"{base}.status": "rejected", f"{base}.rejected_by": hr_emp_code,
+                    f"{base}.rejector_name": "HR", f"{base}.rejected_date": now,
+                    f"{base}.rejection_reason": reason, f"{base}.rejected_level": hr_key,
+                    f"{base}.hr_approved": False, f"{base}.hr_approved_by": None,
+                    f"{base}.hr_approved_date": None}})
+                entry_ids.append(e.get("_id"))
+    if not entry_ids:
+        await db["Status"].update_one({"employeeId": employee_id}, {"$set": {f"{pre}.current_level": cur}})
+        raise HTTPException(status_code=404, detail="No active entries found for this month")
+    await move_entries_to_rejected(employee_id, month, entry_ids)
+    await db["Status"].update_one({"employeeId": employee_id}, {"$set": {
+        f"{pre}.overall_status": "rejected", f"{pre}.rejection_reason": reason,
+        f"{pre}.rejected_level": hr_key, f"{pre}.total_amount": 0,
+        f"{pre}.{hr_key}.rejected_by": hr_emp_code, f"{pre}.{hr_key}.rejected_date": now,
+        f"{pre}.{hr_key}.rejection_reason": reason, f"{pre}.{hr_key}.rejected_count": len(entry_ids),
+        f"{pre}.{hr_key}.approved_count": 0, f"{pre}.{hr_key}.pending_count": 0}})
+    await db["HR_Rejected"].update_one({"HR_Code": hr_emp_code}, {"$addToSet": {"EmployeesCodes": employee_id}}, upsert=True)
+    # leave the approver's queue unless other months still wait on them
+    if approver_code and not await has_pending_at_approver(employee_id, approver_code):
+        await db["Pending"].update_one({"ReportingEmpCode": approver_code}, {"$pull": {"EmployeesCodes": employee_id}})
+    return {"success": True, "message": f"HR rejected {len(entry_ids)} entries for {month}",
+            "rejected_count": len(entry_ids)}
+
+
 @app.post("/api/ope/hr/approve-month")
 @audited_action("hr", "approve")
 async def hr_approve_month(
@@ -5607,6 +5692,8 @@ async def hr_approve_month(
 
         if hr_emp_code != "JHS729":
             raise HTTPException(status_code=403, detail="Only HR can perform this action")
+
+        await ope_features.ensure_hr_stage(employee_id, month_range, "approve")
 
         ope_doc = await db["OPE_data"].find_one({"employeeId": employee_id})
         if not ope_doc:

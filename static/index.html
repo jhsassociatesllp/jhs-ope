@@ -60,6 +60,10 @@
             <i class="fas fa-file-excel"></i>
             <span>HR Report</span>
           </li>
+          <li id="navPartial" class="nav-item" style="display: none">
+            <i class="fas fa-hourglass-half"></i>
+            <span>Partial Pending</span>
+          </li>
           <li id="navAccess" class="nav-item" style="display: none">
             <i class="fas fa-lock-open"></i>
             <span>Resubmission</span>
@@ -402,6 +406,11 @@
       <!-- HR Report Section (HR / Admin) -->
       <section id="reportsSection" class="content-section">
         <div data-ope-react="hr-report" data-ope-role="hr"></div>
+      </section>
+
+      <!-- Partial Pending Section (HR only) -->
+      <section id="partialSection" class="content-section">
+        <div data-ope-react="partial-pending" data-ope-role="hr"></div>
       </section>
 
       <!-- Resubmission Access Section (HR / Admin) -->

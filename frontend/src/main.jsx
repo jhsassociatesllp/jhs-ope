@@ -4,6 +4,7 @@ import './styles.css';
 import { api } from './api.js';
 import AccessControl from './pages/AccessControl.jsx';
 import HrReport from './pages/HrReport.jsx';
+import PartialPending from './pages/PartialPending.jsx';
 import MonthlyUploads from './pages/MonthlyUploads.jsx';
 import PayrollMonths from './pages/PayrollMonths.jsx';
 import TeamReports from './pages/TeamReports.jsx';
@@ -26,6 +27,7 @@ function DetailHost() {
 const PAGES = {
   'hr-report': HrReport,
   'access-control': AccessControl,
+  'partial-pending': PartialPending,
   'monthly-uploads': MonthlyUploads,
   'payroll-months': PayrollMonths,
   'team-reports': TeamReports,
@@ -66,7 +68,8 @@ async function setupPortal() {
   try {
     const roles = await api('/api/ope/my-roles');
     if (!(roles.is_hr || roles.is_admin)) return;
-    [[navReports, 'reportsSection'], [navAccess, 'accessSection']].forEach(([nav, sec]) => {
+    [[navReports, 'reportsSection'], [navAccess, 'accessSection'],
+      ...(roles.is_hr ? [[document.getElementById('navPartial'), 'partialSection']] : [])].forEach(([nav, sec]) => {
       if (!nav) return;
       nav.style.display = 'flex';
       nav.addEventListener('click', (e) => { e.preventDefault(); showSection(nav, sec); });
