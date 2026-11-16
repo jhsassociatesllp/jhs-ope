@@ -159,9 +159,15 @@ def summarize(data: dict) -> list:
 
 def preview(data: dict) -> dict:
     tickets = sum(1 for x in data["entries"] if x["e"].get("ticket_pdf"))
+    per_month = {}
+    for x in data["entries"]:
+        if x["e"].get("ticket_pdf"):
+            per_month[x["payroll_month"]] = per_month.get(x["payroll_month"], 0) + 1
+    by_month = [{"month": k, "tickets": v, "parts": -(-v // MAX_TICKETS)}
+                for k, v in sorted(per_month.items(), key=lambda kv: str(kv[0]))]
     return {"groups": len(summarize(data)), "employees": len({r["employee_id"] for r in data["months"]}),
             "records": len(data["months"]), "entries": len(data["entries"]), "tickets": tickets,
-            "ticket_limit": MAX_TICKETS,
+            "ticket_limit": MAX_TICKETS, "ticket_months": by_month,
             "submitted_amount": round(sum(safe_num(r["submitted"]) for r in data["months"]), 2)}
 
 
@@ -259,20 +265,19 @@ def build_workbook(data: dict, generated_by: str) -> bytes:
     return buf.getvalue()
 
 
-async def build_tickets_zip(data: dict) -> tuple:
+async def build_tickets_zip(data: dict, part: int = 1) -> tuple:
     """-> (zip bytes, included, skipped_notes). Files are stored as
-    <Partner|Manager>/<EmpID_Name>/<Month>/<ticket file>."""
+    <Partner|Manager>/<EmpID_Name>/<Month>/<ticket file>.
+    `part` (1-based) selects a slice of MAX_TICKETS tickets so any selection can be
+    downloaded completely, one part at a time."""
     buf = io.BytesIO()
     notes, included, total = [], 0, 0
+    with_ticket = [x for x in data["entries"] if x["e"].get("ticket_pdf")]
+    start = (max(part, 1) - 1) * MAX_TICKETS
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
-        for x in data["entries"]:
+        for x in with_ticket[start:start + MAX_TICKETS]:
             e = x["e"]
             fid = e.get("ticket_pdf")
-            if not fid:
-                continue
-            if included >= MAX_TICKETS:
-                notes.append(f"Limit of {MAX_TICKETS} tickets reached - narrow the month/person to get the rest.")
-                break
             blob = await _read_ticket(str(fid))
             if blob is None:
                 notes.append(f"Missing in storage: {x['employee_id']} {x['payroll_month']} {ticket_filename(e)}")
@@ -287,7 +292,7 @@ async def build_tickets_zip(data: dict) -> tuple:
             included += 1
         z.writestr("README.txt",
                    f"Supporting tickets - {LABEL[data['group_by']]} wise\n"
-                   f"Payroll month: {data['month'] or 'All months'}\nFiles: {included}\n\n"
+                   f"Payroll month: {data['month'] or 'All months'}\nPart: {part}\nFiles: {included}\n\n"
                    "Each file name matches the 'Ticket file (in ZIP)' column of the Excel report.\n"
                    + ("\n".join(notes) if notes else "No files were skipped."))
     return buf.getvalue(), included, notes
@@ -350,17 +355,20 @@ def build_router(get_current_user) -> APIRouter:
 
     @r.get("/api/admin/team-report/tickets")
     async def tickets(group_by: str = Query("partner"), person: str = "", partner: str = "", manager: str = "",
-                      month: str = "", status: str = "", u=Depends(get_current_user)):
+                      month: str = "", status: str = "", part: int = 1, u=Depends(get_current_user)):
         await require_admin(code(u))
         check(group_by)
         p, m = _scope(group_by, person, partner, manager)
         data = await collect(group_by, p, m, month, status)
         if not any(x["e"].get("ticket_pdf") for x in data["entries"]):
             raise HTTPException(status_code=404, detail="No ticket PDFs are attached to the selected entries")
-        blob, included, notes = await build_tickets_zip(data)
+        blob, included, notes = await build_tickets_zip(data, part)
+        fname = _tag(group_by, p, m, month, "zip")
+        if part > 1:
+            fname = fname[:-4] + f"_part{part}.zip"
         return StreamingResponse(
             io.BytesIO(blob), media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{_tag(group_by, p, m, month, "zip")}"',
+            headers={"Content-Disposition": f'attachment; filename="{fname}"',
                      "X-Tickets-Included": str(included), "X-Tickets-Skipped": str(len(notes))})
 
     return r

@@ -29,6 +29,23 @@ export default function TeamReports() {
   const run = async (kind) => {
     setBusy(kind); setErr(''); setNote('');
     try {
+      const months = (preview.data && preview.data.ticket_months) || [];
+      const parts = months.reduce((n, m) => n + m.parts, 0);
+      if (kind === 'tickets' && !month && parts > 1) {
+        // All months: download month by month (and part by part for very big months)
+        let done = 0;
+        for (const m of months) {
+          for (let part = 1; part <= m.parts; part++) {
+            done += 1;
+            setNote(`Downloading ZIP ${done} of ${parts} (${m.month})…`);
+            await download(`/api/admin/team-report/tickets?${qs({ ...filters, month: m.month, part })}`,
+              `OPE_tickets_${m.month}${part > 1 ? `_part${part}` : ''}.zip`);
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        }
+        setNote(`${parts} month-wise ZIP files downloaded (${p.tickets} tickets).`);
+        return;
+      }
       await download(`/api/admin/team-report/${kind}?${qs(filters)}`,
         kind === 'excel' ? 'OPE_report.xlsx' : 'OPE_tickets.zip');
       setNote(kind === 'excel' ? 'Excel report downloaded.' : 'Supporting tickets downloaded.');
@@ -104,9 +121,10 @@ export default function TeamReports() {
               <Stat label="Submitted amount" value={inr(p.submitted_amount)} />
             </div>
             {p.records === 0 && <Alert kind="warn">No records match these filters.</Alert>}
-            {p.tickets > p.ticket_limit && (
+            {!month && p.ticket_months && p.ticket_months.reduce((n, m) => n + m.parts, 0) > 1 && (
               <Alert kind="warn">
-                {p.tickets} tickets match, but one ZIP holds at most {p.ticket_limit}. Pick one {who} or one month to get them all.
+                {p.tickets} tickets across {p.ticket_months.length} months: they will download as separate month-wise ZIP files
+                (max {p.ticket_limit} tickets per ZIP). Allow multiple downloads if the browser asks.
               </Alert>
             )}
           </div>
