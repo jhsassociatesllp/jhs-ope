@@ -22,7 +22,7 @@ export default function HrReport() {
   }, [q]);
 
   const { loading, error, data, reload } = useAsync(
-    () => (month ? api(`/api/hr/report?${qs({ month, status, q: query, page, page_size: PAGE })}`) : Promise.resolve(null)),
+    () => api(`/api/hr/report?${qs({ month, status, q: query, page, page_size: PAGE })}`),
     [month, status, query, page],
   );
 
@@ -30,7 +30,7 @@ export default function HrReport() {
     setBusy(true);
     setDlError('');
     try {
-      await download(`/api/hr/report/export?${qs({ month })}`, 'OPE_HR_Report.xlsx');
+      await download(`/api/hr/report/export?${qs({ month, status, q: query })}`, 'OPE_HR_Report.xlsx');
     } catch (e) {
       setDlError(e.message);
     } finally {
@@ -64,11 +64,13 @@ export default function HrReport() {
 
       <Card>
         <div className="opr-row">
-          <div className="opr-grow"><MonthSelect value={month} onChange={(m) => { setMonth(m); setPage(1); }} /></div>
+          <div className="opr-grow"><MonthSelect value={month} allowAll onChange={(m) => { setMonth(m); setPage(1); }} /></div>
           <label className="opr-field opr-grow"><span>Search employee</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or ID" /></label>
           <Button variant="ghost" onClick={reload} disabled={loading}>Refresh</Button>
-          <Button onClick={exportXlsx} busy={busy} disabled={!month || !data || !s.total_records}>Download Excel</Button>
+          <Button onClick={exportXlsx} busy={busy} disabled={!data || !s || !s.total_records}>
+            {status ? `Download ${FILTERS.find((f) => f[0] === status)[1]} (Excel)` : 'Download Excel'}
+          </Button>
         </div>
         {dlError && <div style={{ marginTop: 10 }}><Alert onClose={() => setDlError('')}>{dlError}</Alert></div>}
       </Card>
@@ -109,7 +111,6 @@ export default function HrReport() {
           </Card>
         </>
       )}
-      {!month && !loading && !error && <Empty title="Select a month">Choose a payroll month to see its report.</Empty>}
     </div>
   );
 }

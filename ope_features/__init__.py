@@ -23,7 +23,7 @@ from .common import (
 )
 from .detail import build_detail
 from .partial_pending import ensure_hr_stage, months_not_at_hr  # noqa: F401  (used by main.py)
-from .reports import BUCKETS, build_report, export_xlsx
+from .reports import BUCKETS, build_report, export_xlsx, filter_report
 from .restricted import ensure_month_record as ensure_restricted_month  # noqa: F401
 
 log = logging.getLogger("ope")
@@ -184,10 +184,10 @@ def build_router(get_current_user) -> APIRouter:
     # ------------------------------------------------------------ report
     async def _report(month: str, u) -> dict:
         await require_hr_or_admin(code(u))
-        return await build_report(normalize_month(month))
+        return await build_report(normalize_month(month) if month else "")
 
     @r.get("/api/hr/report")
-    async def hr_report(month: str = Query(...), status: Optional[str] = None, q: str = "",
+    async def hr_report(month: str = "", status: Optional[str] = None, q: str = "",
                         page: int = 1, page_size: int = 25, u=Depends(get_current_user)):
         rep = await _report(month, u)
         rows = rep["rows"]
@@ -202,10 +202,13 @@ def build_router(get_current_user) -> APIRouter:
                 "generated_at_ist": fmt_ist(now_utc())}
 
     @r.get("/api/hr/report/export")
-    async def hr_report_export(month: str = Query(...), u=Depends(get_current_user)):
-        rep = await _report(month, u)
+    async def hr_report_export(month: str = "", status: Optional[str] = None, q: str = "",
+                               u=Depends(get_current_user)):
+        rep = filter_report(await _report(month, u), status, q)
         data = export_xlsx(rep, code(u))
         slug = re.sub(r"[^A-Za-z0-9]+", "_", rep["summary"]["payroll_month"]).strip("_")
+        if rep["status_filter"]:
+            slug += "_" + rep["status_filter"]
         await write_audit(employeeId="*", payroll_month=rep["summary"]["payroll_month"], action="report_exported",
                           stage="Report", actor_id=code(u), actor_name=code(u), actor_role="HR/Admin",
                           remark=f"{rep['summary']['total_records']} records")
