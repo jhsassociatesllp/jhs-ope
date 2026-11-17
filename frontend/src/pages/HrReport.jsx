@@ -10,6 +10,7 @@ const FILTERS = [['', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], 
 export default function HrReport() {
   const [month, setMonth] = useState('');
   const [status, setStatus] = useState('');
+  const [partner, setPartner] = useState('');
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -22,15 +23,15 @@ export default function HrReport() {
   }, [q]);
 
   const { loading, error, data, reload } = useAsync(
-    () => api(`/api/hr/report?${qs({ month, status, q: query, page, page_size: PAGE })}`),
-    [month, status, query, page],
+    () => api(`/api/hr/report?${qs({ month, status, partner, q: query, page, page_size: PAGE })}`),
+    [month, status, partner, query, page],
   );
 
   const exportXlsx = async () => {
     setBusy(true);
     setDlError('');
     try {
-      await download(`/api/hr/report/export?${qs({ month, status, q: query })}`, 'OPE_HR_Report.xlsx');
+      await download(`/api/hr/report/export?${qs({ month, status, partner, q: query })}`, 'OPE_HR_Report.xlsx');
     } catch (e) {
       setDlError(e.message);
     } finally {
@@ -65,6 +66,14 @@ export default function HrReport() {
       <Card>
         <div className="opr-row">
           <div className="opr-grow"><MonthSelect value={month} allowAll onChange={(m) => { setMonth(m); setPage(1); }} /></div>
+          <label className="opr-field opr-grow"><span>Partner</span>
+            <select value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}>
+              <option value="">All partners</option>
+              {((data && data.partners) || []).map((x) => (
+                <option key={x.code} value={x.code}>{x.name} ({x.code}) · {x.records} records</option>
+              ))}
+            </select>
+          </label>
           <label className="opr-field opr-grow"><span>Search employee</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or ID" /></label>
           <Button variant="ghost" onClick={reload} disabled={loading}>Refresh</Button>

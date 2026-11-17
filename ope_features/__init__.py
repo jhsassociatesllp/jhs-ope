@@ -23,7 +23,7 @@ from .common import (
 )
 from .detail import build_detail
 from .partial_pending import ensure_hr_stage, months_not_at_hr  # noqa: F401  (used by main.py)
-from .reports import BUCKETS, build_report, export_xlsx, filter_report
+from .reports import BUCKETS, build_report, export_xlsx, filter_report, partner_list
 from .restricted import ensure_month_record as ensure_restricted_month  # noqa: F401
 
 log = logging.getLogger("ope")
@@ -187,9 +187,11 @@ def build_router(get_current_user) -> APIRouter:
         return await build_report(normalize_month(month) if month else "")
 
     @r.get("/api/hr/report")
-    async def hr_report(month: str = "", status: Optional[str] = None, q: str = "",
+    async def hr_report(month: str = "", status: Optional[str] = None, q: str = "", partner: str = "",
                         page: int = 1, page_size: int = 25, u=Depends(get_current_user)):
         rep = await _report(month, u)
+        partners = partner_list(rep)
+        rep = filter_report(rep, None, "", partner)   # partner scopes the counts; status/search narrow the table
         rows = rep["rows"]
         if status in BUCKETS:
             rows = [x for x in rows if x["status"] == status]
@@ -197,16 +199,18 @@ def build_router(get_current_user) -> APIRouter:
             ql = q.lower()
             rows = [x for x in rows if ql in x["employee_id"].lower() or ql in (x["employee_name"] or "").lower()]
         page, page_size = max(1, page), min(max(1, page_size), 200)
-        return {"summary": rep["summary"], "rows": rows[(page - 1) * page_size: page * page_size],
+        return {"summary": rep["summary"], "partners": partners, "rows": rows[(page - 1) * page_size: page * page_size],
                 "total_rows": len(rows), "page": page, "page_size": page_size,
                 "generated_at_ist": fmt_ist(now_utc())}
 
     @r.get("/api/hr/report/export")
-    async def hr_report_export(month: str = "", status: Optional[str] = None, q: str = "",
+    async def hr_report_export(month: str = "", status: Optional[str] = None, q: str = "", partner: str = "",
                                u=Depends(get_current_user)):
-        rep = filter_report(await _report(month, u), status, q)
+        rep = filter_report(await _report(month, u), status, q, partner)
         data = export_xlsx(rep, code(u))
         slug = re.sub(r"[^A-Za-z0-9]+", "_", rep["summary"]["payroll_month"]).strip("_")
+        if rep["partner_filter"]:
+            slug += "_" + re.sub(r"[^A-Za-z0-9]+", "_", rep["partner_filter"]).strip("_")
         if rep["status_filter"]:
             slug += "_" + rep["status_filter"]
         await write_audit(employeeId="*", payroll_month=rep["summary"]["payroll_month"], action="report_exported",

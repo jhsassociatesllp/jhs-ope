@@ -40,6 +40,12 @@ async def build_report(month: str = "") -> dict:
         async for x in d["Reject_OPE_data"].find({"employeeId": {"$in": chunk}}):
             rej[x["employeeId"]] = x
 
+    emps = {}
+    for i in range(0, len(ids), 500):
+        async for e in d["Employee_details"].find({"EmpID": {"$in": ids[i:i + 500]}},
+                                                  {"EmpID": 1, "PartnerEmpCode": 1, "Partner": 1}):
+            emps[e["EmpID"]] = e
+
     rows, entries = [], []
     pairs = [(s, ps) for s in status_docs for ps in s.get("approval_status", [])
              if all_months or ps.get("payroll_month") == month]
@@ -74,10 +80,14 @@ async def build_report(month: str = "") -> dict:
                 remarks.append(f"{info.get('level_name')}: {info['approval_remark']}")
         for where, bucket in (("Active", active), ("Rejected", rejected)):
             for e in bucket:
-                entries.append({"employee_id": eid, "payroll_month": month, "where": where, "e": e,
+                entries.append({"employee_id": eid, "payroll_month": month, "partner_name": "", "where": where, "e": e,
                                 "employee_name": s.get("employeeName") or ""})
+        emp = emps.get(eid) or {}
+        pcode = str(emp.get("PartnerEmpCode") or "").strip().upper() or "UNASSIGNED"
+        pname = emp.get("Partner") or "Unassigned"
         rows.append({
             "employee_id": eid,
+            "partner_code": pcode, "partner_name": pname,
             "employee_name": s.get("employeeName") or (ope.get(eid) or {}).get("employeeName") or "",
             "payroll_month": month,
             "submission_version": ps.get("submission_version", 1),
@@ -99,6 +109,9 @@ async def build_report(month: str = "") -> dict:
             "fixed_amount": bool(ps.get("fixed_amount")),
             "restricted": bool(ps.get("restricted")),
         })
+    pn = {r["employee_id"]: r["partner_name"] for r in rows}
+    for x in entries:
+        x["partner_name"] = pn.get(x["employee_id"], "")
     rows.sort(key=lambda r: (r["payroll_month"] or "", r["employee_id"]))
 
     counts = {b: 0 for b in BUCKETS}
@@ -124,10 +137,20 @@ async def build_report(month: str = "") -> dict:
     return {"summary": summary, "rows": rows, "entries": entries}
 
 
-def filter_report(rep: dict, status: Optional[str] = None, q: str = "") -> dict:
+def partner_list(rep: dict) -> list:
+    out = {}
+    for r in rep["rows"]:
+        o = out.setdefault(r["partner_code"], {"code": r["partner_code"], "name": r["partner_name"], "records": 0})
+        o["records"] += 1
+    return sorted(out.values(), key=lambda x: str(x["name"]).lower())
+
+
+def filter_report(rep: dict, status: Optional[str] = None, q: str = "", partner: str = "") -> dict:
     """Narrow a report to a status bucket / search text and recompute the summary so
     the screen and the Excel export agree."""
     rows = rep["rows"]
+    if partner:
+        rows = [x for x in rows if x["partner_code"] == partner.strip().upper()]
     if status in BUCKETS:
         rows = [x for x in rows if x["status"] == status]
     if q:
@@ -141,7 +164,8 @@ def filter_report(rep: dict, status: Optional[str] = None, q: str = "") -> dict:
               "total_hr_approved_amount": round(sum(safe_num(x["hr_approved_amount"]) for x in rows), 2)})
     return {"summary": s, "rows": rows,
             "entries": [e for e in rep.get("entries", []) if (e["employee_id"], e["payroll_month"]) in keys],
-            "status_filter": status if status in BUCKETS else ""}
+            "status_filter": status if status in BUCKETS else "",
+            "partner_filter": (rows[0]["partner_name"] if partner and rows else "")}
 
 
 def _safe(v):
@@ -163,7 +187,8 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
     head_fill = PatternFill("solid", fgColor="1F3A5F")
     head_font = Font(bold=True, color="FFFFFF")
     sf = BUCKET_LABEL.get(report.get("status_filter"), "All statuses")
-    ws["A1"] = f"OPE HR Report - {s['payroll_month']} - {sf}"
+    ws["A1"] = (f"OPE HR Report - {s['payroll_month']} - {sf}"
+                + (f" - Partner: {report['partner_filter']}" if report.get("partner_filter") else ""))
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = f"Generated {fmt_ist(now_utc())} by {generated_by}"
     lines = [("Total records", s["total_records"]), ("Total employees", s["total_employees"])]
@@ -181,7 +206,8 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
     ws.column_dimensions["B"].width = 18
 
     ws2 = wb.create_sheet("Records")
-    cols = [("Employee ID", "employee_id"), ("Employee Name", "employee_name"), ("Payroll Month", "payroll_month"),
+    cols = [("Partner", "partner_name"), ("Employee ID", "employee_id"), ("Employee Name", "employee_name"),
+            ("Payroll Month", "payroll_month"),
             ("Version", "submission_version"), ("OPE Limit (INR)", "ope_limit"),
             ("Submitted Amount (INR)", "submitted_amount"), ("Current Total (INR)", "current_total"),
             ("Reporting Manager Approved (INR)", "rm_approved_amount"),
@@ -198,11 +224,11 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
         for ci, (_t, key) in enumerate(cols, start=1):
             v = r.get(key)
             ws2.cell(row=ri, column=ci, value=_safe(v) if v is not None else ("Not reviewed" if "approved" in key.lower() and key.endswith("amount") else None))
-    ws2.freeze_panes = "C2"
+    ws2.freeze_panes = "D2"
     ws2.auto_filter.ref = ws2.dimensions
 
     ws3 = wb.create_sheet("Entries")
-    ecols = [("Employee ID", 13), ("Employee Name", 26), ("Payroll Month", 26), ("Date", 12), ("Client", 22),
+    ecols = [("Partner", 24), ("Employee ID", 13), ("Employee Name", 26), ("Payroll Month", 26), ("Date", 12), ("Client", 22),
              ("Project ID", 14), ("Project Name", 24), ("From", 16), ("To", 16), ("Mode", 16),
              ("Submitted (INR)", 15), ("Approved/Current (INR)", 20), ("Entry Status", 14),
              ("Approved By", 22), ("Approval Remark", 28), ("Rejected By", 22), ("Rejection Reason", 30), ("Remarks", 28)]
@@ -212,7 +238,7 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
         ws3.column_dimensions[get_column_letter(ci)].width = w
     for ri, x in enumerate(report.get("entries", []), start=2):
         e = x["e"]
-        vals = [x["employee_id"], x["employee_name"], x["payroll_month"], e.get("date"), e.get("client"),
+        vals = [x.get("partner_name"), x["employee_id"], x["employee_name"], x["payroll_month"], e.get("date"), e.get("client"),
                 e.get("project_id"), e.get("project_name"), e.get("location_from"), e.get("location_to"),
                 e.get("travel_mode"), safe_num(e.get("original_amount", e.get("amount"))), safe_num(e.get("amount")),
                 "Rejected" if x["where"] == "Rejected" else (e.get("status") or "").capitalize(),
@@ -220,7 +246,7 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
                 e.get("rejector_name") or e.get("rejected_by"), e.get("rejection_reason"), e.get("remarks")]
         for ci, v in enumerate(vals, start=1):
             ws3.cell(row=ri, column=ci, value=_safe(v) if isinstance(v, str) else v)
-    ws3.freeze_panes = "C2"
+    ws3.freeze_panes = "D2"
     ws3.auto_filter.ref = ws3.dimensions
     buf = io.BytesIO()
     wb.save(buf)
