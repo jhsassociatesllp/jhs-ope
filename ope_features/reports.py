@@ -65,12 +65,22 @@ async def build_report(month: str = "") -> dict:
             lvl = by_name.get(name)
             return sa.get(lvl, {}).get("approved_amount") if lvl else None
 
+        # HR decisions are always written on the entries (even when the Status HR level is
+        # still empty, e.g. HR approved while RM/Partner is pending) - use them as a fallback.
+        hr_ents = [e for e in active if e.get("hr_approved")]
+        hr_rej_ents = [e for e in rejected if (e.get("rejector_name") == "HR" or e.get("hr_rejected_by"))]
+        ent_dates = [to_utc(e.get("hr_approved_date")) for e in hr_ents] +                     [to_utc(e.get("rejected_date")) for e in hr_rej_ents]
+        ent_dates = [x for x in ent_dates if x]
+        ent_hr_when = max(ent_dates) if ent_dates else None
+
         def when(name):
             lvl = by_name.get(name)
             d_ = _decided(ps.get(lvl)) if lvl else None
-            if name == "HR" and ps.get("hr_direct_approved_date"):
-                # HR approved early (Partial Pending): always show HR's own decision time
-                d_ = to_utc(ps.get("hr_direct_approved_date")) or d_
+            if name == "HR":
+                if ps.get("hr_direct_approved_date"):
+                    # HR approved early (Partial Pending): always show HR's own decision time
+                    d_ = to_utc(ps.get("hr_direct_approved_date")) or d_
+                d_ = d_ or ent_hr_when
             return fmt_ist(d_)
 
         status = ps.get("overall_status") or "pending"
@@ -86,13 +96,25 @@ async def build_report(month: str = "") -> dict:
         hr_remark = ""
         if ps.get("hr_direct_approved"):
             hr_remark = ps.get("hr_direct_remark") or "Approved by HR"
-            if not any(r.startswith("HR") for r in remarks):
-                remarks.append(f"HR (Partial Approve): {hr_remark}")
         else:
             for l in ("L1", "L2", "L3"):
                 info = ps.get(l) or {}
                 if info.get("level_name") == "HR":
                     hr_remark = info.get("rejection_reason") or info.get("approval_remark") or ""
+        if not hr_remark:
+            texts = []
+            for e in hr_ents:
+                t = e.get("hr_approval_remark") or (e.get("approval_remark") if e.get("approver_name") == "HR" else "")
+                if t:
+                    texts.append(str(t))
+            for e in hr_rej_ents:
+                if e.get("rejection_reason"):
+                    texts.append("Rejected: " + str(e["rejection_reason"]))
+            hr_remark = " | ".join(dict.fromkeys(texts))
+        if not hr_remark and (hr_ents or ent_hr_when):
+            hr_remark = "Approved by HR"
+        if hr_remark and not any(r.startswith("HR") for r in remarks):
+            remarks.append(f"HR: {hr_remark}")
         for where, bucket in (("Active", active), ("Rejected", rejected)):
             for e in bucket:
                 entries.append({"employee_id": eid, "payroll_month": month, "partner_name": "", "where": where, "e": e,
