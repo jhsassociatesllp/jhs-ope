@@ -5,12 +5,13 @@ import MonthSelect from '../components/MonthSelect.jsx';
 import { Alert, Badge, Button, Card, DataTable, Empty, Pagination, Spinner, Stat, useAsync } from '../components/ui.jsx';
 
 const PAGE = 25;
-const FILTERS = [['', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['partial', 'Partial']];
+const FILTERS = [['', 'All'], ['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['partial', 'Partial'], ['hr_direct', 'HR direct approved']];
 
 export default function HrReport() {
   const [month, setMonth] = useState('');
   const [status, setStatus] = useState('');
   const [partner, setPartner] = useState('');
+  const [manager, setManager] = useState('');
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -23,15 +24,15 @@ export default function HrReport() {
   }, [q]);
 
   const { loading, error, data, reload } = useAsync(
-    () => api(`/api/hr/report?${qs({ month, status, partner, q: query, page, page_size: PAGE })}`),
-    [month, status, partner, query, page],
+    () => api(`/api/hr/report?${qs({ month, status, partner, manager, q: query, page, page_size: PAGE })}`),
+    [month, status, partner, manager, query, page],
   );
 
-  const exportXlsx = async () => {
+  const exportXlsx = async (statusOverride) => {
     setBusy(true);
     setDlError('');
     try {
-      await download(`/api/hr/report/export?${qs({ month, status, partner, q: query })}`, 'OPE_HR_Report.xlsx');
+      await download(`/api/hr/report/export?${qs({ month, status: statusOverride === undefined ? status : statusOverride, partner, manager, q: query })}`, 'OPE_HR_Report.xlsx');
     } catch (e) {
       setDlError(e.message);
     } finally {
@@ -67,9 +68,17 @@ export default function HrReport() {
         <div className="opr-row">
           <div className="opr-grow"><MonthSelect value={month} allowAll onChange={(m) => { setMonth(m); setPage(1); }} /></div>
           <label className="opr-field opr-grow"><span>Partner</span>
-            <select value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}>
+            <select value={partner} onChange={(e) => { setPartner(e.target.value); setManager(''); setPage(1); }}>
               <option value="">All partners</option>
               {((data && data.partners) || []).map((x) => (
+                <option key={x.code} value={x.code}>{x.name} ({x.code}) · {x.records} records</option>
+              ))}
+            </select>
+          </label>
+          <label className="opr-field opr-grow"><span>Reporting Manager</span>
+            <select value={manager} onChange={(e) => { setManager(e.target.value); setPage(1); }}>
+              <option value="">All reporting managers</option>
+              {((data && data.managers) || []).map((x) => (
                 <option key={x.code} value={x.code}>{x.name} ({x.code}) · {x.records} records</option>
               ))}
             </select>
@@ -77,8 +86,12 @@ export default function HrReport() {
           <label className="opr-field opr-grow"><span>Search employee</span>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or ID" /></label>
           <Button variant="ghost" onClick={reload} disabled={loading}>Refresh</Button>
-          <Button onClick={exportXlsx} busy={busy} disabled={!data || !s || !s.total_records}>
+          <Button onClick={() => exportXlsx()} busy={busy} disabled={!data || !s || !s.total_records}>
             {status ? `Download ${FILTERS.find((f) => f[0] === status)[1]} (Excel)` : 'Download Excel'}
+          </Button>
+          <Button variant="ok" onClick={() => exportXlsx('hr_direct')} busy={busy}
+            disabled={!data || !data.hr_direct_count}>
+            Download HR direct approved (Excel){data && data.hr_direct_count ? ` · ${data.hr_direct_count}` : ''}
           </Button>
         </div>
         {dlError && <div style={{ marginTop: 10 }}><Alert onClose={() => setDlError('')}>{dlError}</Alert></div>}

@@ -23,7 +23,7 @@ from .common import (
 )
 from .detail import build_detail
 from .partial_pending import ensure_hr_stage, months_not_at_hr  # noqa: F401  (used by main.py)
-from .reports import BUCKETS, build_report, export_xlsx, filter_report, partner_list
+from .reports import BUCKETS, build_report, export_xlsx, filter_report, manager_list, match_status, partner_list
 from .restricted import ensure_month_record as ensure_restricted_month  # noqa: F401
 
 log = logging.getLogger("ope")
@@ -188,29 +188,31 @@ def build_router(get_current_user) -> APIRouter:
 
     @r.get("/api/hr/report")
     async def hr_report(month: str = "", status: Optional[str] = None, q: str = "", partner: str = "",
-                        page: int = 1, page_size: int = 25, u=Depends(get_current_user)):
+                        manager: str = "", page: int = 1, page_size: int = 25, u=Depends(get_current_user)):
         rep = await _report(month, u)
         partners = partner_list(rep)
-        rep = filter_report(rep, None, "", partner)   # partner scopes the counts; status/search narrow the table
-        rows = rep["rows"]
-        if status in BUCKETS:
-            rows = [x for x in rows if x["status"] == status]
+        managers = manager_list(filter_report(rep, None, "", partner))
+        rep = filter_report(rep, None, "", partner, manager)   # partner/manager scope the counts; status/search narrow the table
+        rows = [x for x in rep["rows"] if match_status(x, status)]
         if q:
             ql = q.lower()
             rows = [x for x in rows if ql in x["employee_id"].lower() or ql in (x["employee_name"] or "").lower()]
         page, page_size = max(1, page), min(max(1, page_size), 200)
-        return {"summary": rep["summary"], "partners": partners, "rows": rows[(page - 1) * page_size: page * page_size],
+        return {"summary": rep["summary"], "partners": partners, "managers": managers,
+                "hr_direct_count": sum(1 for x in rep["rows"] if x.get("hr_direct")), "rows": rows[(page - 1) * page_size: page * page_size],
                 "total_rows": len(rows), "page": page, "page_size": page_size,
                 "generated_at_ist": fmt_ist(now_utc())}
 
     @r.get("/api/hr/report/export")
     async def hr_report_export(month: str = "", status: Optional[str] = None, q: str = "", partner: str = "",
-                               u=Depends(get_current_user)):
-        rep = filter_report(await _report(month, u), status, q, partner)
+                               manager: str = "", u=Depends(get_current_user)):
+        rep = filter_report(await _report(month, u), status, q, partner, manager)
         data = export_xlsx(rep, code(u))
         slug = re.sub(r"[^A-Za-z0-9]+", "_", rep["summary"]["payroll_month"]).strip("_")
         if rep["partner_filter"]:
             slug += "_" + re.sub(r"[^A-Za-z0-9]+", "_", rep["partner_filter"]).strip("_")
+        if rep["manager_filter"]:
+            slug += "_RM_" + re.sub(r"[^A-Za-z0-9]+", "_", rep["manager_filter"]).strip("_")
         if rep["status_filter"]:
             slug += "_" + rep["status_filter"]
         await write_audit(employeeId="*", payroll_month=rep["summary"]["payroll_month"], action="report_exported",
