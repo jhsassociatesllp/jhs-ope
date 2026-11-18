@@ -67,7 +67,11 @@ async def build_report(month: str = "") -> dict:
 
         def when(name):
             lvl = by_name.get(name)
-            return fmt_ist(_decided(ps.get(lvl))) if lvl else None
+            d_ = _decided(ps.get(lvl)) if lvl else None
+            if name == "HR" and ps.get("hr_direct_approved_date"):
+                # HR approved early (Partial Pending): always show HR's own decision time
+                d_ = to_utc(ps.get("hr_direct_approved_date")) or d_
+            return fmt_ist(d_)
 
         status = ps.get("overall_status") or "pending"
         if status not in BUCKETS:
@@ -79,6 +83,16 @@ async def build_report(month: str = "") -> dict:
                 remarks.append(f"{info.get('level_name')} rejected: {info['rejection_reason']}")
             elif info.get("approval_remark") and info.get("status"):
                 remarks.append(f"{info.get('level_name')}: {info['approval_remark']}")
+        hr_remark = ""
+        if ps.get("hr_direct_approved"):
+            hr_remark = ps.get("hr_direct_remark") or "Approved by HR"
+            if not any(r.startswith("HR") for r in remarks):
+                remarks.append(f"HR (Partial Approve): {hr_remark}")
+        else:
+            for l in ("L1", "L2", "L3"):
+                info = ps.get(l) or {}
+                if info.get("level_name") == "HR":
+                    hr_remark = info.get("rejection_reason") or info.get("approval_remark") or ""
         for where, bucket in (("Active", active), ("Rejected", rejected)):
             for e in bucket:
                 entries.append({"employee_id": eid, "payroll_month": month, "partner_name": "", "where": where, "e": e,
@@ -98,6 +112,7 @@ async def build_report(month: str = "") -> dict:
             return "Approved" if info.get("status") else "Pending"
 
         rows.append({
+            "hr_remark": hr_remark,
             "employee_id": eid,
             "partner_code": pcode, "partner_name": pname,
             "manager_code": mcode, "manager_name": mname,
@@ -252,7 +267,8 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
             ("Partner Approved (INR)", "partner_approved_amount"), ("HR Approved (INR)", "hr_approved_amount"),
             ("Status", "status_label"), ("Stage", "stage"), ("Submitted At (IST)", "submitted_at"),
             ("Reporting Manager Action (IST)", "rm_action_at"), ("Partner Action (IST)", "partner_action_at"),
-            ("HR Action (IST)", "hr_action_at"), ("Remarks", "remarks"),
+            ("HR Action (IST)", "hr_action_at"),
+            ("HR Partial Approve / Reject Remarks", "hr_remark"), ("Remarks", "remarks"),
             ("Reporting Manager Level", "rm_level_status"), ("Partner Level", "partner_level_status"),
             ("HR Direct Approved", "hr_direct_label"), ("HR Direct Approved By", "hr_direct_by"),
             ("HR Direct Approved At (IST)", "hr_direct_at"), ("HR Direct Remark", "hr_direct_remark")]
@@ -283,7 +299,7 @@ def export_xlsx(report: dict, generated_by: str) -> bytes:
                 e.get("project_id"), e.get("project_name"), e.get("location_from"), e.get("location_to"),
                 e.get("travel_mode"), safe_num(e.get("original_amount", e.get("amount"))), safe_num(e.get("amount")),
                 "Rejected" if x["where"] == "Rejected" else (e.get("status") or "").capitalize(),
-                e.get("approver_name") or e.get("approved_by"), e.get("approval_remark"),
+                e.get("approver_name") or e.get("approved_by"), e.get("approval_remark") or e.get("hr_approval_remark"),
                 e.get("rejector_name") or e.get("rejected_by"), e.get("rejection_reason"), e.get("remarks")]
         for ci, v in enumerate(vals, start=1):
             ws3.cell(row=ri, column=ci, value=_safe(v) if isinstance(v, str) else v)
