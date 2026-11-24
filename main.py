@@ -8645,21 +8645,15 @@ async def get_employee_projects(employee_code: str, current_user=Depends(get_cur
         if not emp:
             raise HTTPException(status_code=404, detail="Employee not found")
  
-        partner_emp_code = emp.get("PartnerEmpCode", "").strip().upper()
-        print(f"📂 Projects request — emp: {emp_code}, partner: {partner_emp_code}")
- 
-        if not partner_emp_code:
-            return {"projects": [], "clients": []}
- 
+        # Every employee sees ALL clients / projects (no partner-wise filtering).
+        print(f"📂 Projects request — emp: {emp_code} (all clients)")
+
         # Query the Timesheets database (different DB on same cluster)
         timesheets_db = client["Timesheets"]
-        cursor = timesheets_db["Projects"].find(
-            {"partner_emp_code": partner_emp_code},
-            {"_id": 0}      # exclude ObjectId to keep JSON simple
-        )
+        cursor = timesheets_db["Projects"].find({}, {"_id": 0})  # exclude ObjectId to keep JSON simple
         raw = await cursor.to_list(length=None)
-        print(f"✅ Found {len(raw)} projects for partner {partner_emp_code}")
- 
+        print(f"✅ Found {len(raw)} projects (all partners)")
+
         # Deduplicate by project_code
         seen = set()
         projects = []
